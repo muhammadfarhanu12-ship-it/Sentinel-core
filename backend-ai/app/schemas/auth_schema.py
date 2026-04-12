@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.user_schema import PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, UserResponse, validate_password_strength
 
@@ -28,11 +28,11 @@ class LogoutRequest(BaseModel):
 
 
 class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
+    email: str
 
 
 class ResendVerificationRequest(BaseModel):
-    email: EmailStr
+    email: str
 
 
 class ResetPasswordRequest(BaseModel):
@@ -51,16 +51,16 @@ class VerifyEmailRequest(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
-    email: EmailStr | None = None
+    email: str | None = None
     email_sent: bool | None = None
 
 
 class TestEmailRequest(BaseModel):
-    email: EmailStr
+    email: str
 
 
 class TestAuthFlowRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
 
     @field_validator("password")

@@ -1,12 +1,13 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
-from sqlalchemy.sql import func
-from app.core.database import Base
+from __future__ import annotations
 
-class Usage(Base):
-    __tablename__ = "usages"
+from datetime import datetime
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    month = Column(String, index=True) # e.g., "2023-10"
-    requests_count = Column(Integer, default=0)
-    tokens_count = Column(Integer, default=0)
+from pydantic import BaseModel
+
+
+class Usage(BaseModel):
+    id: str
+    user_id: str
+    requests_count: int = 0
+    created_at: datetime
+    updated_at: datetime

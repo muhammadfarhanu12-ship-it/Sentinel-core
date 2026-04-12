@@ -1,16 +1,16 @@
-from sqlalchemy import Column, DateTime, Integer, String, Text
-from sqlalchemy.sql import func
+from __future__ import annotations
 
-from app.core.database import Base
+from datetime import datetime
+
+from pydantic import BaseModel
 
 
-class AdminAccessRequest(Base):
-    __tablename__ = "admin_access_requests"
-
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String(255), nullable=False, index=True)
-    full_name = Column(String(120), nullable=True)
-    organization_name = Column(String(255), nullable=True)
-    reason = Column(Text, nullable=True)
-    status = Column(String(32), default="pending", server_default="pending", nullable=False, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+class AdminAccessRequest(BaseModel):
+    id: str
+    email: str
+    full_name: str | None = None
+    organization_name: str | None = None
+    reason: str | None = None
+    status: str = "pending"
+    created_at: datetime
+    updated_at: datetime

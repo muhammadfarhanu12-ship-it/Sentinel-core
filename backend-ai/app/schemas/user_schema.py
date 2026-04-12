@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 PASSWORD_MIN_LENGTH = 12
 PASSWORD_MAX_LENGTH = 128
@@ -33,14 +33,14 @@ def validate_password_strength(value: str) -> str:
 
 
 class UserBase(BaseModel):
-    email: EmailStr
+    email: str
     name: str | None = Field(default=None, max_length=120)
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     @field_validator("email")
     @classmethod
-    def normalize_email(cls, value: EmailStr) -> EmailStr:
+    def normalize_email(cls, value: str) -> str:
         return value.strip().lower()
 
     @field_validator("name")

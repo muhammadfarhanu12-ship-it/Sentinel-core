@@ -1,18 +1,15 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 import secrets
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
+from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import HTTPException, Request, status
-from sqlalchemy import case, desc, func, or_, text
-from sqlalchemy.orm import Session
+from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.admin.admin_access_request_model import AdminAccessRequest
-from app.admin.admin_auth import create_admin_access_token
-from app.admin.admin_model import Admin
-from app.core.config import settings
 from app.admin.admin_schema import (
     AdminAccessRequestCreate,
     AdminAccessRequestResponse,
@@ -31,151 +28,119 @@ from app.admin.admin_schema import (
     AdminUserStatusUpdate,
     AdminUserSummary,
 )
-from app.models.admin_audit_log import AdminAuditLog
-from app.models.admin_settings import AdminPlatformSettings
-from app.models.api_key import APIKey, KeyStatusEnum
-from app.models.security_log import LogStatusEnum, SecurityLog
-from app.models.usage import Usage
-from app.models.user import User
 from app.middleware.rate_limiter import check_rate_limit
-from app.schemas.api_key_schema import APIKeyCreate
-from app.services.api_key_service import create_api_key, revoke_api_key
-from app.services.audit_service import audit_event
+from app.security.roles import ADMIN_ROLE, is_admin_role
+from app.utils.api_key_generator import generate_api_key
 from app.utils.hashing import get_password_hash, verify_password
-
-logger = logging.getLogger(__name__)
-
-DEFAULT_ADMIN_EMAIL = "admin@example.com"
-ADMIN_ROLE = "admin"
+from app.utils.token_generator import create_access_token
 
 
 class AdminService:
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
 
-    def ensure_default_admin(
-        self,
-        email: str | None = None,
-        password: str | None = None,
-        *,
-        sync_password: bool = False,
-    ) -> Admin | None:
-        resolved_email = str(email or settings.ADMIN_BOOTSTRAP_EMAIL or DEFAULT_ADMIN_EMAIL).strip().lower()
-        resolved_password = str(password or settings.ADMIN_BOOTSTRAP_PASSWORD or "").strip()
-        if not resolved_password:
-            logger.info("Admin bootstrap skipped because ADMIN_BOOTSTRAP_PASSWORD is not configured")
-            return None
+    @staticmethod
+    def _utcnow() -> datetime:
+        return datetime.now(timezone.utc)
 
-        normalized_email = resolved_email
-        admin = self.db.query(Admin).filter(func.lower(Admin.email) == normalized_email).first()
-        if admin:
-            changed = False
-            if admin.email != normalized_email:
-                admin.email = normalized_email
-                changed = True
-            if str(admin.role or "").strip().lower() != ADMIN_ROLE:
-                admin.role = ADMIN_ROLE
-                changed = True
-            if not admin.is_active:
-                admin.is_active = True
-                changed = True
-            if sync_password and not verify_password(resolved_password, admin.hashed_password):
-                admin.hashed_password = get_password_hash(resolved_password)
-                changed = True
+    @staticmethod
+    def _normalize_email(value: str) -> str:
+        return value.strip().lower()
 
-            if changed:
-                self.db.add(admin)
-                self.db.commit()
-                self.db.refresh(admin)
-                audit_event("admin.seed.updated", outcome="success", actor_id=admin.id, target=admin.email)
-            return admin
+    @staticmethod
+    def _hash_token(value: str) -> str:
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
-        admin = Admin(
-            email=normalized_email,
-            hashed_password=get_password_hash(resolved_password),
-            role=ADMIN_ROLE,
-            is_active=True,
-        )
-        self.db.add(admin)
-        self.db.commit()
-        self.db.refresh(admin)
-        audit_event("admin.seed.created", outcome="success", actor_id=admin.id, target=admin.email)
-        return admin
+    @staticmethod
+    def _get_client_ip(request: Request) -> str:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        return request.client.host if request.client else "unknown"
 
-    def login(self, email: str, password: str, request: Request) -> AdminTokenResponse:
-        normalized_email = email.strip().lower()
+    @staticmethod
+    def _parse_object_id(value: str) -> ObjectId:
+        try:
+            return ObjectId(value)
+        except (InvalidId, TypeError) as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found") from exc
+
+    async def _get_user_or_404(self, user_id: str) -> dict[str, Any]:
+        user = await self.db["users"].find_one({"_id": self._parse_object_id(user_id)})
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        return user
+
+    async def login(self, email: str, password: str, request: Request) -> AdminTokenResponse:
+        normalized_email = self._normalize_email(email)
         check_rate_limit(
             f"admin-login:{self._get_client_ip(request) or normalized_email}",
             scope="admin-login",
             limit=5,
             window_seconds=60,
         )
-        admin = self.db.query(Admin).filter(func.lower(Admin.email) == normalized_email).first()
-        if admin is None or not self._verify_or_migrate_password(admin, password):
-            audit_event(
-                "admin.login.failed",
-                outcome="failed",
-                ip_address=self._get_client_ip(request),
-                target=normalized_email,
-            )
+
+        user = await self.db["users"].find_one({"email": normalized_email})
+        if user is None or not verify_password(password, str(user.get("hashed_password", ""))):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin credentials")
-        if not admin.is_active:
+        if not bool(user.get("is_active", True)):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin account is inactive")
-        if str(admin.role or "").strip().lower() != ADMIN_ROLE:
+        if not is_admin_role(user.get("role")):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
-        admin.last_login_at = self._utcnow()
-        self.db.add(admin)
-        self.db.commit()
-        self.db.refresh(admin)
-        self._write_audit_log(admin, "admin.login", target_type="admin", target_id=str(admin.id), request=request)
-        return AdminTokenResponse(access_token=create_admin_access_token(admin))
+        now = self._utcnow()
+        await self.db["users"].update_one(
+            {"_id": user["_id"]},
+            {"$set": {"last_login_at": now, "updated_at": now, "role": ADMIN_ROLE}},
+        )
 
-    def get_dashboard(self, admin: Admin) -> dict[str, object]:
-        self._write_audit_log(admin, "admin.dashboard.read", target_type="dashboard")
+        access_token = create_access_token(
+            data={
+                "sub": normalized_email,
+                "user_id": str(user["_id"]),
+                "role": ADMIN_ROLE,
+            }
+        )
+        return AdminTokenResponse(access_token=access_token)
+
+    async def get_dashboard(self, admin: dict[str, Any]) -> dict[str, object]:
         return {
             "message": "Welcome Admin",
             "admin": {
-                "id": admin.id,
-                "email": admin.email,
-                "role": str(admin.role or ADMIN_ROLE).strip().lower(),
-                "is_active": bool(admin.is_active),
-                "last_login_at": admin.last_login_at,
+                "id": str(admin.get("_id") or admin.get("id")),
+                "email": str(admin.get("email", "")).lower(),
+                "role": ADMIN_ROLE,
+                "is_active": bool(admin.get("is_active", True)),
+                "last_login_at": admin.get("last_login_at"),
             },
         }
 
-    def request_password_reset(self, email: str, request: Request) -> AdminForgotPasswordResponse:
-        normalized_email = email.strip().lower()
+    async def request_password_reset(self, email: str, request: Request) -> AdminForgotPasswordResponse:
+        normalized_email = self._normalize_email(email)
         check_rate_limit(
             f"admin-forgot-password:{self._get_client_ip(request) or normalized_email}",
             scope="admin-forgot-password",
             limit=3,
             window_seconds=900,
         )
-        admin = self.db.query(Admin).filter(func.lower(Admin.email) == normalized_email).first()
-        if admin is None or str(admin.role or "").strip().lower() != ADMIN_ROLE or not admin.is_active:
+
+        user = await self.db["users"].find_one({"email": normalized_email})
+        if user is None or not is_admin_role(user.get("role")) or not bool(user.get("is_active", True)):
             return AdminForgotPasswordResponse(
                 message="If an admin account exists, password reset instructions have been generated."
             )
 
         raw_token = secrets.token_urlsafe(32)
         expires_at = self._utcnow() + timedelta(minutes=30)
-        admin.reset_token_hash = self._hash_reset_token(raw_token)
-        admin.reset_token_expiry = expires_at
-        self.db.add(admin)
-        self.db.commit()
-        self.db.refresh(admin)
-        logger.info(
-            "Admin password reset token generated email=%s delivery=mock expires_at=%s",
-            normalized_email,
-            expires_at.isoformat(),
-        )
-        audit_event(
-            "admin.password_reset.requested",
-            outcome="success",
-            actor_id=admin.id,
-            ip_address=self._get_client_ip(request),
-            target=admin.email,
+        await self.db["users"].update_one(
+            {"_id": user["_id"]},
+            {
+                "$set": {
+                    "admin_reset_token_hash": self._hash_token(raw_token),
+                    "admin_reset_token_expiry": expires_at,
+                    "updated_at": self._utcnow(),
+                }
+            },
         )
         return AdminForgotPasswordResponse(
             message="If an admin account exists, password reset instructions have been generated.",
@@ -184,250 +149,313 @@ class AdminService:
             expires_at=expires_at,
         )
 
-    def reset_password(self, payload: AdminResetPasswordRequest, request: Request) -> AdminMessageResponse:
+    async def reset_password(self, payload: AdminResetPasswordRequest, request: Request) -> AdminMessageResponse:
         check_rate_limit(
             f"admin-reset-password:{self._get_client_ip(request) or 'unknown'}",
             scope="admin-reset-password",
             limit=10,
             window_seconds=900,
         )
-        admin = self.db.query(Admin).filter(Admin.reset_token_hash == self._hash_reset_token(payload.token)).first()
-        if (
-            admin is None
-            or str(admin.role or "").strip().lower() != ADMIN_ROLE
-            or admin.reset_token_expiry is None
-            or admin.reset_token_expiry < self._utcnow()
-        ):
+
+        now = self._utcnow()
+        user = await self.db["users"].find_one({"admin_reset_token_hash": self._hash_token(payload.token)})
+        if user is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired admin reset token")
 
-        admin.hashed_password = get_password_hash(payload.new_password)
-        admin.reset_token_hash = None
-        admin.reset_token_expiry = None
-        admin.is_active = True
-        self.db.add(admin)
-        self.db.commit()
-        self.db.refresh(admin)
-        audit_event(
-            "admin.password_reset.completed",
-            outcome="success",
-            actor_id=admin.id,
-            ip_address=self._get_client_ip(request),
-            target=admin.email,
+        expiry = user.get("admin_reset_token_expiry")
+        if not isinstance(expiry, datetime):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired admin reset token")
+        expiry = expiry if expiry.tzinfo else expiry.replace(tzinfo=timezone.utc)
+        if expiry < now:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired admin reset token")
+
+        await self.db["users"].update_one(
+            {"_id": user["_id"]},
+            {
+                "$set": {
+                    "hashed_password": get_password_hash(payload.new_password),
+                    "admin_reset_token_hash": None,
+                    "admin_reset_token_expiry": None,
+                    "is_active": True,
+                    "updated_at": now,
+                }
+            },
         )
         return AdminMessageResponse(message="Admin password reset completed successfully.")
 
-    def request_access(self, payload: AdminAccessRequestCreate, request: Request) -> AdminAccessRequestResponse:
-        normalized_email = str(payload.email).strip().lower()
+    async def request_access(self, payload: AdminAccessRequestCreate, request: Request) -> AdminAccessRequestResponse:
+        normalized_email = self._normalize_email(str(payload.email))
         check_rate_limit(
             f"admin-request-access:{self._get_client_ip(request) or normalized_email}",
             scope="admin-request-access",
             limit=3,
             window_seconds=3600,
         )
-        existing_admin = self.db.query(Admin).filter(func.lower(Admin.email) == normalized_email).first()
-        if existing_admin and str(existing_admin.role or "").strip().lower() == ADMIN_ROLE:
+
+        existing_admin = await self.db["users"].find_one({"email": normalized_email, "role": ADMIN_ROLE})
+        if existing_admin:
             return AdminAccessRequestResponse(
                 message="An admin account already exists for this email. Use admin login or password recovery.",
                 status="existing_account",
             )
 
-        access_request = AdminAccessRequest(
-            email=normalized_email,
-            full_name=payload.full_name,
-            organization_name=payload.organization_name,
-            reason=payload.reason,
-            status="pending",
-        )
-        self.db.add(access_request)
-        self.db.commit()
-        self.db.refresh(access_request)
-        audit_event(
-            "admin.request_access.created",
-            outcome="success",
-            ip_address=self._get_client_ip(request),
-            target=normalized_email,
-            metadata={
-                "request_id": access_request.id,
+        now = self._utcnow()
+        result = await self.db["admin_access_requests"].insert_one(
+            {
+                "email": normalized_email,
+                "full_name": payload.full_name,
                 "organization_name": payload.organization_name,
-            },
+                "reason": payload.reason,
+                "status": "pending",
+                "created_at": now,
+                "updated_at": now,
+            }
         )
         return AdminAccessRequestResponse(
             message="Admin access request submitted successfully.",
-            request_id=access_request.id,
-            status=access_request.status,
+            request_id=str(result.inserted_id),
+            status="pending",
         )
 
-    def get_metrics(self, admin: Admin) -> AdminMetricsResponse:
-        total_users = int(self.db.query(func.count(User.id)).scalar() or 0)
-        active_users = int(self.db.query(func.count(User.id)).filter(User.is_active.is_(True)).scalar() or 0)
-        suspended_users = total_users - active_users
-        total_requests = int(self.db.query(func.count(SecurityLog.id)).scalar() or 0)
-        threats_blocked = int(
-            self.db.query(func.count(SecurityLog.id))
-            .filter(SecurityLog.status.in_([LogStatusEnum.BLOCKED, LogStatusEnum.REDACTED]))
-            .scalar()
-            or 0
-        )
-        active_api_keys = int(self.db.query(func.count(APIKey.id)).filter(APIKey.status == KeyStatusEnum.ACTIVE).scalar() or 0)
-        quarantined_api_keys = int(
-            self.db.query(func.count(APIKey.id)).filter(APIKey.status == KeyStatusEnum.QUARANTINED).scalar() or 0
-        )
-        avg_latency_ms = round(float(self.db.query(func.coalesce(func.avg(SecurityLog.latency_ms), 0)).scalar() or 0), 2)
+    async def get_metrics(self, admin: dict[str, Any]) -> AdminMetricsResponse:
+        _ = admin
 
-        now = datetime.now(timezone.utc)
-        series_rows = (
-            self.db.query(
-                func.date(SecurityLog.timestamp).label("day"),
-                func.count(SecurityLog.id).label("requests"),
-                func.sum(
-                    case(
-                        (SecurityLog.status.in_([LogStatusEnum.BLOCKED, LogStatusEnum.REDACTED]), 1),
-                        else_=0,
-                    )
-                ).label("threats"),
-            )
-            .filter(SecurityLog.timestamp >= now - timedelta(days=7))
-            .group_by(func.date(SecurityLog.timestamp))
-            .order_by(func.date(SecurityLog.timestamp).asc())
-            .all()
+        total_users = await self.db["users"].count_documents({})
+        active_users = await self.db["users"].count_documents({"is_active": True})
+        suspended_users = max(0, total_users - active_users)
+        total_requests = await self.db["security_logs"].count_documents({})
+        threats_blocked = await self.db["security_logs"].count_documents(
+            {
+                "$or": [
+                    {"status": {"$in": ["BLOCKED", "REDACTED"]}},
+                    {"is_quarantined": True},
+                ]
+            }
         )
+        active_api_keys = await self.db["api_keys"].count_documents({"status": "active"})
+        quarantined_api_keys = await self.db["api_keys"].count_documents({"status": "quarantined"})
+
+        avg_latency_result = await self.db["security_logs"].aggregate(
+            [{"$group": {"_id": None, "avg": {"$avg": "$latency_ms"}}}]
+        ).to_list(length=1)
+        avg_latency_ms = float(avg_latency_result[0]["avg"]) if avg_latency_result else 0.0
+
+        start = self._utcnow() - timedelta(days=7)
+        series_rows = await self.db["security_logs"].aggregate(
+            [
+                {"$match": {"timestamp": {"$gte": start}}},
+                {
+                    "$group": {
+                        "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$timestamp"}},
+                        "requests": {"$sum": 1},
+                        "threats": {
+                            "$sum": {
+                                "$cond": [
+                                    {
+                                        "$or": [
+                                            {"$in": ["$status", ["BLOCKED", "REDACTED"]]},
+                                            {"$eq": ["$is_quarantined", True]},
+                                        ]
+                                    },
+                                    1,
+                                    0,
+                                ]
+                            }
+                        },
+                    }
+                },
+                {"$sort": {"_id": 1}},
+            ]
+        ).to_list(length=8)
         points = [
-            AdminMetricsSeriesPoint(label=str(day), requests=int(requests or 0), threats=int(threats or 0))
-            for day, requests, threats in series_rows
+            AdminMetricsSeriesPoint(label=str(row.get("_id", "")), requests=int(row.get("requests", 0)), threats=int(row.get("threats", 0)))
+            for row in series_rows
         ]
 
-        self._write_audit_log(admin, "admin.metrics.read", target_type="metrics")
         return AdminMetricsResponse(
-            total_users=total_users,
-            active_users=active_users,
-            suspended_users=suspended_users,
-            total_requests=total_requests,
-            threats_blocked=threats_blocked,
-            active_api_keys=active_api_keys,
-            quarantined_api_keys=quarantined_api_keys,
-            avg_latency_ms=avg_latency_ms,
+            total_users=int(total_users),
+            active_users=int(active_users),
+            suspended_users=int(suspended_users),
+            total_requests=int(total_requests),
+            threats_blocked=int(threats_blocked),
+            active_api_keys=int(active_api_keys),
+            quarantined_api_keys=int(quarantined_api_keys),
+            avg_latency_ms=round(avg_latency_ms, 2),
             requests_last_7_days=points,
         )
 
-    def get_system_status(self, admin: Admin) -> AdminSystemStatusResponse:
-        database = "ok"
+    async def get_system_status(self, admin: dict[str, Any]) -> AdminSystemStatusResponse:
+        _ = admin
+        database_status = "ok"
         try:
-            self.db.execute(text("SELECT 1"))
+            await self.db.command("ping")
         except Exception:
-            database = "error"
+            database_status = "error"
 
-        latest_security_event_at = self.db.query(func.max(SecurityLog.timestamp)).scalar()
-        status_value = "ok" if database == "ok" else "degraded"
-        payload = AdminSystemStatusResponse(
-            status=status_value,
-            database=database,
+        latest_event = await self.db["security_logs"].find_one(sort=[("timestamp", -1)], projection={"timestamp": 1})
+        admin_count = await self.db["users"].count_documents({"role": ADMIN_ROLE})
+
+        return AdminSystemStatusResponse(
+            status="ok" if database_status == "ok" else "degraded",
+            database=database_status,
             uptime_hint="Gateway operational",
-            admin_count=int(self.db.query(func.count(Admin.id)).scalar() or 0),
-            last_security_event_at=latest_security_event_at,
+            admin_count=int(admin_count),
+            last_security_event_at=latest_event.get("timestamp") if latest_event else None,
         )
-        self._write_audit_log(admin, "admin.system_status.read", target_type="system")
-        return payload
 
-    def list_users(
+    async def list_users(
         self,
-        admin: Admin,
+        admin: dict[str, Any],
         limit: int,
         offset: int,
         q: str | None,
         is_active: bool | None = None,
         tier: str | None = None,
     ) -> list[AdminUserSummary]:
-        usage_subquery = (
-            self.db.query(
-                Usage.user_id.label("user_id"),
-                func.coalesce(func.sum(Usage.requests_count), 0).label("api_usage"),
-            )
-            .group_by(Usage.user_id)
-            .subquery()
-        )
-        key_subquery = (
-            self.db.query(
-                APIKey.user_id.label("user_id"),
-                func.count(APIKey.id).label("api_key_count"),
-            )
-            .group_by(APIKey.user_id)
-            .subquery()
-        )
-        query = (
-            self.db.query(
-                User,
-                func.coalesce(usage_subquery.c.api_usage, 0).label("api_usage"),
-                func.coalesce(key_subquery.c.api_key_count, 0).label("api_key_count"),
-            )
-            .outerjoin(usage_subquery, usage_subquery.c.user_id == User.id)
-            .outerjoin(key_subquery, key_subquery.c.user_id == User.id)
-        )
+        _ = admin
+        query: dict[str, Any] = {}
+
         if q:
-            term = f"%{q.strip().lower()}%"
-            query = query.filter(
-                or_(
-                    func.lower(User.email).like(term),
-                    func.lower(func.coalesce(User.organization_name, "")).like(term),
+            safe_pattern = q.strip()
+            query["$or"] = [
+                {"email": {"$regex": safe_pattern, "$options": "i"}},
+                {"organization_name": {"$regex": safe_pattern, "$options": "i"}},
+            ]
+        if is_active is not None:
+            query["is_active"] = bool(is_active)
+        if tier:
+            query["tier"] = str(tier).upper()
+
+        cursor = self.db["users"].find(query).sort("created_at", -1).skip(offset).limit(limit)
+        documents = await cursor.to_list(length=limit)
+
+        payload: list[AdminUserSummary] = []
+        for document in documents:
+            user_id = str(document.get("_id"))
+            api_key_count = await self.db["api_keys"].count_documents({"user_id": user_id})
+            usage_count = await self.db["security_logs"].count_documents({"user_id": user_id})
+            payload.append(
+                AdminUserSummary(
+                    id=user_id,
+                    email=str(document.get("email", "")),
+                    tier=str(document.get("tier", "FREE")),
+                    organization_name=document.get("organization_name"),
+                    is_active=bool(document.get("is_active", True)),
+                    monthly_limit=int(document.get("monthly_limit") or 1000),
+                    created_at=document.get("created_at") or self._utcnow(),
+                    api_usage=int(usage_count),
+                    api_key_count=int(api_key_count),
                 )
             )
-        if is_active is not None:
-            query = query.filter(User.is_active.is_(is_active))
-        if tier:
-            query = query.filter(User.tier == tier)
-        rows = (
-            query.order_by(User.created_at.desc(), User.id.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
-        )
-        payload = [
-            AdminUserSummary(
-                id=user.id,
-                email=user.email,
-                tier=user.tier,
-                organization_name=user.organization_name,
-                is_active=user.is_active,
-                monthly_limit=user.monthly_limit,
-                created_at=user.created_at,
-                api_usage=int(api_usage or 0),
-                api_key_count=int(api_key_count or 0),
-            )
-            for user, api_usage, api_key_count in rows
-        ]
-        self._write_audit_log(admin, "admin.users.list", target_type="user", metadata={"count": len(payload)})
         return payload
 
-    def delete_user(self, admin: Admin, user_id: int) -> dict:
-        user = self._get_user_or_404(user_id)
-        email = user.email
-        self.db.delete(user)
-        self.db.commit()
-        self._write_audit_log(
-            admin,
-            "admin.users.delete",
-            target_type="user",
-            target_id=str(user_id),
-            metadata={"email": email},
-        )
-        return {"deleted": True, "user_id": user_id}
+    async def delete_user(self, admin: dict[str, Any], user_id: str) -> dict[str, Any]:
+        _ = admin
+        oid = self._parse_object_id(user_id)
+        target = await self.db["users"].find_one({"_id": oid})
+        if target is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    def update_user_status(self, admin: Admin, user_id: int, payload: AdminUserStatusUpdate) -> AdminUserSummary:
-        user = self._get_user_or_404(user_id)
-        user.is_active = payload.is_active
-        self.db.commit()
-        self.db.refresh(user)
-        self._write_audit_log(
-            admin,
-            "admin.users.status.update",
-            target_type="user",
-            target_id=str(user_id),
-            metadata={"is_active": payload.is_active},
-        )
-        return self._serialize_user(user)
+        user_key = str(target.get("_id"))
+        await self.db["users"].delete_one({"_id": oid})
+        await self.db["api_keys"].delete_many({"user_id": user_key})
+        await self.db["security_logs"].delete_many({"user_id": user_key})
+        await self.db["notifications"].delete_many({"user_id": user_key})
 
-    def list_logs(
+        return {"deleted": True, "user_id": user_key}
+
+    async def update_user_status(self, admin: dict[str, Any], user_id: str, payload: AdminUserStatusUpdate) -> AdminUserSummary:
+        _ = admin
+        oid = self._parse_object_id(user_id)
+        now = self._utcnow()
+
+        await self.db["users"].update_one(
+            {"_id": oid},
+            {"$set": {"is_active": bool(payload.is_active), "updated_at": now}},
+        )
+        user = await self.db["users"].find_one({"_id": oid})
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+        return AdminUserSummary(
+            id=str(user.get("_id")),
+            email=str(user.get("email", "")),
+            tier=str(user.get("tier", "FREE")),
+            organization_name=user.get("organization_name"),
+            is_active=bool(user.get("is_active", True)),
+            monthly_limit=int(user.get("monthly_limit") or 1000),
+            created_at=user.get("created_at") or now,
+            api_usage=0,
+            api_key_count=0,
+        )
+
+    def _build_logs_query(
         self,
-        admin: Admin,
+        *,
+        q: str | None,
+        status: str | None,
+        risk_level: str | None,
+        threat_type: str | None,
+        only_quarantined: bool | None,
+        only_threats: bool,
+    ) -> dict[str, Any]:
+        query: dict[str, Any] = {}
+        if q:
+            safe_pattern = q.strip()
+            query["$or"] = [
+                {"user_email": {"$regex": safe_pattern, "$options": "i"}},
+                {"endpoint": {"$regex": safe_pattern, "$options": "i"}},
+                {"threat_type": {"$regex": safe_pattern, "$options": "i"}},
+            ]
+        if status:
+            query["status"] = status.upper()
+        if risk_level:
+            query["risk_level"] = risk_level.lower()
+        if threat_type:
+            query["threat_type"] = {"$regex": threat_type, "$options": "i"}
+        if only_quarantined is True:
+            query["is_quarantined"] = True
+        if only_threats:
+            query["$and"] = query.get("$and", [])
+            query["$and"].append(
+                {
+                    "$or": [
+                        {"status": {"$in": ["BLOCKED", "REDACTED"]}},
+                        {"threat_type": {"$ne": None}},
+                        {"is_quarantined": True},
+                    ]
+                }
+            )
+        return query
+
+    @staticmethod
+    def _serialize_log(document: dict[str, Any]) -> AdminSecurityLogResponse:
+        return AdminSecurityLogResponse(
+            id=str(document.get("_id")),
+            timestamp=document.get("timestamp") or datetime.now(timezone.utc),
+            api_key_id=str(document.get("api_key_id")) if document.get("api_key_id") is not None else None,
+            user_id=str(document.get("user_id")) if document.get("user_id") is not None else None,
+            user_email=document.get("user_email"),
+            status=str(document.get("status") or "allowed").upper(),
+            threat_type=document.get("threat_type"),
+            threat_types=document.get("threat_types"),
+            threat_score=float(document.get("threat_score")) if document.get("threat_score") is not None else None,
+            risk_score=float(document.get("risk_score")) if document.get("risk_score") is not None else None,
+            attack_vector=document.get("attack_vector"),
+            risk_level=document.get("risk_level"),
+            endpoint=document.get("endpoint"),
+            method=document.get("method"),
+            model=document.get("model"),
+            latency_ms=int(document.get("latency_ms") or 0),
+            tokens_used=int(document.get("tokens_used") or 0),
+            ip_address=document.get("ip_address"),
+            is_quarantined=bool(document.get("is_quarantined", False)),
+            raw_payload=document.get("raw_payload"),
+        )
+
+    async def list_logs(
+        self,
+        admin: dict[str, Any],
         limit: int,
         offset: int,
         q: str | None,
@@ -436,22 +464,22 @@ class AdminService:
         threat_type: str | None = None,
         only_quarantined: bool | None = None,
     ) -> list[AdminSecurityLogResponse]:
-        rows = self._base_logs_query(
-            limit,
-            offset,
-            q,
+        _ = admin
+        query = self._build_logs_query(
+            q=q,
             status=status,
             risk_level=risk_level,
             threat_type=threat_type,
             only_quarantined=only_quarantined,
-        ).all()
-        payload = [self._serialize_log(row) for row in rows]
-        self._write_audit_log(admin, "admin.logs.list", target_type="security_log", metadata={"count": len(payload)})
-        return payload
+            only_threats=False,
+        )
+        cursor = self.db["security_logs"].find(query).sort("timestamp", -1).skip(offset).limit(limit)
+        documents = await cursor.to_list(length=limit)
+        return [self._serialize_log(document) for document in documents]
 
-    def list_threats(
+    async def list_threats(
         self,
-        admin: Admin,
+        admin: dict[str, Any],
         limit: int,
         offset: int,
         q: str | None,
@@ -460,318 +488,181 @@ class AdminService:
         threat_type: str | None = None,
         only_quarantined: bool | None = None,
     ) -> list[AdminSecurityLogResponse]:
-        rows = (
-            self._base_logs_query(
-                limit,
-                offset,
-                q,
-                apply_pagination=False,
-                status=status,
-                risk_level=risk_level,
-                threat_type=threat_type,
-                only_quarantined=only_quarantined,
-            )
-            .filter(
-                or_(
-                    SecurityLog.status.in_([LogStatusEnum.BLOCKED, LogStatusEnum.REDACTED]),
-                    SecurityLog.threat_type.isnot(None),
-                    SecurityLog.is_quarantined.is_(True),
-                )
-            )
-            .offset(offset)
-            .limit(limit)
-            .all()
+        _ = admin
+        query = self._build_logs_query(
+            q=q,
+            status=status,
+            risk_level=risk_level,
+            threat_type=threat_type,
+            only_quarantined=only_quarantined,
+            only_threats=True,
         )
-        payload = [self._serialize_log(row) for row in rows]
-        self._write_audit_log(admin, "admin.threats.list", target_type="security_log", metadata={"count": len(payload)})
-        return payload
+        cursor = self.db["security_logs"].find(query).sort("timestamp", -1).skip(offset).limit(limit)
+        documents = await cursor.to_list(length=limit)
+        return [self._serialize_log(document) for document in documents]
 
-    def list_api_keys(
+    async def list_api_keys(
         self,
-        admin: Admin,
+        admin: dict[str, Any],
         limit: int,
         offset: int,
         q: str | None,
         status: str | None = None,
     ) -> list[AdminApiKeyResponse]:
-        query = self.db.query(APIKey, User.email).join(User, User.id == APIKey.user_id)
-        if q:
-            term = f"%{q.strip().lower()}%"
-            query = query.filter(
-                or_(func.lower(User.email).like(term), func.lower(func.coalesce(APIKey.name, "")).like(term))
-            )
+        _ = admin
+        query: dict[str, Any] = {}
         if status:
-            query = query.filter(APIKey.status == status)
-        rows = (
-            query.order_by(APIKey.created_at.desc(), APIKey.id.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
-        )
-        payload = [
-            AdminApiKeyResponse(
-                id=api_key.id,
-                user_id=api_key.user_id,
-                user_email=user_email,
-                name=api_key.name,
-                prefix=api_key.prefix,
-                status=api_key.status,
-                usage_count=int(api_key.usage_count or 0),
-                last_used=api_key.last_used,
-                last_ip=api_key.last_ip,
-                created_at=api_key.created_at,
+            query["status"] = status.lower()
+        if q:
+            safe_pattern = q.strip()
+            query["$or"] = [{"name": {"$regex": safe_pattern, "$options": "i"}}, {"prefix": {"$regex": safe_pattern, "$options": "i"}}]
+
+        cursor = self.db["api_keys"].find(query).sort("created_at", -1).skip(offset).limit(limit)
+        docs = await cursor.to_list(length=limit)
+
+        payload: list[AdminApiKeyResponse] = []
+        for doc in docs:
+            user_id = str(doc.get("user_id") or "")
+            user = await self.db["users"].find_one({"_id": self._parse_object_id(user_id)}) if ObjectId.is_valid(user_id) else None
+            payload.append(
+                AdminApiKeyResponse(
+                    id=str(doc.get("_id")),
+                    user_id=user_id,
+                    user_email=str((user or {}).get("email") or "unknown@example.com"),
+                    name=str(doc.get("name") or "API Key"),
+                    prefix=doc.get("prefix"),
+                    status=str(doc.get("status") or "active"),
+                    usage_count=int(doc.get("usage_count") or 0),
+                    last_used=doc.get("last_used"),
+                    last_ip=doc.get("last_ip"),
+                    created_at=doc.get("created_at") or self._utcnow(),
+                    key=None,
+                )
             )
-            for api_key, user_email in rows
-        ]
-        self._write_audit_log(admin, "admin.api_keys.list", target_type="api_key", metadata={"count": len(payload)})
         return payload
 
-    def create_gateway_api_key(self, admin: Admin, payload: AdminApiKeyCreateRequest) -> AdminApiKeyResponse:
-        user = self._get_user_or_404(payload.user_id)
-        created, raw_key = create_api_key(self.db, user.id, APIKeyCreate(name=payload.name))
-        self._write_audit_log(
-            admin,
-            "admin.api_keys.create",
-            target_type="api_key",
-            target_id=str(created.id),
-            metadata={"user_id": user.id, "name": payload.name},
-        )
+    async def create_gateway_api_key(self, admin: dict[str, Any], payload: AdminApiKeyCreateRequest) -> AdminApiKeyResponse:
+        _ = admin
+        user = await self._get_user_or_404(payload.user_id)
+
+        raw_key = generate_api_key()
+        now = self._utcnow()
+        document = {
+            "user_id": str(user.get("_id")),
+            "name": payload.name,
+            "prefix": raw_key[:16],
+            "key_hash": self._hash_token(raw_key),
+            "status": "active",
+            "usage_count": 0,
+            "last_used": None,
+            "last_ip": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        result = await self.db["api_keys"].insert_one(document)
+
         return AdminApiKeyResponse(
-            id=created.id,
-            user_id=user.id,
-            user_email=user.email,
-            name=created.name,
-            prefix=created.prefix,
-            status=created.status,
-            usage_count=int(created.usage_count or 0),
-            last_used=created.last_used,
-            last_ip=created.last_ip,
-            created_at=created.created_at,
+            id=str(result.inserted_id),
+            user_id=str(user.get("_id")),
+            user_email=str(user.get("email") or ""),
+            name=payload.name,
+            prefix=document["prefix"],
+            status=document["status"],
+            usage_count=0,
+            last_used=None,
+            last_ip=None,
+            created_at=now,
             key=raw_key,
         )
 
-    def revoke_gateway_api_key(self, admin: Admin, key_id: int) -> AdminApiKeyResponse:
-        api_key = self.db.query(APIKey).filter(APIKey.id == key_id).first()
+    async def revoke_gateway_api_key(self, admin: dict[str, Any], key_id: str) -> AdminApiKeyResponse:
+        _ = admin
+        oid = self._parse_object_id(key_id)
+
+        api_key = await self.db["api_keys"].find_one({"_id": oid})
         if api_key is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
-        revoked = revoke_api_key(self.db, api_key.user_id, key_id)
-        user = self._get_user_or_404(revoked.user_id)
-        self._write_audit_log(
-            admin,
-            "admin.api_keys.delete",
-            target_type="api_key",
-            target_id=str(key_id),
-            metadata={"user_id": user.id},
+
+        now = self._utcnow()
+        await self.db["api_keys"].update_one(
+            {"_id": oid},
+            {"$set": {"status": "revoked", "updated_at": now}},
         )
+
+        user = None
+        user_id = str(api_key.get("user_id") or "")
+        if ObjectId.is_valid(user_id):
+            user = await self.db["users"].find_one({"_id": ObjectId(user_id)})
+
         return AdminApiKeyResponse(
-            id=revoked.id,
-            user_id=user.id,
-            user_email=user.email,
-            name=revoked.name,
-            prefix=revoked.prefix,
-            status=revoked.status,
-            usage_count=int(revoked.usage_count or 0),
-            last_used=revoked.last_used,
-            last_ip=revoked.last_ip,
-            created_at=revoked.created_at,
-        )
-
-    def get_settings(self, admin: Admin) -> AdminSettingsResponse:
-        settings = self._get_or_create_platform_settings()
-        self._write_audit_log(admin, "admin.settings.read", target_type="settings")
-        return self._serialize_settings(settings)
-
-    def update_settings(self, admin: Admin, payload: AdminSettingsUpdateRequest) -> AdminSettingsResponse:
-        settings = self._get_or_create_platform_settings()
-        settings.enable_gemini_module = payload.enable_gemini_module
-        settings.enable_openai_module = payload.enable_openai_module
-        settings.enable_anthropic_module = payload.enable_anthropic_module
-        settings.ai_kill_switch_enabled = payload.ai_kill_switch_enabled
-        settings.require_mfa_for_admin = payload.require_mfa_for_admin
-        settings.admin_rate_limit_per_minute = payload.admin_rate_limit_per_minute
-        settings.admin_rate_limit_window_seconds = payload.admin_rate_limit_window_seconds
-        settings.api_key_rate_limit_per_minute = payload.api_key_rate_limit_per_minute
-        settings.updated_by_user_id = admin.id
-        self.db.add(settings)
-        self.db.commit()
-        self.db.refresh(settings)
-        self._write_audit_log(
-            admin,
-            "admin.settings.update",
-            target_type="settings",
-            target_id=str(settings.id),
-            metadata=payload.model_dump(),
-        )
-        return self._serialize_settings(settings)
-
-    def _get_user_or_404(self, user_id: int) -> User:
-        user = self.db.query(User).filter(User.id == user_id).first()
-        if user is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-        return user
-
-    def _serialize_user(self, user: User) -> AdminUserSummary:
-        api_usage = int(
-            self.db.query(func.coalesce(func.sum(Usage.requests_count), 0)).filter(Usage.user_id == user.id).scalar() or 0
-        )
-        api_key_count = int(self.db.query(func.count(APIKey.id)).filter(APIKey.user_id == user.id).scalar() or 0)
-        return AdminUserSummary(
-            id=user.id,
-            email=user.email,
-            tier=user.tier,
-            organization_name=user.organization_name,
-            is_active=user.is_active,
-            monthly_limit=user.monthly_limit,
-            created_at=user.created_at,
-            api_usage=api_usage,
-            api_key_count=api_key_count,
-        )
-
-    def _base_logs_query(
-        self,
-        limit: int,
-        offset: int,
-        q: str | None,
-        apply_pagination: bool = True,
-        status: str | None = None,
-        risk_level: str | None = None,
-        threat_type: str | None = None,
-        only_quarantined: bool | None = None,
-    ):
-        query = (
-            self.db.query(SecurityLog, User.id, User.email)
-            .outerjoin(APIKey, APIKey.id == SecurityLog.api_key_id)
-            .outerjoin(User, User.id == APIKey.user_id)
-        )
-        if q:
-            term = f"%{q.strip().lower()}%"
-            query = query.filter(
-                or_(
-                    func.lower(func.coalesce(User.email, "")).like(term),
-                    func.lower(func.coalesce(SecurityLog.threat_type, "")).like(term),
-                    func.lower(func.coalesce(SecurityLog.endpoint, "")).like(term),
-                )
-            )
-        if status:
-            query = query.filter(SecurityLog.status == status)
-        if risk_level:
-            query = query.filter(func.lower(func.coalesce(SecurityLog.risk_level, "")) == risk_level.strip().lower())
-        if threat_type:
-            query = query.filter(func.lower(func.coalesce(SecurityLog.threat_type, "")) == threat_type.strip().lower())
-        if only_quarantined is not None:
-            query = query.filter(SecurityLog.is_quarantined.is_(only_quarantined))
-        query = query.order_by(desc(SecurityLog.timestamp), desc(SecurityLog.id))
-        if apply_pagination:
-            query = query.offset(offset).limit(limit)
-        return query
-
-    def _get_or_create_platform_settings(self) -> AdminPlatformSettings:
-        settings = self.db.query(AdminPlatformSettings).order_by(AdminPlatformSettings.id.asc()).first()
-        if settings:
-            return settings
-        settings = AdminPlatformSettings()
-        self.db.add(settings)
-        self.db.commit()
-        self.db.refresh(settings)
-        return settings
-
-    @staticmethod
-    def _serialize_settings(settings: AdminPlatformSettings) -> AdminSettingsResponse:
-        return AdminSettingsResponse(
-            enable_gemini_module=settings.enable_gemini_module,
-            enable_openai_module=settings.enable_openai_module,
-            enable_anthropic_module=settings.enable_anthropic_module,
-            ai_kill_switch_enabled=settings.ai_kill_switch_enabled,
-            require_mfa_for_admin=settings.require_mfa_for_admin,
-            admin_rate_limit_per_minute=settings.admin_rate_limit_per_minute,
-            admin_rate_limit_window_seconds=settings.admin_rate_limit_window_seconds,
-            api_key_rate_limit_per_minute=settings.api_key_rate_limit_per_minute,
-            updated_by_user_id=settings.updated_by_user_id,
-            updated_at=settings.updated_at,
-        )
-
-    def _serialize_log(self, row) -> AdminSecurityLogResponse:
-        log, user_id, user_email = row
-        return AdminSecurityLogResponse(
-            id=log.id,
-            timestamp=log.timestamp,
-            api_key_id=log.api_key_id,
+            id=str(api_key.get("_id")),
             user_id=user_id,
-            user_email=user_email,
-            status=log.status,
-            threat_type=log.threat_type,
-            threat_types=log.threat_types,
-            threat_score=log.threat_score,
-            risk_score=log.risk_score,
-            attack_vector=log.attack_vector,
-            risk_level=log.risk_level,
-            endpoint=log.endpoint,
-            method=log.method,
-            model=log.model,
-            latency_ms=int(log.latency_ms or 0),
-            tokens_used=int(log.tokens_used or 0),
-            ip_address=log.ip_address,
-            is_quarantined=bool(log.is_quarantined),
-            raw_payload=log.raw_payload,
-        )
-
-    def _write_audit_log(
-        self,
-        admin: Admin,
-        action: str,
-        *,
-        target_type: str | None = None,
-        target_id: str | None = None,
-        request: Request | None = None,
-        metadata: dict | None = None,
-    ) -> None:
-        log = AdminAuditLog(
-            admin_user_id=admin.id,
-            action=action,
-            target_type=target_type,
-            target_id=target_id,
-            ip_address=self._get_client_ip(request) if request else None,
-            method=request.method if request else None,
-            path=request.url.path if request else None,
-            event_metadata=metadata or {},
-        )
-        self.db.add(log)
-        self.db.commit()
-        audit_event(
-            action,
-            outcome="success",
-            actor_id=admin.id,
-            ip_address=self._get_client_ip(request) if request else None,
-            target=target_id or target_type,
-            metadata=metadata or {},
+            user_email=str((user or {}).get("email") or "unknown@example.com"),
+            name=str(api_key.get("name") or "API Key"),
+            prefix=api_key.get("prefix"),
+            status="revoked",
+            usage_count=int(api_key.get("usage_count") or 0),
+            last_used=api_key.get("last_used"),
+            last_ip=api_key.get("last_ip"),
+            created_at=api_key.get("created_at") or now,
+            key=None,
         )
 
     @staticmethod
-    def _get_client_ip(request: Request | None) -> str | None:
-        if request is None:
-            return None
-        forwarded = request.headers.get("x-forwarded-for")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
-        return request.client.host if request.client else None
+    def _default_settings(now: datetime) -> dict[str, Any]:
+        return {
+            "enable_gemini_module": True,
+            "enable_openai_module": True,
+            "enable_anthropic_module": False,
+            "ai_kill_switch_enabled": False,
+            "require_mfa_for_admin": False,
+            "admin_rate_limit_per_minute": 120,
+            "admin_rate_limit_window_seconds": 60,
+            "api_key_rate_limit_per_minute": 600,
+            "updated_by_user_id": None,
+            "updated_at": now,
+        }
 
-    @staticmethod
-    def _utcnow() -> datetime:
-        return datetime.now(timezone.utc)
+    async def get_settings(self, admin: dict[str, Any]) -> AdminSettingsResponse:
+        _ = admin
+        now = self._utcnow()
 
-    @staticmethod
-    def _hash_reset_token(token: str) -> str:
-        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+        doc = await self.db["admin_settings"].find_one({"_singleton": True})
+        if doc is None:
+            defaults = {"_singleton": True, **self._default_settings(now)}
+            await self.db["admin_settings"].insert_one(defaults)
+            doc = defaults
 
-    def _verify_or_migrate_password(self, admin: Admin, password: str) -> bool:
-        if verify_password(password, admin.hashed_password):
-            return True
+        return AdminSettingsResponse(
+            enable_gemini_module=bool(doc.get("enable_gemini_module", True)),
+            enable_openai_module=bool(doc.get("enable_openai_module", True)),
+            enable_anthropic_module=bool(doc.get("enable_anthropic_module", False)),
+            ai_kill_switch_enabled=bool(doc.get("ai_kill_switch_enabled", False)),
+            require_mfa_for_admin=bool(doc.get("require_mfa_for_admin", False)),
+            admin_rate_limit_per_minute=int(doc.get("admin_rate_limit_per_minute", 120)),
+            admin_rate_limit_window_seconds=int(doc.get("admin_rate_limit_window_seconds", 60)),
+            api_key_rate_limit_per_minute=int(doc.get("api_key_rate_limit_per_minute", 600)),
+            updated_by_user_id=str(doc.get("updated_by_user_id")) if doc.get("updated_by_user_id") else None,
+            updated_at=doc.get("updated_at") or now,
+        )
 
-        if admin.hashed_password == password:
-            admin.hashed_password = get_password_hash(password)
-            self.db.add(admin)
-            self.db.commit()
-            self.db.refresh(admin)
-            return True
-
-        return False
+    async def update_settings(self, admin: dict[str, Any], payload: AdminSettingsUpdateRequest) -> AdminSettingsResponse:
+        now = self._utcnow()
+        update_doc = {
+            "enable_gemini_module": payload.enable_gemini_module,
+            "enable_openai_module": payload.enable_openai_module,
+            "enable_anthropic_module": payload.enable_anthropic_module,
+            "ai_kill_switch_enabled": payload.ai_kill_switch_enabled,
+            "require_mfa_for_admin": payload.require_mfa_for_admin,
+            "admin_rate_limit_per_minute": payload.admin_rate_limit_per_minute,
+            "admin_rate_limit_window_seconds": payload.admin_rate_limit_window_seconds,
+            "api_key_rate_limit_per_minute": payload.api_key_rate_limit_per_minute,
+            "updated_by_user_id": str(admin.get("_id") or admin.get("id") or ""),
+            "updated_at": now,
+        }
+        await self.db["admin_settings"].update_one(
+            {"_singleton": True},
+            {"$set": update_doc, "$setOnInsert": {"_singleton": True}},
+            upsert=True,
+        )
+        return await self.get_settings(admin)

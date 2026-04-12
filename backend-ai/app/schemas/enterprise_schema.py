@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
 TeamRoleValue = Literal["OWNER", "ADMIN", "VIEWER"]
@@ -46,18 +46,17 @@ class UsageSummaryResponse(BaseModel):
 class TeamMemberResponse(BaseModel):
     id: str
     name: str
-    email: EmailStr
+    email: str
     role: TeamRoleValue
     status: str
     invite_link: str | None = None
 
 
 class TeamInviteRequest(BaseModel):
-    email: EmailStr
+    email: str
     role: TeamRoleValue = "VIEWER"
     generate_invite_link: bool = True
 
 
 class TeamRoleUpdateRequest(BaseModel):
     role: TeamRoleValue
-

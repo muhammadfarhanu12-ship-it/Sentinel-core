@@ -18,33 +18,23 @@ from app.admin.admin_bootstrap import bootstrap_admin_system
 from app.admin.admin_router import router as admin_v1_router
 from app.ai_service import get_clean_execution_output
 from app.core.config import settings
-from app.database import (
-    MONGO_DB_NAME,
+from app.db.mongo import (
     close_mongo_connection,
     connect_to_mongo,
     get_mongo_connection_status,
+    get_mongo_db_name,
     ping_mongo,
 )
 from app.middleware.auth_middleware import attach_security_context
-from app.routes.admin_routes import router as legacy_admin_router
-from app.routers.analytics_router import router as analytics_router
-from app.routers.billing_router import router as billing_router
-from app.routers.brain_router import router as brain_router
 from app.routes.auth_routes import router as auth_router
 from app.routers.email_router import router as email_router
-from app.routers.enterprise_router import router as enterprise_router
-from app.routers.frontend_router import router as frontend_router
-from app.routers.logs_router import router as logs_router
-from app.routers.notification_router import router as notification_router
+from app.routers.user_router import router as user_router
 from app.routers.log_ws import router as log_ws_router
-from app.routers.reports_router import router as reports_router
-from app.routers.scan_router import router as scan_router
-from app.routers.settings_router import router as settings_router
 from app.routers.notification_ws import router as notification_ws_router
 from app.schemas.api_schema import fail
+from app.services.email_service import verify_smtp_connection
 from app.services.sentinel_core import build_sentinel_verdict
 from app.services.threat_detection import ThreatDetectionService
-from app.services.email_service import verify_smtp_connection
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
@@ -102,19 +92,23 @@ def _safe_request_body_preview(body: bytes, content_type: str) -> object:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app.state.mongodb_client = None
+    app.state.database = None
     app.state.mongo_startup_error = None
     app.state.smtp_startup_error = None
     app.state.admin_startup_error = None
+
     try:
-        bootstrap_admin_system()
-    except Exception as exc:
-        app.state.admin_startup_error = str(exc)
-        logger.exception("Admin startup bootstrap failed; continuing without dedicated admin plane")
-    try:
-        await connect_to_mongo()
+        await connect_to_mongo(app=app)
     except Exception as exc:
         app.state.mongo_startup_error = str(exc)
         logger.exception("MongoDB startup failed; continuing in degraded mode")
+
+    try:
+        await bootstrap_admin_system()
+    except Exception as exc:
+        app.state.admin_startup_error = str(exc)
+        logger.exception("Admin startup bootstrap failed; continuing without dedicated admin plane")
 
     if settings.SMTP_VERIFY_ON_STARTUP:
         try:
@@ -122,10 +116,11 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             app.state.smtp_startup_error = str(exc)
             logger.exception("SMTP startup verification failed; continuing in degraded mode")
+
     try:
         yield
     finally:
-        await close_mongo_connection()
+        await close_mongo_connection(app=app)
 
 
 app = FastAPI(
@@ -234,31 +229,13 @@ api_v1 = APIRouter(prefix="/api/v1")
 api_v1.include_router(auth_router)
 api_v1.include_router(admin_v1_router)
 api_v1.include_router(email_router)
-api_v1.include_router(frontend_router)
-api_v1.include_router(analytics_router)
-api_v1.include_router(reports_router)
-api_v1.include_router(logs_router)
-api_v1.include_router(enterprise_router)
-api_v1.include_router(billing_router)
-api_v1.include_router(scan_router)
-api_v1.include_router(settings_router)
-api_v1.include_router(notification_router)
-api_v1.include_router(brain_router)
+api_v1.include_router(user_router)
 
 api_legacy = APIRouter(prefix="/api")
 api_legacy.include_router(auth_router)
-api_legacy.include_router(legacy_admin_router)
+api_legacy.include_router(admin_v1_router)
 api_legacy.include_router(email_router)
-api_legacy.include_router(frontend_router)
-api_legacy.include_router(analytics_router)
-api_legacy.include_router(reports_router)
-api_legacy.include_router(logs_router)
-api_legacy.include_router(enterprise_router)
-api_legacy.include_router(billing_router)
-api_legacy.include_router(scan_router)
-api_legacy.include_router(settings_router)
-api_legacy.include_router(notification_router)
-api_legacy.include_router(brain_router)
+api_legacy.include_router(user_router)
 
 app.include_router(api_v1)
 app.include_router(api_legacy)
@@ -307,7 +284,7 @@ def _summarize_dependency_error(error: str | None) -> str | None:
     if "ssl handshake failed" in normalized:
         return "MongoDB TLS handshake failed. Check the Atlas network allowlist, credentials, and TLS settings in backend-ai/.env."
     if "authentication failed" in normalized:
-        return "MongoDB authentication failed. Check the MONGO_URI username/password in backend-ai/.env."
+        return "MongoDB authentication failed. Check MONGODB_URI username/password in backend-ai/.env."
     if "serverselectiontimeouterror" in normalized or "replicasetnoprimary" in normalized:
         return "MongoDB is unreachable. Confirm the cluster is online and accessible from this machine."
     return error
@@ -334,7 +311,7 @@ async def health(response: Response) -> dict[str, object]:
     return {
         "status": overall_status,
         "database": database_state,
-        "database_name": MONGO_DB_NAME,
+        "database_name": get_mongo_db_name(),
         "database_error": _summarize_dependency_error(database_error or mongo_status.get("last_error")),
         "mongo_ready": bool(mongo_status.get("ready")),
         "mongo_last_checked_at": mongo_status.get("last_checked_at"),

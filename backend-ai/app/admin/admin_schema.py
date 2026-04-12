@@ -2,18 +2,15 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.api_key import KeyStatusEnum
-from app.models.security_log import LogStatusEnum
-from app.models.user import TierEnum
 from app.schemas.user_schema import PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, validate_password_strength
 
 
 class AdminLoginRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    email: EmailStr
+    email: str
     password: str = Field(min_length=1, max_length=PASSWORD_MAX_LENGTH)
 
 
@@ -29,7 +26,7 @@ class AdminMessageResponse(BaseModel):
 class AdminForgotPasswordRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    email: EmailStr
+    email: str
 
 
 class AdminForgotPasswordResponse(BaseModel):
@@ -52,7 +49,7 @@ class AdminResetPasswordRequest(BaseModel):
 class AdminAccessRequestCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    email: EmailStr
+    email: str
     full_name: str | None = Field(default=None, max_length=120)
     organization_name: str | None = Field(default=None, max_length=255)
     reason: str | None = Field(default=None, max_length=1000)
@@ -60,7 +57,7 @@ class AdminAccessRequestCreate(BaseModel):
 
 class AdminAccessRequestResponse(BaseModel):
     message: str
-    request_id: int | None = None
+    request_id: str | None = None
     status: str = "pending"
 
 
@@ -91,9 +88,9 @@ class AdminSystemStatusResponse(BaseModel):
 
 
 class AdminUserSummary(BaseModel):
-    id: int
-    email: EmailStr
-    tier: TierEnum
+    id: str
+    email: str
+    tier: str = "FREE"
     organization_name: str | None = None
     is_active: bool
     monthly_limit: int
@@ -107,12 +104,12 @@ class AdminUserStatusUpdate(BaseModel):
 
 
 class AdminSecurityLogResponse(BaseModel):
-    id: int
+    id: str
     timestamp: datetime
-    api_key_id: int | None = None
-    user_id: int | None = None
+    api_key_id: str | None = None
+    user_id: str | None = None
     user_email: str | None = None
-    status: LogStatusEnum
+    status: str
     threat_type: str | None = None
     threat_types: list[str] | None = None
     threat_score: float | None = None
@@ -130,12 +127,12 @@ class AdminSecurityLogResponse(BaseModel):
 
 
 class AdminApiKeyResponse(BaseModel):
-    id: int
-    user_id: int
+    id: str
+    user_id: str
     user_email: str
     name: str
     prefix: str | None = None
-    status: KeyStatusEnum
+    status: str
     usage_count: int = 0
     last_used: datetime | None = None
     last_ip: str | None = None
@@ -144,7 +141,7 @@ class AdminApiKeyResponse(BaseModel):
 
 
 class AdminApiKeyCreateRequest(BaseModel):
-    user_id: int = Field(ge=1)
+    user_id: str = Field(min_length=1)
     name: str = Field(min_length=1, max_length=120)
 
 
@@ -157,7 +154,7 @@ class AdminSettingsResponse(BaseModel):
     admin_rate_limit_per_minute: int
     admin_rate_limit_window_seconds: int
     api_key_rate_limit_per_minute: int
-    updated_by_user_id: int | None = None
+    updated_by_user_id: str | None = None
     updated_at: datetime
 
 

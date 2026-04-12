@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from urllib.parse import parse_qs
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -123,12 +124,12 @@ async def _extract_login_payload(request: Request) -> LoginRequest:
         if "application/json" in content_type:
             payload = await request.json()
             return LoginRequest.model_validate(payload)
-
-        form = await request.form()
+        body = (await request.body()).decode("utf-8", errors="ignore")
+        parsed = parse_qs(body, keep_blank_values=True)
         return LoginRequest.model_validate(
             {
-                "email": form.get("username") or form.get("email") or "",
-                "password": form.get("password") or "",
+                "email": (parsed.get("username") or parsed.get("email") or [""])[0],
+                "password": (parsed.get("password") or [""])[0],
             }
         )
     except ValidationError as exc:
