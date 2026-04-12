@@ -40,7 +40,8 @@ def _seed_workspace_activity(db_session) -> tuple[User, APIKey]:
     key = APIKey(
         user_id=user.id,
         prefix="sentinel_sk_",
-        key_hash=get_password_hash("sk_test_placeholder"),
+        key_hash=get_password_hash("sentinel_sk_live_ABCDEF1234567890ABCDEF1234567890"),
+
         name="Workspace Primary",
         status=KeyStatusEnum.ACTIVE,
         usage_count=10,
