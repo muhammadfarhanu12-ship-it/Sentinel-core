@@ -1,5 +1,5 @@
 import { clearTokens, getAccessToken, getRefreshToken, isAccessTokenExpired, setTokens } from './auth';
-import { buildBackendUrl } from './api';
+import { buildBackendUrl, parseApiErrorMessage } from './api';
 
 type JsonValue = any;
 
@@ -38,7 +38,7 @@ async function refreshAccessTokenOnce(): Promise<string | null> {
 
   refreshInFlight = (async () => {
     try {
-      const refreshUrl = buildBackendUrl('/api/auth/refresh');
+      const refreshUrl = buildBackendUrl('/api/v1/auth/refresh');
       const res = await fetch(refreshUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -107,11 +107,7 @@ export async function authedFetchJson<T = JsonValue>(input: RequestInfo | URL, i
   const res = await authedFetch(input, init);
   const payload = await res.json().catch(() => null);
   if (!res.ok) {
-    const message =
-      payload?.error?.message ||
-      payload?.detail ||
-      payload?.message ||
-      `Request failed with status ${res.status}`;
+    const message = parseApiErrorMessage(payload, `Request failed with status ${res.status}`);
     throw new HttpError(String(message), res.status, payload);
   }
   return unwrapEnvelope<T>(payload);

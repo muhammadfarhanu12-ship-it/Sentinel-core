@@ -1,7 +1,5 @@
-const DEFAULT_BACKEND_ORIGIN =
-  window.location.hostname === '127.0.0.1' ? 'http://127.0.0.1:8000' : 'http://localhost:8000';
-const DEFAULT_BACKEND_WS_ORIGIN =
-  window.location.hostname === '127.0.0.1' ? 'ws://127.0.0.1:8000' : 'ws://localhost:8000';
+const LOCAL_BACKEND_ORIGIN = 'http://localhost:8000';
+const PRODUCTION_BACKEND_ORIGIN = 'https://sentinel-core-xcrz.onrender.com';
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
@@ -11,29 +9,95 @@ function stripApiSuffix(value: string): string {
   return stripTrailingSlash(value).replace(/\/api(?:\/v1)?$/i, '');
 }
 
-export function resolveBackendOrigin(): string {
-  const configuredOrigin = stripApiSuffix(
-    import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || '',
-  );
-  if (configuredOrigin) return configuredOrigin;
+function currentHostname(): string {
+  if (typeof window === 'undefined') return '';
+  return window.location.hostname;
+}
 
-  const isLocalFrontend =
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1';
-  const isGatewayPort = window.location.port === '5173' || window.location.port === '5174';
+function isLocalHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1';
+}
 
-  // Prefer the local gateway/proxy during development so the UI gets JSON 5xx errors
-  // instead of a browser-level connection refusal when the backend is unavailable.
-  if (isLocalFrontend && isGatewayPort) {
-    return window.location.origin;
+function wait(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+function buildRequestHeaders(headersInput: HeadersInit | undefined, body: BodyInit | null | undefined): Headers {
+  const headers = new Headers(headersInput || {});
+  if (!headers.has('Accept')) headers.set('Accept', 'application/json');
+
+  if (!body || headers.has('Content-Type') || body instanceof FormData) {
+    return headers;
   }
 
-  return DEFAULT_BACKEND_ORIGIN;
+  if (body instanceof URLSearchParams) {
+    headers.set('Content-Type', 'application/x-www-form-urlencoded;charset=UTF-8');
+    return headers;
+  }
+
+  headers.set('Content-Type', 'application/json');
+  return headers;
+}
+
+function shouldRetryRequest(method: string | undefined, status?: number, error?: unknown): boolean {
+  const normalizedMethod = (method || 'GET').toUpperCase();
+  const retryableMethod = normalizedMethod === 'GET' || normalizedMethod === 'HEAD' || normalizedMethod === 'OPTIONS';
+  if (!retryableMethod) return false;
+
+  if (typeof status === 'number') {
+    return status === 502 || status === 503 || status === 504;
+  }
+
+  return error instanceof TypeError;
+}
+
+export function resolveBackendOrigin(): string {
+  const configuredOrigin = stripApiSuffix(
+    import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_BACKEND_URL || '',
+  );
+  if (configuredOrigin) return configuredOrigin;
+  return isLocalHostname(currentHostname()) ? LOCAL_BACKEND_ORIGIN : PRODUCTION_BACKEND_ORIGIN;
 }
 
 export function buildBackendUrl(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${resolveBackendOrigin()}${normalizedPath}`;
+}
+
+export async function apiFetch(endpoint: string, options: RequestInit = {}): Promise<Response> {
+  const url = /^https?:\/\//i.test(endpoint) ? endpoint : buildBackendUrl(endpoint);
+  const requestInit: RequestInit = {
+    ...options,
+    headers: buildRequestHeaders(options.headers, options.body),
+  };
+
+  try {
+    const response = await fetch(url, requestInit);
+    if (!shouldRetryRequest(requestInit.method, response.status)) {
+      return response;
+    }
+
+    await wait(800);
+    return fetch(url, requestInit);
+  } catch (error) {
+    if (!shouldRetryRequest(requestInit.method, undefined, error)) {
+      throw error;
+    }
+
+    await wait(800);
+    return fetch(url, requestInit);
+  }
+}
+
+export async function apiRequest<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const response = await apiFetch(endpoint, options);
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(parseApiErrorMessage(payload, 'API request failed'));
+  }
+
+  return unwrapApiData<T>(payload);
 }
 
 function toWebSocketOrigin(origin: string): string {
@@ -47,13 +111,7 @@ export function resolveBackendWebSocketOrigin(): string {
     import.meta.env.VITE_API_WS_URL || import.meta.env.VITE_WS_URL || import.meta.env.VITE_SOCKET_URL || '',
   );
   if (configuredWsOrigin) return configuredWsOrigin;
-
-  const configuredHttpOrigin = stripApiSuffix(
-    import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || '',
-  );
-  if (configuredHttpOrigin) return toWebSocketOrigin(configuredHttpOrigin);
-
-  return DEFAULT_BACKEND_WS_ORIGIN;
+  return toWebSocketOrigin(resolveBackendOrigin());
 }
 
 export function resolveAdminApiBaseUrl(): string {

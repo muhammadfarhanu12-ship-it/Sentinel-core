@@ -3,7 +3,7 @@ import { buildBackendUrl, resolveBackendOrigin } from './api';
 export { resolveBackendOrigin };
 
 export function beginOAuthLogin(provider: 'google' | 'github' | 'facebook') {
-  window.location.assign(buildBackendUrl(`/api/auth/${provider}/login`));
+  window.location.assign(buildBackendUrl(`/api/v1/auth/${provider}/login`));
 }
 
 export type OAuthCallbackResult = {

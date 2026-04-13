@@ -12,10 +12,10 @@ FastAPI backend for Sentinel, the "Cloudflare for AI".
 
 ## Auth notes
 
-- Frontend auth calls target `http://localhost:8000` when `VITE_API_BASE_URL` is set.
-- Without `VITE_API_BASE_URL`, the local frontend gateway proxies `/api` to the FastAPI server.
-- Realtime clients connect directly to `ws://localhost:8000/ws/logs?token=...` and `ws://localhost:8000/ws/notifications?token=...`.
-- `/health` and `/api/health` now return `503` with a degraded status when MongoDB is unavailable instead of preventing FastAPI from starting.
+- Frontend HTTP calls should target the versioned API namespace at `/api/v1/...`.
+- Production frontend builds should point `VITE_API_URL` to `https://sentinel-core-xcrz.onrender.com`.
+- Realtime clients connect directly to `/ws/logs?token=...` and `/ws/notifications?token=...` on the backend origin.
+- `/health`, `/api/v1/health`, and the hidden legacy `/api/health` route return `503` with a degraded status when MongoDB is unavailable instead of preventing FastAPI from starting.
 
 ## Automated remediation
 

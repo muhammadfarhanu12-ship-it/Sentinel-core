@@ -15,9 +15,9 @@ View your app in AI Studio: https://ai.studio/apps/bdf6d9c8-96b0-4798-bfe7-cb93f
 
 1. Install dependencies:
    `npm install`
-2. Copy `.env.example` to `.env` and configure the local gateway/backend URLs:
-   `VITE_API_BASE_URL=http://localhost:8000`
-   `VITE_API_WS_URL=ws://localhost:8000`
-   `VITE_ADMIN_API_BASE_URL=http://localhost:8000/api/v1/admin`
+2. Copy `.env.example` to `.env` and configure the backend URLs:
+   `VITE_API_URL=https://sentinel-core-xcrz.onrender.com`
+   `VITE_API_WS_URL=wss://sentinel-core-xcrz.onrender.com`
+   `VITE_ADMIN_API_BASE_URL=https://sentinel-core-xcrz.onrender.com/api/v1/admin`
 4. Run the app:
    `npm run dev`

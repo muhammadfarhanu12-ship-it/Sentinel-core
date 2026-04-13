@@ -6,18 +6,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import html2canvas from 'html2canvas';
 import { useStore } from '../stores/useStore';
 import { authHeaders } from '../services/auth';
+import { apiRequest } from '../services/api';
 
 type AnalystMessage = { role: 'user' | 'model' | 'system'; text: string; type?: 'action' | 'text' };
 
 async function brainAnalyze(payload: { prompt: string; image_data?: string | null }) {
-  const res = await fetch('/api/v1/brain/analyze', {
+  const data = await apiRequest<any>('/api/v1/brain/analyze', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    headers: { ...authHeaders() },
     body: JSON.stringify(payload),
   });
-  const raw = await res.json().catch(() => null);
-  const data = raw && typeof raw === 'object' && 'data' in raw ? (raw as any).data : raw;
-  if (!res.ok) throw new Error((raw && ((raw.error && raw.error.message) || raw.detail || raw.message)) || 'Analysis failed');
   return data?.analysis ?? data;
 }
 

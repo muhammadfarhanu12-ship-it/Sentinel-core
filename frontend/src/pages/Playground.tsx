@@ -5,6 +5,7 @@ import { Badge } from '../components/ui/Badge';
 import { ShieldAlert, Send, Loader2, Settings2, Activity, Terminal, Copy, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { authHeaders } from '../services/auth';
+import { apiRequest } from '../services/api';
 
 export default function Playground() {
   const [prompt, setPrompt] = useState('');
@@ -57,6 +58,7 @@ export default function Playground() {
     setResult(null);
     setError(null); // Production: surface errors above the result pane.
     setHasRun(true); // Production: used to show "no scan yet" message.
+    let timeoutId: number | null = null;
     
     try {
       // Production: dynamic API key (no hardcoding); empty means "no header".
@@ -66,58 +68,36 @@ export default function Playground() {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
-      const timeoutId = window.setTimeout(() => controller.abort(), 15000);
+      timeoutId = window.setTimeout(() => controller.abort(), 15000);
 
-      const response = await fetch('/api/v1/scan', {
+      const data = await apiRequest<any>('/api/v1/scan', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           ...authHeaders(),
           ...(apiKey ? { 'x-api-key': apiKey } : {}),
         },
         signal: controller.signal,
-        // Production: full payload expected by backend ScanRequest schema.
         body: JSON.stringify({
           prompt,
           provider,
           model,
-          // Production: backend accepts camelCase `securityTier` (and we keep snake_case for compatibility).
           securityTier,
           security_tier: securityTier,
         }),
       });
-      
-      let data: any = null;
-      try {
-        data = await response.json();
-      } catch {
-        data = null;
-      } finally {
-        window.clearTimeout(timeoutId);
-      }
-
-      const unwrapped = data && typeof data === 'object' && 'data' in data ? (data as any).data : data;
-
-      // Production: response.ok check + backend error surfacing.
-      if (!response.ok) {
-        const message =
-          (data && ((data.error && (data.error.message || data.error)) || data.detail || data.message)) ||
-          `Request failed (${response.status})`;
-        setError(String(message));
-        setResult(unwrapped ?? data);
-        return;
-      }
-
-      setResult(unwrapped);
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      setResult(data);
     } catch (error) {
       const err = error as any;
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
       if (err?.name === 'AbortError') {
         setError('Scan timed out after 15 seconds. Please try again.');
         setResult({ error: 'timeout' });
       } else {
         console.error('Scan failed:', error);
-        setError('Failed to connect to Sentinel-Core');
-        setResult({ error: 'Failed to connect to Sentinel-Core' });
+        const message = String(err?.message || 'Failed to connect to Sentinel-Core');
+        setError(message);
+        setResult({ error: message });
       }
     } finally {
       setIsScanning(false);

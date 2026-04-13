@@ -12,7 +12,7 @@ from app.schemas.auth_schema import TokenData
 from app.security.roles import ADMIN_ROLE, is_admin_role, normalize_user_role
 from app.services.auth_service import get_user_by_id
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 
 class CurrentUserContext(dict):

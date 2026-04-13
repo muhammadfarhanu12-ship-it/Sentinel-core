@@ -54,7 +54,7 @@ function normalizeHttpBaseUrl(name: string, value: string): string {
 const GATEWAY_PORT = parsePort(readEnv("PORT", readEnv("GATEWAY_PORT", "5173")));
 const BACKEND_AI_URL = normalizeHttpBaseUrl(
   "BACKEND_AI_URL",
-  requireEnv("BACKEND_AI_URL", readEnv("VITE_API_BASE_URL", readEnv("VITE_API_URL"))),
+  requireEnv("BACKEND_AI_URL", readEnv("VITE_API_URL", readEnv("VITE_API_BASE_URL"))),
 );
 const ENABLE_LOCAL_FALLBACK = parseBooleanEnv("ENABLE_LOCAL_FALLBACK");
 const ENABLE_BACKEND_WS_BRIDGE = parseBooleanEnv("ENABLE_BACKEND_WS_BRIDGE");
@@ -318,7 +318,7 @@ function startBackendWebSocketBridge(io: Server) {
         console.warn(`Backend websocket bridge closed: ${path}. Retrying in ${delay}ms.`);
         setTimeout(run, delay);
       });
-      ws.on("error", (error) => {
+      ws.on("error", (error: unknown) => {
         console.warn(`Backend websocket bridge error: ${path}`, error);
         try {
           ws.close();

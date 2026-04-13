@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 import { ASOCAnalyst } from '../components/ASOCAnalyst';
 import { ReasoningWindow } from '../components/ReasoningWindow';
 import { authHeaders } from '../services/auth';
+import { apiRequest } from '../services/api';
 
 export default function Dashboard() {
   const { analytics, fetchAnalytics, isLoading, reasoningLogs } = useStore();
@@ -36,25 +37,21 @@ export default function Dashboard() {
   const handleTestGateway = async () => {
     if (!testPrompt.trim()) return;
     
-      setIsTesting(true);
-      setTestResult(null);
-      
-      try {
-      const response = await fetch('/api/v1/scan', {
+    setIsTesting(true);
+    setTestResult(null);
+    
+    try {
+      const data = await apiRequest<any>('/api/v1/scan', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           ...authHeaders(),
         },
         body: JSON.stringify({ prompt: testPrompt }),
       });
-      
-      const payload = await response.json();
-      const data = payload?.data ?? payload;
-      setTestResult(response.ok ? data : { error: data?.error?.message || payload?.error?.message || 'Gateway test failed' });
+      setTestResult(data);
     } catch (error) {
       console.error('Test failed:', error);
-      setTestResult({ error: 'Failed to connect to Sentinel-Core' });
+      setTestResult({ error: error instanceof Error ? error.message : 'Failed to connect to Sentinel-Core' });
     } finally {
       setIsTesting(false);
     }

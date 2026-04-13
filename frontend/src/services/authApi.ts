@@ -1,4 +1,4 @@
-import { buildBackendUrl, parseApiErrorMessage, resolveBackendOrigin, unwrapApiData } from './api';
+import { apiRequest, resolveBackendOrigin } from './api';
 
 export const AUTH_SERVICE_UNAVAILABLE_MESSAGE =
   `Unable to reach the authentication service. Make sure FastAPI is running on ${resolveBackendOrigin()}.`;
@@ -32,20 +32,15 @@ const passwordPolicyChecks = [
   /\d/,
 ];
 
-async function authFetch(input: string, init: RequestInit): Promise<Response> {
+async function authRequest<T>(endpoint: string, init: RequestInit): Promise<T> {
   try {
-    return await fetch(input, init);
-  } catch {
-    throw new Error(AUTH_SERVICE_UNAVAILABLE_MESSAGE);
+    return await apiRequest<T>(endpoint, init);
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error(AUTH_SERVICE_UNAVAILABLE_MESSAGE);
+    }
+    throw error;
   }
-}
-
-async function parseAuthResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(parseApiErrorMessage(payload, fallbackMessage));
-  }
-  return unwrapApiData<T>(payload);
 }
 
 export async function signupWithEmail(payload: {
@@ -53,12 +48,11 @@ export async function signupWithEmail(payload: {
   email: string;
   password: string;
 }): Promise<AuthMessageResponse> {
-  const response = await authFetch(buildBackendUrl('/api/auth/signup'), {
+  return authRequest<AuthMessageResponse>('/api/v1/auth/signup', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  return parseAuthResponse<AuthMessageResponse>(response, 'Signup failed');
 }
 
 export async function signInWithEmail(email: string, password: string): Promise<LoginResponse> {
@@ -66,64 +60,57 @@ export async function signInWithEmail(email: string, password: string): Promise<
   body.set('username', email.trim());
   body.set('password', password);
 
-  const response = await authFetch(buildBackendUrl('/api/auth/login'), {
+  const data = await authRequest<LoginResponse>('/api/v1/auth/login', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
-      Accept: 'application/json',
     },
     body,
   });
-  const data = await parseAuthResponse<LoginResponse>(response, 'Login failed');
+
   if (!data?.access_token) {
     throw new Error('Login failed');
   }
+
   return data;
 }
 
 export async function resendVerificationEmail(email: string): Promise<AuthMessageResponse> {
-  const response = await authFetch(buildBackendUrl('/api/auth/resend-verification'), {
+  return authRequest<AuthMessageResponse>('/api/v1/auth/resend-verification', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: email.trim() }),
   });
-  return parseAuthResponse<AuthMessageResponse>(response, 'Unable to resend verification email');
 }
 
 export async function requestPasswordReset(email: string): Promise<AuthMessageResponse> {
-  const response = await authFetch(buildBackendUrl('/api/auth/forgot-password'), {
+  return authRequest<AuthMessageResponse>('/api/v1/auth/forgot-password', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: email.trim() }),
   });
-  return parseAuthResponse<AuthMessageResponse>(response, 'Request failed');
 }
 
 export async function resetPasswordWithToken(token: string, newPassword: string): Promise<AuthMessageResponse> {
-  const response = await authFetch(buildBackendUrl('/api/auth/reset-password'), {
+  return authRequest<AuthMessageResponse>('/api/v1/auth/reset-password', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token, new_password: newPassword }),
   });
-  return parseAuthResponse<AuthMessageResponse>(response, 'Request failed');
 }
 
 export async function verifyEmailToken(token: string): Promise<AuthMessageResponse> {
-  const verificationUrl = buildBackendUrl(`/api/auth/verify-email?token=${encodeURIComponent(token)}`);
-  const response = await authFetch(verificationUrl, {
+  return authRequest<AuthMessageResponse>(`/api/v1/auth/verify-email?token=${encodeURIComponent(token)}`, {
     method: 'GET',
-    headers: { Accept: 'application/json' },
   });
-  return parseAuthResponse<AuthMessageResponse>(response, 'Verification failed');
 }
 
 export async function logoutFromServer(refreshToken?: string | null): Promise<AuthMessageResponse> {
-  const response = await authFetch(buildBackendUrl('/api/auth/logout'), {
+  return authRequest<AuthMessageResponse>('/api/v1/auth/logout', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(refreshToken ? { refresh_token: refreshToken } : {}),
   });
-  return parseAuthResponse<AuthMessageResponse>(response, 'Logout failed');
 }
 
 export function isEmailVerificationRequired(message: string | null | undefined): boolean {

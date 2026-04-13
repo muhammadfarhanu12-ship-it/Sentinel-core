@@ -47,7 +47,6 @@ from app.schemas.api_schema import fail
 from app.services.email_service import verify_smtp_connection
 from app.services.sentinel_core import build_sentinel_verdict
 from app.services.threat_detection import ThreatDetectionService
-
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
@@ -141,9 +140,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+origins = [
+    "http://localhost:5173",
+    "https://sentinel-core-arei.vercel.app",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list or ["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -243,7 +247,7 @@ api_v1.include_router(admin_v1_router)
 api_v1.include_router(email_router)
 api_v1.include_router(user_router)
 
-api_legacy = APIRouter(prefix="/api")
+api_legacy = APIRouter(prefix="/api", include_in_schema=False)
 api_legacy.include_router(auth_router)
 api_legacy.include_router(admin_v1_router)
 api_legacy.include_router(email_router)
@@ -277,7 +281,7 @@ async def root() -> dict[str, str]:
     return {"message": "Sentinel backend is running."}
 
 
-@app.post("/analyze")
+@app.post("/analyze", include_in_schema=False)
 @app.post("/api/v1/analyze")
 async def analyze(payload: SecurityRequest) -> dict[str, object]:
     assessment = ThreatDetectionService().analyze(payload.prompt, security_tier="PRO")
@@ -315,7 +319,8 @@ def _summarize_dependency_error(error: str | None) -> str | None:
 
 
 @app.get("/health")
-@app.get("/api/health")
+@app.get("/api/v1/health")
+@app.get("/api/health", include_in_schema=False)
 async def health(response: Response) -> dict[str, object]:
     mongo_status = get_mongo_connection_status()
     database_state = "ok"
