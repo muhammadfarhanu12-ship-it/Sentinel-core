@@ -27,10 +27,22 @@ from app.db.mongo import (
 )
 from app.middleware.auth_middleware import attach_security_context
 from app.routes.auth_routes import router as auth_router
+from app.routers.analytics_router import router as analytics_router
+from app.routers.audit_logs_router import router as audit_logs_router
+from app.routers.billing_router import router as billing_router
+from app.routers.brain_router import router as brain_router
 from app.routers.email_router import router as email_router
+from app.routers.keys_router import router as keys_router
+from app.routers.logs_router import router as logs_router
 from app.routers.user_router import router as user_router
 from app.routers.log_ws import router as log_ws_router
 from app.routers.notification_ws import router as notification_ws_router
+from app.routers.notifications_router import router as notifications_router
+from app.routers.reports_router import router as reports_router
+from app.routers.scan_router import router as scan_router
+from app.routers.settings_router import router as settings_router
+from app.routers.team_router import router as team_router
+from app.routers.usage_router import router as usage_router
 from app.schemas.api_schema import fail
 from app.services.email_service import verify_smtp_connection
 from app.services.sentinel_core import build_sentinel_verdict
@@ -239,6 +251,18 @@ api_legacy.include_router(user_router)
 
 app.include_router(api_v1)
 app.include_router(api_legacy)
+app.include_router(analytics_router, prefix="/api/v1/analytics")
+app.include_router(reports_router, prefix="/api/v1/reports")
+app.include_router(keys_router, prefix="/api/v1/keys")
+app.include_router(logs_router, prefix="/api/v1/logs")
+app.include_router(team_router, prefix="/api/v1/team")
+app.include_router(settings_router, prefix="/api/v1/settings")
+app.include_router(usage_router, prefix="/api/v1/usage")
+app.include_router(billing_router, prefix="/api/v1/billing")
+app.include_router(audit_logs_router, prefix="/api/v1/audit-logs")
+app.include_router(notifications_router, prefix="/api/v1/notifications")
+app.include_router(brain_router, prefix="/api/v1/brain")
+app.include_router(scan_router, prefix="/api/v1/scan")
 app.include_router(log_ws_router)
 app.include_router(notification_ws_router)
 
