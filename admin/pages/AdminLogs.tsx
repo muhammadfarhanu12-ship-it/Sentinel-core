@@ -4,6 +4,7 @@ import { AlertTriangle, Search } from 'lucide-react';
 import DataTable, { type TableColumn } from '../components/tables/DataTable';
 import Loader from '../components/ui/Loader';
 import { fetchAdminLogs } from '../lib/adminService';
+import { safeFormatDate } from '../lib/date';
 import { getErrorMessage } from '../lib/errors';
 import type { AdminLog } from '../types';
 
@@ -41,7 +42,7 @@ export default function AdminLogs() {
       {
         key: 'timestamp',
         title: 'Timestamp',
-        render: (log) => new Date(log.timestamp).toLocaleString(),
+        render: (log) => safeFormatDate(log.timestamp || log.created_at),
       },
       {
         key: 'endpoint',

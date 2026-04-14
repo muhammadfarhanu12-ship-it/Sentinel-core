@@ -5,6 +5,7 @@ export type ApiKeyStatus = 'ACTIVE' | 'REVOKED' | 'QUARANTINED' | 'active' | 're
 export interface SecurityLog {
   id: string;
   timestamp: string;
+  created_at?: string | null;
   api_key_id: string | null;
   status: LogStatus;
   threat_type: ThreatType | string;
@@ -40,6 +41,7 @@ export interface NotificationItem {
   title: string;
   message: string;
   type?: string | null;
+  timestamp?: string | null;
   is_read: boolean;
   created_at: string;
 }
@@ -71,6 +73,7 @@ export interface RemediationAction {
 
 export interface RemediationLog {
   id: string;
+  timestamp?: string | null;
   created_at: string;
   user_id?: string | null;
   api_key_id?: string | null;

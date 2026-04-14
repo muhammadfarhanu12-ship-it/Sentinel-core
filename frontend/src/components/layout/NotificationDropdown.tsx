@@ -3,8 +3,8 @@ import { Bell, ShieldAlert, AlertTriangle } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useStore } from '../../stores/useStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { formatDistanceToNow } from 'date-fns';
 import { Link } from 'react-router-dom';
+import { safeFormatDate } from '../../lib/date';
 
 export function NotificationDropdown() {
   const [isOpen, setIsOpen] = useState(false);
@@ -90,7 +90,7 @@ export function NotificationDropdown() {
                           {alert.message}
                         </p>
                         <p className="text-xs text-slate-500 mt-2">
-                          {formatDistanceToNow(new Date(alert.created_at), { addSuffix: true })}
+                          {safeFormatDate(alert.timestamp || alert.created_at)}
                         </p>
                       </div>
                     </button>

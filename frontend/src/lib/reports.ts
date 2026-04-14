@@ -1,3 +1,5 @@
+import { safeToISOString, toSafeDate } from './date';
+
 export type Granularity = 'daily' | 'weekly';
 
 export type ThreatCountsPoint = {
@@ -24,8 +26,10 @@ export function buildReportsQuery(input: {
   const q = new URLSearchParams();
   q.set('granularity', input.granularity);
   q.set('days', String(input.days));
-  if (input.startTime) q.set('start_time', new Date(input.startTime).toISOString());
-  if (input.endTime) q.set('end_time', new Date(input.endTime).toISOString());
+  const startTimeIso = safeToISOString(input.startTime);
+  const endTimeIso = safeToISOString(input.endTime);
+  if (startTimeIso) q.set('start_time', startTimeIso);
+  if (endTimeIso) q.set('end_time', endTimeIso);
   return q.toString();
 }
 
@@ -43,9 +47,8 @@ export function summarizeThreatCounts(series: ThreatCountsPoint[]) {
 }
 
 export function formatPeriodLabel(iso: string, granularity: Granularity) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
+  const d = toSafeDate(iso);
+  if (!d) return '—';
   // Weekly uses the bucket start date as label.
   return d.toLocaleDateString(undefined, { month: 'short', day: '2-digit' });
 }
-

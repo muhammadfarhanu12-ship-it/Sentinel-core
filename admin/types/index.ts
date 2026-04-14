@@ -36,6 +36,7 @@ export type AdminUser = {
 export type AdminLog = {
   id: number;
   timestamp: string;
+  created_at?: string | null;
   api_key_id?: number | null;
   user_id?: number | null;
   user_email?: string | null;

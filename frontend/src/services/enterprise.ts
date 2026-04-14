@@ -53,7 +53,7 @@ function normalizeAuditLog(item: unknown): AuditLogEntry {
   const actorType = asString(getNested(record, ['actor_type', 'actorType']), 'SYSTEM').toUpperCase();
   return {
     id: asString(getNested(record, ['id', 'event_id']), `audit-${Date.now()}`),
-    timestamp: asString(getNested(record, ['timestamp', 'created_at']), new Date().toISOString()),
+    timestamp: asString(getNested(record, ['timestamp', 'created_at']), ''),
     actor: asString(getNested(record, ['actor', 'actor_email', 'user', 'initiator']), actorType === 'SYSTEM' ? 'System' : 'Unknown user'),
     actor_type: actorType,
     action: asString(getNested(record, ['action', 'event', 'operation']), 'UNKNOWN_ACTION'),
@@ -69,7 +69,7 @@ function normalizeAuditLog(item: unknown): AuditLogEntry {
 function normalizeTrendPoint(item: unknown): UsageTrendPoint {
   const record = asRecord(item);
   return {
-    date: asString(getNested(record, ['date', 'label', 'day']), new Date().toISOString().slice(0, 10)),
+    date: asString(getNested(record, ['date', 'label', 'day']), ''),
     requests: asNumber(getNested(record, ['requests', 'total_requests']), 0),
     threats: asNumber(getNested(record, ['threats', 'blocked_injections', 'blocked']), 0),
   };

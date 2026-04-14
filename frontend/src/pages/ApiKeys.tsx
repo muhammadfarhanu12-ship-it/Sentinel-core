@@ -5,8 +5,8 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { Key, Plus, Copy, Check, Trash2, Eye, EyeOff, AlertTriangle } from 'lucide-react';
-import { format } from 'date-fns';
 import { motion } from 'framer-motion';
+import { safeFormatDateWithPattern } from '../lib/date';
 
 const MASKED_API_KEY = `sentinel_sk_${'*'.repeat(24)}`;
 
@@ -90,9 +90,9 @@ export default function ApiKeys() {
                     )}
                   </div>
                   <div className="flex items-center space-x-2 text-sm text-slate-400">
-                    <span>Created {format(new Date(apiKey.created_at), 'MMM d, yyyy')}</span>
+                    <span>Created {safeFormatDateWithPattern(apiKey.created_at, 'MMM d, yyyy')}</span>
                     <span>•</span>
-                    <span>Last used {apiKey.last_used ? format(new Date(apiKey.last_used), 'MMM d, yyyy') : 'Never'}</span>
+                    <span>Last used {apiKey.last_used ? safeFormatDateWithPattern(apiKey.last_used, 'MMM d, yyyy') : 'Never'}</span>
                   </div>
                 </div>
 

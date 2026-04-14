@@ -15,6 +15,7 @@ import {
   type ThreatCountsResponse,
   type ThreatCountsPoint,
 } from '../lib/reports';
+import { safeFormatDate } from '../lib/date';
 import { ReportStatCard } from '../components/reports/ReportStatCard';
 import { authedFetch, authedFetchJson } from '../services/authenticatedFetch';
 
@@ -60,7 +61,8 @@ export default function Reports() {
           (Array.isArray(remediationRows) ? remediationRows : []).map((r: any) => ({
             ...r,
             id: String(r.id),
-            created_at: String(r.created_at),
+            timestamp: r.timestamp == null ? (r.created_at == null ? null : String(r.created_at)) : String(r.timestamp),
+            created_at: String(r.created_at ?? r.timestamp ?? ''),
             api_key_id: r.api_key_id == null ? null : String(r.api_key_id),
             security_log_id: r.security_log_id == null ? null : String(r.security_log_id),
             user_id: r.user_id == null ? null : String(r.user_id),
@@ -262,7 +264,7 @@ export default function Reports() {
                         )}
                       </div>
                       <div className="text-sm text-slate-300 mt-1 truncate">
-                        {new Date(r.created_at).toLocaleString()} · api_key {r.api_key_id ?? '—'} · log {r.security_log_id ?? '—'}
+                        {safeFormatDate(r.timestamp || r.created_at)} · api_key {r.api_key_id ?? '—'} · log {r.security_log_id ?? '—'}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap justify-end">

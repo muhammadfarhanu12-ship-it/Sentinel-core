@@ -4,9 +4,9 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Search, Filter, ChevronDown, ChevronRight, Copy, Check, Play, Square } from 'lucide-react';
-import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SecurityLog } from '../types';
+import { safeFormatDateWithPattern, safeTimeValue, safeToISOString } from '../lib/date';
 
 export default function Logs() {
   const { logs, apiKeys, fetchApiKeys, fetchLogs, isLoading } = useStore();
@@ -32,13 +32,15 @@ export default function Logs() {
   // Debounced backend fetch for filters/search
   useEffect(() => {
     const handle = window.setTimeout(() => {
+      const startTimeIso = safeToISOString(startTime);
+      const endTimeIso = safeToISOString(endTime);
       fetchLogs({
         limit: 500,
         status: statusFilter || undefined,
         threat_type: threatTypeFilter || undefined,
         api_key_id: apiKeyFilter || undefined,
-        start_time: startTime ? new Date(startTime).toISOString() : undefined,
-        end_time: endTime ? new Date(endTime).toISOString() : undefined,
+        start_time: startTimeIso,
+        end_time: endTimeIso,
         q: searchTerm.trim() ? searchTerm.trim() : undefined,
       });
     }, 300);
@@ -65,18 +67,19 @@ export default function Logs() {
   const displayedLogs = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     return sourceLogs.filter((log) => {
+      const logDateValue = log.timestamp || log.created_at;
       if (statusFilter && String(log.status) !== statusFilter) return false;
       if (threatTypeFilter && String(log.threat_type) !== threatTypeFilter) return false;
       if (apiKeyFilter && String(log.api_key_id ?? '') !== apiKeyFilter) return false;
       if (startTime) {
-        const ts = new Date(log.timestamp).getTime();
-        const start = new Date(startTime).getTime();
-        if (!Number.isNaN(ts) && !Number.isNaN(start) && ts < start) return false;
+        const ts = safeTimeValue(logDateValue);
+        const start = safeTimeValue(startTime);
+        if (start !== null && (ts === null || ts < start)) return false;
       }
       if (endTime) {
-        const ts = new Date(log.timestamp).getTime();
-        const end = new Date(endTime).getTime();
-        if (!Number.isNaN(ts) && !Number.isNaN(end) && ts > end) return false;
+        const ts = safeTimeValue(logDateValue);
+        const end = safeTimeValue(endTime);
+        if (end !== null && (ts === null || ts > end)) return false;
       }
       if (term) {
         const hay = `${log.endpoint ?? ''} ${log.method ?? ''} ${log.threat_type ?? ''}`.toLowerCase();
@@ -232,7 +235,7 @@ export default function Logs() {
                 className="rounded-lg border border-transparent hover:border-white/5 bg-transparent hover:bg-slate-800/30 transition-colors"
               >
                 <div className="grid grid-cols-12 gap-4 p-3 items-center cursor-pointer" onClick={() => setExpandedLog(expandedLog === log.id ? null : log.id)}>
-                  <div className="col-span-2 text-sm font-mono text-slate-300">{format(new Date(log.timestamp), 'HH:mm:ss.SSS')}</div>
+                  <div className="col-span-2 text-sm font-mono text-slate-300">{safeFormatDateWithPattern(log.timestamp || log.created_at, 'HH:mm:ss.SSS')}</div>
                   <div className="col-span-2">
                     <Badge variant={log.status.toLowerCase() as any}>{log.status}</Badge>
                   </div>

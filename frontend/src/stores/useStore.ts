@@ -59,7 +59,7 @@ function normalizeApiKey(item: any): ApiKey {
     id: String(item?.id),
     name: String(item?.name || "API Key"),
     key: item?.key ? String(item.key) : undefined,
-    created_at: String(item?.created_at || new Date().toISOString()),
+    created_at: String(item?.created_at ?? ""),
     last_used: item?.last_used ? String(item.last_used) : null,
     status: normalizedStatus as any,
     usage_count: Number(item?.usage_count || 0),
@@ -70,6 +70,8 @@ function normalizeLog(item: any): SecurityLog {
   return {
     ...item,
     id: String(item?.id),
+    timestamp: String(item?.timestamp ?? item?.created_at ?? ""),
+    created_at: item?.created_at == null ? (item?.timestamp == null ? null : String(item.timestamp)) : String(item.created_at),
     api_key_id: item?.api_key_id == null ? null : String(item.api_key_id),
   } as SecurityLog;
 }
@@ -81,8 +83,9 @@ function normalizeNotification(item: any): NotificationItem {
     title: String(item?.title || ""),
     message: String(item?.message || ""),
     type: item?.type == null ? null : String(item.type).toUpperCase(),
+    timestamp: item?.timestamp == null ? (item?.created_at == null ? null : String(item.created_at)) : String(item.timestamp),
     is_read: Boolean(item?.is_read),
-    created_at: String(item?.created_at || new Date().toISOString()),
+    created_at: String(item?.created_at ?? item?.timestamp ?? ""),
   };
 }
 

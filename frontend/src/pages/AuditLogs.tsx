@@ -9,6 +9,7 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
 import { useToast } from '../components/ui/ToastProvider';
+import { safeFormatDate } from '../lib/date';
 import { getErrorMessage } from '../lib/errors';
 import { useStore } from '../stores/useStore';
 import type { AuditLogEntry, AuditSeverity } from '../types';
@@ -181,7 +182,7 @@ export default function AuditLogs() {
                       className="grid w-full grid-cols-[1.1fr_1fr_1fr_1fr_0.9fr] gap-4 bg-slate-900/10 px-5 py-4 text-left transition hover:bg-slate-800/40"
                     >
                       <div>
-                        <div className="text-sm font-medium text-slate-100">{new Date(entry.timestamp).toLocaleString()}</div>
+                        <div className="text-sm font-medium text-slate-100">{safeFormatDate(entry.timestamp)}</div>
                         <Badge variant={severityVariant(String(entry.severity))} className="mt-2">
                           {entry.severity}
                         </Badge>
@@ -214,7 +215,7 @@ export default function AuditLogs() {
                       <Badge variant={severityVariant(String(entry.severity))}>{entry.severity}</Badge>
                     </div>
                     <div className="mt-4 grid gap-2 text-sm text-slate-400">
-                      <span>{new Date(entry.timestamp).toLocaleString()}</span>
+                      <span>{safeFormatDate(entry.timestamp)}</span>
                       <span>{entry.actor} | {entry.actor_type}</span>
                       <span>{entry.ip_address || 'System initiated'}</span>
                     </div>

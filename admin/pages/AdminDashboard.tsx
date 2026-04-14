@@ -3,6 +3,7 @@ import { Activity, AlertTriangle, KeyRound, Users } from 'lucide-react';
 
 import Loader from '../components/ui/Loader';
 import { fetchAdminApiKeys, fetchAdminLogs, fetchAdminMetrics } from '../lib/adminService';
+import { safeFormatDate } from '../lib/date';
 import { getErrorMessage } from '../lib/errors';
 import type { AdminApiKey, AdminLog, AdminMetrics } from '../types';
 
@@ -129,7 +130,7 @@ export default function AdminDashboard() {
                 <article className="admin-list__item" key={log.id}>
                   <div>
                     <strong>{log.endpoint || 'Unknown endpoint'}</strong>
-                    <p>{log.user_email || 'No user'} | {new Date(log.timestamp).toLocaleString()}</p>
+                    <p>{log.user_email || 'No user'} | {safeFormatDate(log.timestamp || log.created_at)}</p>
                   </div>
                   <span
                     className={`admin-badge ${

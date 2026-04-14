@@ -26,6 +26,7 @@ declare global {
   type SecurityLogRecord = {
     id: string;
     timestamp: string;
+    created_at?: string | null;
     api_key_id: string | null;
     status: LogStatus;
     threat_type: ThreatType;
@@ -44,4 +45,3 @@ declare global {
     raw_prompt?: string | null;
   };
 }
-
