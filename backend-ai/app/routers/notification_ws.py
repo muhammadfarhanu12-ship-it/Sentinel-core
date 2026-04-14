@@ -94,30 +94,15 @@ async def websocket_notifications(websocket: WebSocket) -> None:
     await manager.connect(identity=identity, websocket=websocket)
     try:
         while True:
-            try:
-                message = await asyncio.wait_for(websocket.receive(), timeout=WEBSOCKET_HEARTBEAT_SECONDS)
-            except asyncio.TimeoutError:
-                await websocket.send_text("ping")
-                continue
-
-            if message["type"] == "websocket.disconnect":
-                raise WebSocketDisconnect(message.get("code", 1000), message.get("reason"))
+            await websocket.send_json({"type": "ping"})
+            await asyncio.sleep(WEBSOCKET_HEARTBEAT_SECONDS)
     except WebSocketDisconnect as exc:
-        logger.info("Notification websocket disconnected user_id=%s code=%s", identity.user_id, exc.code)
-    except RuntimeError as exc:
-        if "disconnect message" in str(exc).lower():
-            logger.info("Notification websocket disconnected user_id=%s", identity.user_id)
-        else:
-            logger.exception("Unexpected notification websocket runtime failure user_id=%s", identity.user_id)
-            try:
-                await websocket.close(code=1011, reason="Internal server error")
-            except Exception:
-                logger.debug("Notification websocket already closed user_id=%s", identity.user_id)
-    except Exception:
-        logger.exception("Unexpected notification websocket failure user_id=%s", identity.user_id)
+        logger.info("WebSocket disconnected user_id=%s code=%s", identity.user_id, exc.code)
+    except Exception as exc:
+        logger.exception("WebSocket error user_id=%s error=%s", identity.user_id, exc)
         try:
-            await websocket.close(code=1011, reason="Internal server error")
+            await websocket.close(code=1011, reason="Internal error")
         except Exception:
-            logger.debug("Notification websocket already closed user_id=%s", identity.user_id)
+            pass
     finally:
         await manager.disconnect(user_id=identity.user_id, websocket=websocket)
