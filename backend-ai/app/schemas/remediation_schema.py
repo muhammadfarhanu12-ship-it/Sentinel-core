@@ -16,7 +16,7 @@ class RemediationAction(BaseModel):
 class RemediationLogResponse(BaseModel):
     id: int
     created_at: datetime
-    user_id: int | None = None
+    user_id: str | None = None
     api_key_id: int | None = None
     security_log_id: int | None = None
     request_id: str | None = None
@@ -29,4 +29,3 @@ class RemediationLogResponse(BaseModel):
 
     class Config:
         from_attributes = True
-

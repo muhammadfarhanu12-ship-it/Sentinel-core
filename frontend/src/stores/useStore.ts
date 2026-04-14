@@ -80,7 +80,7 @@ function normalizeNotification(item: any): NotificationItem {
     user_id: String(item?.user_id),
     title: String(item?.title || ""),
     message: String(item?.message || ""),
-    type: item?.type == null ? null : String(item.type),
+    type: item?.type == null ? null : String(item.type).toUpperCase(),
     is_read: Boolean(item?.is_read),
     created_at: String(item?.created_at || new Date().toISOString()),
   };
@@ -295,7 +295,7 @@ export const useStore = create<AppState>((set, get) => ({
       const normalizedNotification = normalizeNotification(notification);
       get().addLiveNotification(normalizedNotification);
 
-      if (String(normalizedNotification?.type || "").toLowerCase() === "remediation") {
+      if (String(normalizedNotification?.type || "").toUpperCase() === "REMEDIATION") {
         get().addReasoningLog(`Remediation triggered: ${String(normalizedNotification.message || "")}`, "HIGH");
       }
     });

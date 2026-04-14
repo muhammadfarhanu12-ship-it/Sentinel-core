@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
+import logging
 import re
 import secrets
 from collections import defaultdict
@@ -10,15 +11,20 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from bson import ObjectId
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 from app.core.config import settings
+from app.db.mongo import get_database, get_database_from_request, mongo_connection_state
 from app.routers.log_ws import schedule_broadcast
 from app.routers.notification_ws import schedule_notification
 from app.utils.api_key_generator import generate_api_key
 
+logger = logging.getLogger(__name__)
 UTC = timezone.utc
 THREAT_STATUS_VALUES = {"BLOCKED", "REDACTED", "CLEAN"}
+AUDIT_SEVERITY_VALUES = {"INFO", "WARNING", "CRITICAL"}
+NOTIFICATION_TYPE_VALUES = {"INFO", "WARNING", "REMEDIATION", "CRITICAL"}
+RISK_LEVEL_VALUES = {"low", "medium", "high"}
 PLAN_LIMITS = {
     "FREE": 1_000,
     "PRO": 50_000,
@@ -80,6 +86,128 @@ def parse_optional_datetime(value: str | None) -> datetime | None:
     return ensure_datetime(trimmed)
 
 
+def normalize_upper_token(value: Any) -> str:
+    return str(value or "").strip().upper()
+
+
+def normalize_audit_severity(value: Any) -> str:
+    normalized = normalize_upper_token(value)
+    return normalized if normalized in AUDIT_SEVERITY_VALUES else "INFO"
+
+
+def normalize_notification_type(value: Any) -> str:
+    normalized = normalize_upper_token(value)
+    aliases = {
+        "WARN": "WARNING",
+    }
+    normalized = aliases.get(normalized, normalized)
+    return normalized if normalized in NOTIFICATION_TYPE_VALUES else "INFO"
+
+
+def normalize_log_status(value: Any) -> str:
+    normalized = normalize_upper_token(value)
+    if normalized == "ALLOWED":
+        return "CLEAN"
+    return normalized if normalized in THREAT_STATUS_VALUES else "CLEAN"
+
+
+def normalize_risk_level(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    return normalized if normalized in RISK_LEVEL_VALUES else "low"
+
+
+def parse_optional_int(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else None
+
+    raw = str(value).strip()
+    if not raw or not re.fullmatch(r"[+-]?\d+", raw):
+        return None
+
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_non_negative_int(value: Any, *, default: int = 0) -> int:
+    parsed = parse_optional_int(value)
+    if parsed is None:
+        return max(default, 0)
+    return max(parsed, 0)
+
+
+def parse_bounded_float(
+    value: Any,
+    *,
+    default: float = 0.0,
+    minimum: float = 0.0,
+    maximum: float = 1.0,
+) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(min(parsed, maximum), minimum)
+
+
+def _mongo_numeric_id_values(value: Any) -> list[int | str]:
+    parsed = parse_optional_int(value)
+    if parsed is not None:
+        return [parsed, str(parsed)]
+
+    raw = str(value or "").strip()
+    return [raw] if raw else []
+
+
+def build_mongo_id_filter(field_name: str, value: Any) -> dict[str, Any] | None:
+    values = _mongo_numeric_id_values(value)
+    if not values:
+        return None
+    if len(values) == 1:
+        return {field_name: values[0]}
+    return {field_name: {"$in": values}}
+
+
+def matches_identifier(stored_value: Any, expected_value: Any) -> bool:
+    expected_candidates = _mongo_numeric_id_values(expected_value)
+    if not expected_candidates:
+        return False
+
+    stored_candidates = _mongo_numeric_id_values(stored_value)
+    if not stored_candidates:
+        raw_stored = str(stored_value or "").strip()
+        return bool(raw_stored) and raw_stored in {str(candidate) for candidate in expected_candidates}
+
+    return any(candidate in expected_candidates for candidate in stored_candidates)
+
+
+def is_active_key_status(value: Any) -> bool:
+    return normalize_upper_token(value) == "ACTIVE"
+
+
+def is_revoked_key_status(value: Any) -> bool:
+    return normalize_upper_token(value) == "REVOKED"
+
+
+def client_ip_for(request: Request) -> str | None:
+    forwarded_for = str(request.headers.get("x-forwarded-for") or "").split(",", 1)[0].strip()
+    if forwarded_for:
+        return forwarded_for
+
+    client = getattr(request, "client", None)
+    host = getattr(client, "host", None)
+    if host is None:
+        return None
+
+    host_value = str(host).strip()
+    return host_value or None
+
+
 def user_id_for(current_user: dict[str, Any]) -> str:
     for key in ("id", "_id", "email"):
         value = current_user.get(key)
@@ -130,7 +258,18 @@ def monthly_limit_for(current_user: dict[str, Any]) -> int:
 
 
 def db_from_request(request: Request):
-    return getattr(request.app.state, "database", None)
+    try:
+        return get_database_from_request(request)
+    except HTTPException:
+        pass
+
+    if mongo_connection_state.ready:
+        try:
+            return get_database()
+        except RuntimeError:
+            logger.debug("Mongo database state reported ready but no database handle was available.")
+
+    return None
 
 
 def collection_from_request(request: Request, name: str):
@@ -297,43 +436,44 @@ async def ensure_primary_api_key(request: Request, current_user: dict[str, Any])
     workspace_id = workspace_id_for(current_user)
     collection = collection_from_request(request, "keys")
 
-    if collection is not None:
-        existing = await collection.find_one({"user_id": user_id, "status": {"$ne": "REVOKED"}})
-        if existing is not None:
-            return
-        key_id = await next_numeric_id(request, namespace="keys", collection_name="keys", fallback_items=_fallback_store["keys"])
-        await collection.insert_one(
-            {
-                "id": key_id,
-                "user_id": user_id,
-                "workspace_id": workspace_id,
-                "name": "Workspace Primary",
-                "status": "ACTIVE",
-                "usage_count": 0,
-                "created_at": utcnow(),
-                "last_used": None,
-                "key_hash": hashlib.sha256(generate_api_key().encode("utf-8")).hexdigest(),
-            }
-        )
-        return
-
-    existing = next((item for item in _fallback_store["keys"] if item.get("user_id") == user_id and item.get("status") != "REVOKED"), None)
-    if existing is not None:
-        return
-    key_id = await next_numeric_id(request, namespace="keys", collection_name="keys", fallback_items=_fallback_store["keys"])
-    _fallback_store["keys"].append(
-        {
-            "id": key_id,
+    async def build_primary_key_document() -> dict[str, Any]:
+        now = utcnow()
+        return {
+            "id": await next_numeric_id(request, namespace="keys", collection_name="keys", fallback_items=_fallback_store["keys"]),
             "user_id": user_id,
             "workspace_id": workspace_id,
             "name": "Workspace Primary",
             "status": "ACTIVE",
             "usage_count": 0,
-            "created_at": utcnow(),
+            "created_at": now,
+            "updated_at": now,
             "last_used": None,
             "key_hash": hashlib.sha256(generate_api_key().encode("utf-8")).hexdigest(),
         }
+
+    if collection is not None:
+        try:
+            existing = await collection.find_one({"user_id": user_id, "status": {"$nin": ["REVOKED", "revoked"]}})
+            if existing is not None:
+                return
+            document = await build_primary_key_document()
+            await collection.insert_one(document)
+            return
+        except Exception as exc:
+            logger.warning("Failed to ensure primary API key in MongoDB; using fallback store instead: %s", exc)
+
+    existing = next(
+        (
+            item
+            for item in _fallback_store["keys"]
+            if item.get("user_id") == user_id and not is_revoked_key_status(item.get("status"))
+        ),
+        None,
     )
+    if existing is not None:
+        return
+    document = await build_primary_key_document()
+    _fallback_store["keys"].append(document)
 
 
 async def list_api_keys(request: Request, current_user: dict[str, Any]) -> list[dict[str, Any]]:
@@ -341,13 +481,21 @@ async def list_api_keys(request: Request, current_user: dict[str, Any]) -> list[
     user_id = user_id_for(current_user)
     collection = collection_from_request(request, "keys")
     if collection is not None:
-        documents = await list_collection_documents(
-            request,
-            collection_name="keys",
-            filter_query={"user_id": user_id},
-            sort=[("created_at", -1), ("id", -1)],
-            limit=200,
-        )
+        try:
+            documents = await list_collection_documents(
+                request,
+                collection_name="keys",
+                filter_query={"user_id": user_id},
+                sort=[("created_at", -1), ("id", -1)],
+                limit=200,
+            )
+        except Exception as exc:
+            logger.warning("Failed to list API keys from MongoDB; falling back to in-memory store: %s", exc)
+            documents = [
+                item for item in _fallback_store["keys"]
+                if item.get("user_id") == user_id
+            ]
+            documents.sort(key=lambda item: ensure_datetime(item.get("created_at")), reverse=True)
     else:
         documents = [
             item for item in _fallback_store["keys"]
@@ -362,6 +510,7 @@ async def create_api_key_record(request: Request, current_user: dict[str, Any], 
     user_id = user_id_for(current_user)
     workspace_id = workspace_id_for(current_user)
     raw_key = generate_api_key()
+    now = utcnow()
     document = {
         "id": await next_numeric_id(request, namespace="keys", collection_name="keys", fallback_items=_fallback_store["keys"]),
         "user_id": user_id,
@@ -369,14 +518,19 @@ async def create_api_key_record(request: Request, current_user: dict[str, Any], 
         "name": name.strip() or "API Key",
         "status": "ACTIVE",
         "usage_count": 0,
-        "created_at": utcnow(),
+        "created_at": now,
+        "updated_at": now,
         "last_used": None,
         "key_hash": hashlib.sha256(raw_key.encode("utf-8")).hexdigest(),
     }
 
     collection = collection_from_request(request, "keys")
     if collection is not None:
-        await collection.insert_one(document)
+        try:
+            await collection.insert_one(document)
+        except Exception as exc:
+            logger.warning("Failed to store API key in MongoDB; using fallback store instead: %s", exc)
+            _fallback_store["keys"].append(document)
     else:
         _fallback_store["keys"].append(document)
 
@@ -397,16 +551,29 @@ async def revoke_api_key_record(request: Request, current_user: dict[str, Any], 
     user_id = user_id_for(current_user)
     collection = collection_from_request(request, "keys")
     document: dict[str, Any] | None = None
+    key_filter = build_mongo_id_filter("id", key_id) or {"id": key_id}
+    query = {"user_id": user_id, **key_filter}
 
     if collection is not None:
-        await collection.update_one(
-            {"user_id": user_id, "id": key_id},
-            {"$set": {"status": "REVOKED", "updated_at": utcnow()}},
-        )
-        document = await collection.find_one({"user_id": user_id, "id": key_id})
+        try:
+            await collection.update_one(
+                query,
+                {"$set": {"status": "REVOKED", "updated_at": utcnow()}},
+            )
+            document = await collection.find_one(query)
+        except Exception as exc:
+            logger.warning("Failed to revoke API key in MongoDB; using fallback store instead: %s", exc)
     else:
         for item in _fallback_store["keys"]:
-            if item.get("user_id") == user_id and int(item.get("id") or 0) == key_id:
+            if item.get("user_id") == user_id and matches_identifier(item.get("id"), key_id):
+                item["status"] = "REVOKED"
+                item["updated_at"] = utcnow()
+                document = item
+                break
+
+    if document is None:
+        for item in _fallback_store["keys"]:
+            if item.get("user_id") == user_id and matches_identifier(item.get("id"), key_id):
                 item["status"] = "REVOKED"
                 item["updated_at"] = utcnow()
                 document = item
@@ -432,25 +599,40 @@ async def resolve_api_key_id(request: Request, current_user: dict[str, Any], raw
     collection = collection_from_request(request, "keys")
 
     if collection is not None:
-        if key_hash:
-            document = await collection.find_one({"user_id": user_id, "key_hash": key_hash, "status": "ACTIVE"})
-            if document is not None:
-                return int(document["id"])
-        document = await collection.find_one({"user_id": user_id, "status": "ACTIVE"}, sort=[("created_at", -1)])
-        if document is not None:
-            return int(document["id"])
-        return None
+        try:
+            if key_hash:
+                document = await collection.find_one(
+                    {"user_id": user_id, "key_hash": key_hash, "status": {"$in": ["ACTIVE", "active"]}}
+                )
+                resolved_id = parse_optional_int(document.get("id")) if document is not None else None
+                if resolved_id is not None:
+                    return resolved_id
+
+            document = await collection.find_one(
+                {"user_id": user_id, "status": {"$in": ["ACTIVE", "active"]}},
+                sort=[("created_at", -1), ("id", -1)],
+            )
+            resolved_id = parse_optional_int(document.get("id")) if document is not None else None
+            if resolved_id is not None:
+                return resolved_id
+            return None
+        except Exception as exc:
+            logger.warning("Failed to resolve API key from MongoDB; using fallback store instead: %s", exc)
 
     if key_hash:
         for item in _fallback_store["keys"]:
-            if item.get("user_id") == user_id and item.get("status") == "ACTIVE" and item.get("key_hash") == key_hash:
-                return int(item["id"])
+            if item.get("user_id") == user_id and is_active_key_status(item.get("status")) and item.get("key_hash") == key_hash:
+                resolved_id = parse_optional_int(item.get("id"))
+                if resolved_id is not None:
+                    return resolved_id
     for item in sorted(
-        [entry for entry in _fallback_store["keys"] if entry.get("user_id") == user_id and entry.get("status") == "ACTIVE"],
+        [entry for entry in _fallback_store["keys"] if entry.get("user_id") == user_id and is_active_key_status(entry.get("status"))],
         key=lambda entry: ensure_datetime(entry.get("created_at")),
         reverse=True,
     ):
-        return int(item["id"])
+        resolved_id = parse_optional_int(item.get("id"))
+        if resolved_id is not None:
+            return resolved_id
     return None
 
 
@@ -464,11 +646,11 @@ def _log_matches_filters(
     end_time: datetime | None = None,
     q: str | None = None,
 ) -> bool:
-    if status and str(item.get("status") or "").upper() != status.upper():
+    if status and normalize_log_status(item.get("status")) != normalize_log_status(status):
         return False
     if threat_type and str(item.get("threat_type") or "").upper() != threat_type.upper():
         return False
-    if api_key_id and str(item.get("api_key_id") or "") != str(api_key_id):
+    if api_key_id and not matches_identifier(item.get("api_key_id"), api_key_id):
         return False
 
     timestamp = ensure_datetime(item.get("timestamp"))
@@ -512,38 +694,42 @@ async def list_logs(
     collection = collection_from_request(request, "logs")
 
     if collection is not None:
-        query: dict[str, Any] = {"workspace_id": workspace_id}
-        if status:
-            query["status"] = status.upper()
-        if threat_type:
-            query["threat_type"] = threat_type.upper()
-        if api_key_id:
-            query["api_key_id"] = int(api_key_id)
-        if start_time or end_time:
-            range_query: dict[str, Any] = {}
-            if start_time:
-                range_query["$gte"] = start_time
-            if end_time:
-                range_query["$lte"] = end_time
-            query["timestamp"] = range_query
-        if q and q.strip():
-            regex = {"$regex": re.escape(q.strip()), "$options": "i"}
-            query["$or"] = [
-                {"endpoint": regex},
-                {"method": regex},
-                {"threat_type": regex},
-                {"request_id": regex},
-                {"model": regex},
-            ]
-        documents = await list_collection_documents(
-            request,
-            collection_name="logs",
-            filter_query=query,
-            sort=[("timestamp", -1), ("id", -1)],
-            skip=offset,
-            limit=limit,
-        )
-        return [public_document(item, exclude={"workspace_id", "user_id"}) for item in documents]
+        try:
+            query: dict[str, Any] = {"workspace_id": workspace_id}
+            if status:
+                query["status"] = normalize_log_status(status)
+            if threat_type:
+                query["threat_type"] = str(threat_type).strip().upper()
+            api_key_filter = build_mongo_id_filter("api_key_id", api_key_id)
+            if api_key_filter is not None:
+                query.update(api_key_filter)
+            if start_time or end_time:
+                range_query: dict[str, Any] = {}
+                if start_time:
+                    range_query["$gte"] = ensure_datetime(start_time)
+                if end_time:
+                    range_query["$lte"] = ensure_datetime(end_time)
+                query["timestamp"] = range_query
+            if q and q.strip():
+                regex = {"$regex": re.escape(q.strip()), "$options": "i"}
+                query["$or"] = [
+                    {"endpoint": regex},
+                    {"method": regex},
+                    {"threat_type": regex},
+                    {"request_id": regex},
+                    {"model": regex},
+                ]
+            documents = await list_collection_documents(
+                request,
+                collection_name="logs",
+                filter_query=query,
+                sort=[("timestamp", -1), ("id", -1)],
+                skip=offset,
+                limit=limit,
+            )
+            return [public_document(item, exclude={"workspace_id", "user_id"}) for item in documents]
+        except Exception as exc:
+            logger.warning("Failed to list logs from MongoDB; falling back to in-memory store: %s", exc)
 
     filtered = [
         item for item in _fallback_store["logs"]
@@ -564,20 +750,30 @@ async def list_logs(
 
 
 def _notification_public(document: dict[str, Any]) -> dict[str, Any]:
-    return public_document(document, exclude={"workspace_id"})
+    public = public_document(document, exclude={"workspace_id"})
+    public["type"] = normalize_notification_type(public.get("type"))
+    return public
 
 
 async def list_notifications(request: Request, current_user: dict[str, Any]) -> list[dict[str, Any]]:
     user_id = user_id_for(current_user)
     collection = collection_from_request(request, "notifications")
     if collection is not None:
-        documents = await list_collection_documents(
-            request,
-            collection_name="notifications",
-            filter_query={"user_id": user_id},
-            sort=[("created_at", -1), ("id", -1)],
-            limit=200,
-        )
+        try:
+            documents = await list_collection_documents(
+                request,
+                collection_name="notifications",
+                filter_query={"user_id": user_id},
+                sort=[("created_at", -1), ("id", -1)],
+                limit=200,
+            )
+        except Exception as exc:
+            logger.warning("Failed to list notifications from MongoDB; falling back to in-memory store: %s", exc)
+            documents = [
+                item for item in _fallback_store["notifications"]
+                if item.get("user_id") == user_id
+            ]
+            documents.sort(key=lambda item: ensure_datetime(item.get("created_at")), reverse=True)
     else:
         documents = [
             item for item in _fallback_store["notifications"]
@@ -599,6 +795,7 @@ async def create_notification_record(
 ) -> dict[str, Any]:
     user_id = user_id_for(current_user)
     workspace_id = workspace_id_for(current_user)
+    now = utcnow()
     document = {
         "id": await next_numeric_id(
             request,
@@ -609,15 +806,21 @@ async def create_notification_record(
         "user_id": user_id,
         "workspace_id": workspace_id,
         "title": title.strip() or "Notification",
-        "message": message.strip(),
-        "type": notification_type or "info",
+        "message": message.strip() or title.strip() or "Notification",
+        "type": normalize_notification_type(notification_type),
         "is_read": False,
-        "created_at": utcnow(),
+        "timestamp": now,
+        "created_at": now,
+        "updated_at": now,
     }
 
     collection = collection_from_request(request, "notifications")
     if collection is not None:
-        await collection.insert_one(document)
+        try:
+            await collection.insert_one(document)
+        except Exception as exc:
+            logger.warning("Failed to store notification in MongoDB; using fallback store instead: %s", exc)
+            _fallback_store["notifications"].append(document)
     else:
         _fallback_store["notifications"].append(document)
 
@@ -640,14 +843,16 @@ async def mark_notification_read(request: Request, current_user: dict[str, Any],
     user_id = user_id_for(current_user)
     collection = collection_from_request(request, "notifications")
     document: dict[str, Any] | None = None
+    now = utcnow()
 
     if collection is not None:
-        await collection.update_one({"user_id": user_id, "id": notification_id}, {"$set": {"is_read": True}})
+        await collection.update_one({"user_id": user_id, "id": notification_id}, {"$set": {"is_read": True, "updated_at": now}})
         document = await collection.find_one({"user_id": user_id, "id": notification_id})
     else:
         for item in _fallback_store["notifications"]:
             if item.get("user_id") == user_id and int(item.get("id") or 0) == notification_id:
                 item["is_read"] = True
+                item["updated_at"] = now
                 document = item
                 break
 
@@ -657,14 +862,19 @@ async def mark_notification_read(request: Request, current_user: dict[str, Any],
 async def mark_all_notifications_read(request: Request, current_user: dict[str, Any]) -> int:
     user_id = user_id_for(current_user)
     collection = collection_from_request(request, "notifications")
+    now = utcnow()
     if collection is not None:
-        result = await collection.update_many({"user_id": user_id, "is_read": False}, {"$set": {"is_read": True}})
+        result = await collection.update_many(
+            {"user_id": user_id, "is_read": False},
+            {"$set": {"is_read": True, "updated_at": now}},
+        )
         return int(result.modified_count)
 
     modified = 0
     for item in _fallback_store["notifications"]:
         if item.get("user_id") == user_id and not bool(item.get("is_read")):
             item["is_read"] = True
+            item["updated_at"] = now
             modified += 1
     return modified
 
@@ -855,6 +1065,8 @@ async def record_audit_event(
     new_value: Any = None,
 ) -> dict[str, Any]:
     workspace_id = workspace_id_for(current_user)
+    user_id = user_id_for(current_user)
+    now = utcnow()
     document = {
         "id": await next_numeric_id(
             request,
@@ -863,13 +1075,15 @@ async def record_audit_event(
             fallback_items=_fallback_store["audit_logs"],
         ),
         "workspace_id": workspace_id,
-        "timestamp": utcnow(),
+        "user_id": user_id,
+        "timestamp": now,
+        "created_at": now,
         "actor": email_for(current_user),
         "actor_type": "USER",
         "action": action,
         "resource": resource,
-        "ip_address": None,
-        "severity": severity.upper(),
+        "ip_address": client_ip_for(request),
+        "severity": normalize_audit_severity(severity),
         "old_value": old_value,
         "new_value": new_value,
         "metadata": metadata or {},
@@ -877,7 +1091,11 @@ async def record_audit_event(
 
     collection = collection_from_request(request, "audit_logs")
     if collection is not None:
-        await collection.insert_one(document)
+        try:
+            await collection.insert_one(document)
+        except Exception as exc:
+            logger.warning("Failed to store audit event in MongoDB; using fallback store instead: %s", exc)
+            _fallback_store["audit_logs"].append(document)
     else:
         _fallback_store["audit_logs"].append(document)
 
@@ -898,28 +1116,40 @@ async def list_audit_logs(
     collection = collection_from_request(request, "audit_logs")
 
     if collection is not None:
-        query: dict[str, Any] = {"workspace_id": workspace_id}
-        if severity:
-            query["severity"] = severity.upper()
-        if start_date or end_date:
-            range_query: dict[str, Any] = {}
+        try:
+            query: dict[str, Any] = {"workspace_id": workspace_id}
+            if severity:
+                query["severity"] = normalize_audit_severity(severity)
+            if start_date or end_date:
+                range_query: dict[str, Any] = {}
+                if start_date:
+                    range_query["$gte"] = ensure_datetime(start_date)
+                if end_date:
+                    range_query["$lte"] = ensure_datetime(end_date)
+                query["timestamp"] = range_query
+            documents = await list_collection_documents(
+                request,
+                collection_name="audit_logs",
+                filter_query=query,
+                sort=[("timestamp", -1), ("id", -1)],
+                skip=offset,
+                limit=limit,
+            )
+        except Exception as exc:
+            logger.warning("Failed to list audit logs from MongoDB; falling back to in-memory store: %s", exc)
+            documents = [item for item in _fallback_store["audit_logs"] if item.get("workspace_id") == workspace_id]
+            if severity:
+                documents = [item for item in documents if normalize_audit_severity(item.get("severity")) == normalize_audit_severity(severity)]
             if start_date:
-                range_query["$gte"] = start_date
+                documents = [item for item in documents if ensure_datetime(item.get("timestamp")) >= ensure_datetime(start_date)]
             if end_date:
-                range_query["$lte"] = end_date
-            query["timestamp"] = range_query
-        documents = await list_collection_documents(
-            request,
-            collection_name="audit_logs",
-            filter_query=query,
-            sort=[("timestamp", -1), ("id", -1)],
-            skip=offset,
-            limit=limit,
-        )
+                documents = [item for item in documents if ensure_datetime(item.get("timestamp")) <= ensure_datetime(end_date)]
+            documents.sort(key=lambda item: ensure_datetime(item.get("timestamp")), reverse=True)
+            documents = documents[offset: offset + limit]
     else:
         documents = [item for item in _fallback_store["audit_logs"] if item.get("workspace_id") == workspace_id]
         if severity:
-            documents = [item for item in documents if str(item.get("severity") or "").upper() == severity.upper()]
+            documents = [item for item in documents if normalize_audit_severity(item.get("severity")) == normalize_audit_severity(severity)]
         if start_date:
             documents = [item for item in documents if ensure_datetime(item.get("timestamp")) >= start_date]
         if end_date:
@@ -943,7 +1173,7 @@ async def list_audit_logs(
                 "action": "SCAN_ACTIVITY_REVIEWED",
                 "resource": "logs",
                 "ip_address": None,
-                "severity": "CRITICAL" if str(most_recent.get("status") or "").upper() in {"BLOCKED", "REDACTED"} else "INFO",
+                "severity": "CRITICAL" if normalize_log_status(most_recent.get("status")) in {"BLOCKED", "REDACTED"} else "INFO",
                 "old_value": None,
                 "new_value": {"status": most_recent.get("status"), "threat_type": most_recent.get("threat_type")},
                 "metadata": {"request_id": most_recent.get("request_id")},
@@ -1023,13 +1253,19 @@ async def load_workspace_logs(request: Request, current_user: dict[str, Any], *,
     workspace_id = workspace_id_for(current_user)
     collection = collection_from_request(request, "logs")
     if collection is not None:
-        documents = await list_collection_documents(
-            request,
-            collection_name="logs",
-            filter_query={"workspace_id": workspace_id},
-            sort=[("timestamp", -1), ("id", -1)],
-            limit=max_items,
-        )
+        try:
+            documents = await list_collection_documents(
+                request,
+                collection_name="logs",
+                filter_query={"workspace_id": workspace_id},
+                sort=[("timestamp", -1), ("id", -1)],
+                limit=max_items,
+            )
+        except Exception as exc:
+            logger.warning("Failed to load workspace logs from MongoDB; falling back to in-memory store: %s", exc)
+            documents = [item for item in _fallback_store["logs"] if item.get("workspace_id") == workspace_id]
+            documents.sort(key=lambda item: ensure_datetime(item.get("timestamp")), reverse=True)
+            documents = documents[:max_items]
     else:
         documents = [item for item in _fallback_store["logs"] if item.get("workspace_id") == workspace_id]
         documents.sort(key=lambda item: ensure_datetime(item.get("timestamp")), reverse=True)
@@ -1083,9 +1319,7 @@ def build_threat_counts_payload(
         bucket = aggregates.get(key)
         if bucket is None:
             continue
-        status = str(log.get("status") or "CLEAN").upper()
-        if status not in THREAT_STATUS_VALUES:
-            status = "CLEAN"
+        status = normalize_log_status(log.get("status"))
         bucket[status.lower()] += 1
         bucket["total"] += 1
 
@@ -1128,14 +1362,23 @@ async def list_remediations(
     workspace_id = workspace_id_for(current_user)
     collection = collection_from_request(request, "reports")
     if collection is not None:
-        documents = await list_collection_documents(
-            request,
-            collection_name="reports",
-            filter_query={"workspace_id": workspace_id, "kind": "remediation"},
-            sort=[("created_at", -1), ("id", -1)],
-            skip=offset,
-            limit=limit,
-        )
+        try:
+            documents = await list_collection_documents(
+                request,
+                collection_name="reports",
+                filter_query={"workspace_id": workspace_id, "kind": "remediation"},
+                sort=[("created_at", -1), ("id", -1)],
+                skip=offset,
+                limit=limit,
+            )
+        except Exception as exc:
+            logger.warning("Failed to list remediation reports from MongoDB; falling back to in-memory store: %s", exc)
+            documents = [
+                item for item in _fallback_store["reports"]
+                if item.get("workspace_id") == workspace_id and item.get("kind") == "remediation"
+            ]
+            documents.sort(key=lambda item: ensure_datetime(item.get("created_at")), reverse=True)
+            documents = documents[offset: offset + limit]
     else:
         documents = [
             item for item in _fallback_store["reports"]
@@ -1225,7 +1468,7 @@ async def get_usage_summary(request: Request, current_user: dict[str, Any]) -> d
         timestamp = ensure_datetime(log.get("timestamp"))
         if timestamp >= current_month_start:
             monthly_requests += 1
-        status = str(log.get("status") or "").upper()
+        status = normalize_log_status(log.get("status"))
         threat_type = str(log.get("threat_type") or "").upper()
         if status == "BLOCKED" and threat_type == "PROMPT_INJECTION":
             blocked_injections += 1
@@ -1275,7 +1518,7 @@ async def get_analytics_summary(request: Request, current_user: dict[str, Any]) 
 
     for log in logs:
         timestamp = ensure_datetime(log.get("timestamp"))
-        status = str(log.get("status") or "").upper()
+        status = normalize_log_status(log.get("status"))
         threat_type = str(log.get("threat_type") or "").upper()
 
         if status == "BLOCKED":
@@ -1329,35 +1572,54 @@ async def persist_scan_result(
     api_key_id = await resolve_api_key_id(request, current_user, request.headers.get("x-api-key"))
     request_id = getattr(request.state, "request_id", None) or f"req_{secrets.token_hex(8)}"
     now = utcnow()
+    status = normalize_log_status(scan_result.get("status"))
+    threat_type = normalize_upper_token(scan_result.get("threat_type")) or "NONE"
+    normalized_threat_types = [
+        normalize_upper_token(item)
+        for item in (scan_result.get("threat_types") or [])
+        if str(item or "").strip()
+    ]
+    if not normalized_threat_types and threat_type != "NONE":
+        normalized_threat_types = [threat_type]
+    request_ip = client_ip_for(request)
+    threat_score = parse_bounded_float(scan_result.get("threat_score"), default=0.0)
+    risk_score = parse_bounded_float(scan_result.get("risk_score"), default=threat_score)
 
     log_doc = {
         "id": await next_numeric_id(request, namespace="logs", collection_name="logs", fallback_items=_fallback_store["logs"]),
         "workspace_id": workspace_id,
         "user_id": user_id,
+        "user_email": email_for(current_user),
         "api_key_id": api_key_id,
         "timestamp": now,
-        "status": str(scan_result.get("status") or "CLEAN").upper(),
-        "threat_type": str(scan_result.get("threat_type") or "NONE").upper(),
-        "threat_types": [str(item).upper() for item in scan_result.get("threat_types") or []],
-        "threat_score": float(scan_result.get("threat_score") or 0.0),
-        "risk_score": float(scan_result.get("threat_score") or 0.0),
-        "risk_level": str(scan_result.get("risk_level") or "low").lower(),
-        "tokens_used": max(1, len(prompt.split())),
-        "latency_ms": int(runtime.get("duration_ms") or 0),
+        "status": status,
+        "threat_type": threat_type,
+        "threat_types": normalized_threat_types,
+        "threat_score": threat_score,
+        "risk_score": risk_score,
+        "risk_level": normalize_risk_level(scan_result.get("risk_level")),
+        "tokens_used": max(parse_non_negative_int(runtime.get("input_tokens"), default=len(prompt.split())), 1),
+        "latency_ms": parse_non_negative_int(runtime.get("duration_ms")),
         "endpoint": "/api/v1/scan",
         "method": "POST",
+        "ip_address": request_ip,
         "model": model,
         "provider": provider,
-        "security_tier": security_tier,
+        "security_tier": str(security_tier or "PRO").strip().upper() or "PRO",
         "request_id": request_id,
         "raw_payload": {"prompt": prompt[:2_000]},
         "sanitized_content": scan_result.get("sanitized_content"),
         "created_at": now,
+        "updated_at": now,
     }
 
     collection = collection_from_request(request, "logs")
     if collection is not None:
-        await collection.insert_one(log_doc)
+        try:
+            await collection.insert_one(log_doc)
+        except Exception as exc:
+            logger.warning("Failed to persist scan log in MongoDB; using fallback store instead: %s", exc)
+            _fallback_store["logs"].append(log_doc)
     else:
         _fallback_store["logs"].append(log_doc)
 
@@ -1367,13 +1629,14 @@ async def persist_scan_result(
     public_log = public_document(log_doc, exclude={"workspace_id", "user_id"})
     schedule_broadcast(public_log, user_id=user_id)
 
-    status = str(log_doc["status"]).upper()
     if status in {"BLOCKED", "REDACTED"}:
         remediation_doc = {
             "id": await next_numeric_id(request, namespace="reports", collection_name="reports", fallback_items=_fallback_store["reports"]),
             "kind": "remediation",
             "workspace_id": workspace_id,
+            "timestamp": now,
             "created_at": now,
+            "updated_at": now,
             "user_id": user_id,
             "api_key_id": api_key_id,
             "security_log_id": log_doc["id"],
@@ -1396,7 +1659,11 @@ async def persist_scan_result(
         }
         reports_collection = collection_from_request(request, "reports")
         if reports_collection is not None:
-            await reports_collection.insert_one(remediation_doc)
+            try:
+                await reports_collection.insert_one(remediation_doc)
+            except Exception as exc:
+                logger.warning("Failed to persist remediation record in MongoDB; using fallback store instead: %s", exc)
+                _fallback_store["reports"].append(remediation_doc)
         else:
             _fallback_store["reports"].append(remediation_doc)
 
@@ -1407,7 +1674,7 @@ async def persist_scan_result(
                 current_user,
                 title=f"{status.title()} {log_doc['threat_type'].replace('_', ' ')}",
                 message=f"Sentinel {status.lower()} request {request_id}.",
-                notification_type="remediation",
+                notification_type="REMEDIATION",
                 persist_audit=False,
             )
 
@@ -1426,24 +1693,43 @@ async def persist_scan_result(
             "provider": provider,
             "model": model,
             "security_tier": security_tier,
+            "api_key_id": api_key_id,
         },
     )
 
     return public_log
 
 
-async def increment_api_key_usage(request: Request, current_user: dict[str, Any], *, api_key_id: int, used_at: datetime) -> None:
+async def increment_api_key_usage(
+    request: Request,
+    current_user: dict[str, Any],
+    *,
+    api_key_id: int | str | None,
+    used_at: datetime,
+) -> None:
     user_id = user_id_for(current_user)
-    collection = collection_from_request(request, "keys")
-    if collection is not None:
-        await collection.update_one(
-            {"user_id": user_id, "id": api_key_id},
-            {"$inc": {"usage_count": 1}, "$set": {"last_used": used_at}},
-        )
+    resolved_api_key_id = parse_optional_int(api_key_id)
+    if resolved_api_key_id is None:
         return
 
+    update_time = ensure_datetime(used_at)
+    collection = collection_from_request(request, "keys")
+    if collection is not None:
+        try:
+            await collection.update_one(
+                {
+                    "user_id": user_id,
+                    **(build_mongo_id_filter("id", resolved_api_key_id) or {"id": resolved_api_key_id}),
+                },
+                {"$inc": {"usage_count": 1}, "$set": {"last_used": update_time, "updated_at": update_time}},
+            )
+            return
+        except Exception as exc:
+            logger.warning("Failed to increment API key usage in MongoDB; using fallback store instead: %s", exc)
+
     for item in _fallback_store["keys"]:
-        if item.get("user_id") == user_id and int(item.get("id") or 0) == api_key_id:
+        if item.get("user_id") == user_id and matches_identifier(item.get("id"), resolved_api_key_id):
             item["usage_count"] = int(item.get("usage_count") or 0) + 1
-            item["last_used"] = used_at
+            item["last_used"] = update_time
+            item["updated_at"] = update_time
             return

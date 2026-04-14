@@ -340,7 +340,7 @@ function startBackendWebSocketBridge(io: Server) {
 
   connect("/ws/notifications", (notification) => {
     io.emit("notification_received", notification);
-    if (String(notification?.type || "").toLowerCase() === "remediation") {
+    if (String(notification?.type || "").toUpperCase() === "REMEDIATION") {
       io.emit("remediation_triggered", notification);
     }
   });

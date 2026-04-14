@@ -8,7 +8,7 @@ from app.models.security_log import LogStatusEnum
 
 class LogResponse(BaseModel):
     id: int
-    api_key_id: int
+    api_key_id: int | None = None
     timestamp: datetime
     status: LogStatusEnum
     threat_type: Optional[str] = None

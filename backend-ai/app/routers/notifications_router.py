@@ -16,7 +16,7 @@ router = APIRouter(tags=["notifications"])
 class CreateNotificationRequest(BaseModel):
     title: str = Field(..., max_length=200)
     message: str = Field(..., max_length=2000)
-    type: str | None = Field(default="info", max_length=64)
+    type: str | None = Field(default="INFO", max_length=64)
 
 
 @router.get("")

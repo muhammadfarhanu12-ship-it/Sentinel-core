@@ -69,28 +69,33 @@ export function NotificationDropdown() {
                   No recent alerts.
                 </div>
               ) : (
-                alerts.map(alert => (
-                  <button
-                    key={alert.id}
-                    onClick={() => markNotificationRead(alert.id)}
-                    className="w-full text-left p-4 border-b border-white/5 hover:bg-slate-800/50 transition-colors flex items-start space-x-3"
-                  >
-                    <div className={`p-2 rounded-lg shrink-0 ${alert.type === 'remediation' ? 'bg-red-500/10 text-red-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
-                      {alert.type === 'remediation' ? <ShieldAlert className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-200">
-                        {alert.title}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        {alert.message}
-                      </p>
-                      <p className="text-xs text-slate-500 mt-2">
-                        {formatDistanceToNow(new Date(alert.created_at), { addSuffix: true })}
-                      </p>
-                    </div>
-                  </button>
-                ))
+                alerts.map(alert => {
+                  const notificationType = String(alert.type || '').toUpperCase();
+                  const isRemediation = notificationType === 'REMEDIATION';
+
+                  return (
+                    <button
+                      key={alert.id}
+                      onClick={() => markNotificationRead(alert.id)}
+                      className="w-full text-left p-4 border-b border-white/5 hover:bg-slate-800/50 transition-colors flex items-start space-x-3"
+                    >
+                      <div className={`p-2 rounded-lg shrink-0 ${isRemediation ? 'bg-red-500/10 text-red-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
+                        {isRemediation ? <ShieldAlert className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-200">
+                          {alert.title}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {alert.message}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-2">
+                          {formatDistanceToNow(new Date(alert.created_at), { addSuffix: true })}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })
               )}
             </div>
             <div className="p-2 border-t border-white/10 bg-slate-950/50">

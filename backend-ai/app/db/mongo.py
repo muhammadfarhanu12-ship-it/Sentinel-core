@@ -147,6 +147,7 @@ async def connect_to_mongo(*, app=None) -> None:
         if app is not None:
             app.state.mongodb_client = _mongo_client
             app.state.database = _database
+            app.state.mongo_connection_state = mongo_connection_state
         return
 
     _mongo_uri = _resolve_mongo_uri()
@@ -194,6 +195,7 @@ async def connect_to_mongo(*, app=None) -> None:
         if app is not None:
             app.state.mongodb_client = client
             app.state.database = database
+            app.state.mongo_connection_state = mongo_connection_state
 
         _mark_ready()
         logger.info("Connected to MongoDB database '%s'", _mongo_db_name)
@@ -232,6 +234,7 @@ async def close_mongo_connection(*, app=None) -> None:
     if app is not None:
         app.state.mongodb_client = None
         app.state.database = None
+        app.state.mongo_connection_state = mongo_connection_state
 
     logger.info("MongoDB connection closed")
 
@@ -239,11 +242,13 @@ async def close_mongo_connection(*, app=None) -> None:
 __all__ = [
     "close_mongo_connection",
     "connect_to_mongo",
+    "get_client",
     "get_collection",
     "get_database",
     "get_database_from_request",
     "get_mongo_connection_status",
     "get_mongo_db_name",
     "get_mongo_uri",
+    "mongo_connection_state",
     "ping_mongo",
 ]

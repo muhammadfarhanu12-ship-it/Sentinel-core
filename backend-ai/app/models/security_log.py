@@ -8,9 +8,10 @@ from pydantic import BaseModel
 
 
 class LogStatusEnum(str, Enum):
-    ALLOWED = "ALLOWED"
+    CLEAN = "CLEAN"
     BLOCKED = "BLOCKED"
     REDACTED = "REDACTED"
+    ALLOWED = "CLEAN"
 
 
 class SecurityLog(BaseModel):
@@ -19,7 +20,7 @@ class SecurityLog(BaseModel):
     user_id: str | None = None
     user_email: str | None = None
     api_key_id: str | None = None
-    status: LogStatusEnum = LogStatusEnum.ALLOWED
+    status: LogStatusEnum = LogStatusEnum.CLEAN
     threat_type: str | None = None
     threat_types: list[str] | None = None
     threat_score: float | None = None
