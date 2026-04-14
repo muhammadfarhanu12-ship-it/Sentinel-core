@@ -140,15 +140,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-origins = list(
-    dict.fromkeys(
-        [
-            *settings.cors_origins_list,
-            "https://sentinel-core-arei.vercel.app",
-            settings.FRONTEND_URL,
-        ]
-    )
-)
+origins = [
+    "https://sentinel-core-arei.vercel.app",
+]
 
 app.add_middleware(
     CORSMiddleware,
