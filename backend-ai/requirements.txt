@@ -6,3 +6,5 @@ python-dotenv
 python-jose
 passlib
 httpx
+websockets
+wsproto
