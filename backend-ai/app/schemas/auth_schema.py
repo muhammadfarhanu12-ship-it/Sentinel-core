@@ -8,6 +8,7 @@ from app.schemas.user_schema import PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, Us
 class Token(BaseModel):
     access_token: str
     token_type: str
+    role: str | None = None
     refresh_token: str | None = None
     user: UserResponse | None = None
 

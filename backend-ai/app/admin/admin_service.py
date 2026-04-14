@@ -101,7 +101,7 @@ class AdminService:
                 "role": ADMIN_ROLE,
             }
         )
-        return AdminTokenResponse(access_token=access_token)
+        return AdminTokenResponse(access_token=access_token, role=ADMIN_ROLE)
 
     async def get_dashboard(self, admin: dict[str, Any]) -> dict[str, object]:
         return {

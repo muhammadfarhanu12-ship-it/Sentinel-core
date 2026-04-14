@@ -2,22 +2,21 @@ import axios from 'axios';
 
 import { clearAdminToken, getAdminToken } from './auth';
 
+const DEFAULT_API_URL = 'https://sentinel-backend-j6zr.onrender.com';
+
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
 }
 
-function resolveAdminApiBaseUrl(): string {
-  const configuredBaseUrl = stripTrailingSlash(import.meta.env.VITE_ADMIN_API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '');
-  if (configuredBaseUrl) {
-    return configuredBaseUrl;
-  }
-
-  const hostname = window.location.hostname === '127.0.0.1' ? '127.0.0.1' : 'localhost';
-  return `http://${hostname}:8000/api/v1/admin`;
+function resolveApiUrl(): string {
+  return stripTrailingSlash(import.meta.env.VITE_API_URL || DEFAULT_API_URL);
 }
 
+export const API_URL = resolveApiUrl();
+export const ADMIN_API_BASE_URL = `${API_URL}/api/v1/admin`;
+
 const api = axios.create({
-  baseURL: resolveAdminApiBaseUrl(),
+  baseURL: ADMIN_API_BASE_URL,
   withCredentials: true,
 });
 

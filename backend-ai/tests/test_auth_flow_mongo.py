@@ -277,10 +277,38 @@ def test_verify_email_allows_login(auth_client, monkeypatch: pytest.MonkeyPatch)
     assert login_response.status_code == 200, login_response.text
     payload = login_response.json()["data"]
     assert payload["access_token"]
+    assert payload["role"] == "user"
     assert payload["refresh_token"]
     assert payload["user"]["role"] == "user"
     assert payload["user"]["is_verified"] is True
     assert len(sessions._documents) == 1
+
+
+def test_login_accepts_json_and_returns_role(auth_client, monkeypatch: pytest.MonkeyPatch):
+    client, _, _ = auth_client
+    captured: dict[str, str] = {}
+
+    async def fake_send_verification_email_async(*, recipient_email: str, token: str):
+        captured["token"] = token
+        return EmailSendResult(success=True, message_id="verification-json-login")
+
+    monkeypatch.setattr(auth_service, "send_verification_email_async", fake_send_verification_email_async)
+
+    signup_response = _signup(client, "json.login@example.com")
+    assert signup_response.status_code == 201, signup_response.text
+    verify_response = _verify(client, captured["token"])
+    assert verify_response.status_code == 200, verify_response.text
+
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "json.login@example.com", "password": "StrongPass123"},
+    )
+
+    assert login_response.status_code == 200, login_response.text
+    payload = login_response.json()["data"]
+    assert payload["access_token"]
+    assert payload["token_type"] == "bearer"
+    assert payload["role"] == "user"
 
 
 def test_admin_bootstrap_promotes_existing_user_and_hashes_password(auth_client):
@@ -371,6 +399,7 @@ def test_admin_user_can_access_admin_routes(auth_client):
     login_response = _login(client, "platform.admin@example.com", "AdminPass123")
     assert login_response.status_code == 200, login_response.text
     payload = login_response.json()["data"]
+    assert payload["role"] == "admin"
     assert payload["user"]["role"] == "admin"
 
     headers = {"Authorization": f"Bearer {payload['access_token']}"}

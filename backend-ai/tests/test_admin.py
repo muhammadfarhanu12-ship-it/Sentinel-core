@@ -109,6 +109,7 @@ def test_admin_login_works_independently(client, db_session):
 
     assert response.status_code == 200, response.text
     assert response.json()["data"]["access_token"]
+    assert response.json()["data"]["role"] == "admin"
 
 
 def test_admin_routes_reject_missing_and_user_tokens(client, db_session):

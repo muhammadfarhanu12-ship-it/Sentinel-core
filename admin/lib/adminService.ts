@@ -1,4 +1,4 @@
-import api from './api';
+import api, { API_URL } from './api';
 import type {
   AdminApiKey,
   AdminApiKeysQuery,
@@ -16,6 +16,15 @@ type ApiEnvelope<T> = {
   data?: T;
   error?: {
     message?: string;
+  };
+};
+
+type AdminLoginResponse = {
+  access_token: string;
+  token_type: string;
+  role?: string;
+  user?: {
+    role?: string;
   };
 };
 
@@ -42,8 +51,35 @@ function pageToParams(page = 1, pageSize = 10) {
 }
 
 export async function loginAdmin(payload: AdminLoginPayload) {
-  const response = await api.post<ApiEnvelope<{ access_token: string }>>('/auth/login', payload);
-  return unwrapEnvelope(response.data);
+  const response = await fetch(`${API_URL}/api/v1/auth/login`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const responsePayload = (await response.json().catch(() => null)) as ApiEnvelope<AdminLoginResponse> | null;
+  if (!response.ok || !responsePayload) {
+    throw new Error(responsePayload?.error?.message || 'Unable to authenticate with the admin backend.');
+  }
+
+  const authPayload = unwrapEnvelope(responsePayload);
+  if (!authPayload?.access_token) {
+    throw new Error('Admin login did not return an access token.');
+  }
+
+  const resolvedRole = authPayload.role || authPayload.user?.role;
+  if (resolvedRole !== 'admin') {
+    throw new Error('Admin access required.');
+  }
+
+  return {
+    access_token: authPayload.access_token,
+    token_type: authPayload.token_type || 'bearer',
+    role: resolvedRole,
+  };
 }
 
 export async function fetchAdminMetrics() {
