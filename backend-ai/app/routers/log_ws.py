@@ -10,6 +10,7 @@ from app.services.websocket_auth_service import WebSocketIdentity, authenticate_
 
 router = APIRouter()
 logger = logging.getLogger("log_ws")
+WEBSOCKET_HEARTBEAT_SECONDS = 20
 
 
 class ConnectionManager:
@@ -92,7 +93,14 @@ async def websocket_logs(websocket: WebSocket) -> None:
     await manager.connect(identity=identity, websocket=websocket)
     try:
         while True:
-            await websocket.receive()
+            try:
+                message = await asyncio.wait_for(websocket.receive(), timeout=WEBSOCKET_HEARTBEAT_SECONDS)
+            except asyncio.TimeoutError:
+                await websocket.send_text("ping")
+                continue
+
+            if message["type"] == "websocket.disconnect":
+                raise WebSocketDisconnect(message.get("code", 1000), message.get("reason"))
     except WebSocketDisconnect as exc:
         logger.info("Log websocket disconnected user_id=%s code=%s", identity.user_id, exc.code)
     except RuntimeError as exc:

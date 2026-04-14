@@ -53,12 +53,12 @@ def _resolve_websocket_token(websocket: WebSocket) -> str:
 
 async def authenticate_websocket(websocket: WebSocket) -> WebSocketAuthResult:
     path = websocket.url.path
-    token = _resolve_websocket_token(websocket)
-    if not token:
-        logger.warning("WebSocket rejected path=%s client=%s reason=missing_token", path, _client_label(websocket))
-        return WebSocketAuthResult(close_code=1008, close_reason="Authentication required")
-
     try:
+        token = _resolve_websocket_token(websocket)
+        if not token:
+            logger.warning("WebSocket rejected path=%s client=%s reason=missing_token", path, _client_label(websocket))
+            return WebSocketAuthResult(close_code=1008, close_reason="Authentication required")
+
         token_data = decode_token(token, expected_type="access")
         user = await get_user_by_id(str(token_data.user_id))
     except HTTPException as exc:
@@ -85,16 +85,20 @@ async def authenticate_websocket(websocket: WebSocket) -> WebSocketAuthResult:
         )
         return WebSocketAuthResult(close_code=1008, close_reason="User inactive")
 
-    identity = WebSocketIdentity(
-        user_id=str(user["_id"]),
-        email=str(user["email"]).lower(),
-        user_document=user,
-    )
-    logger.info(
-        "WebSocket authenticated path=%s client=%s user_id=%s email=%s",
-        path,
-        _client_label(websocket),
-        identity.user_id,
-        identity.email,
-    )
-    return WebSocketAuthResult(identity=identity)
+    try:
+        identity = WebSocketIdentity(
+            user_id=str(user["_id"]),
+            email=str(user["email"]).lower(),
+            user_document=user,
+        )
+        logger.info(
+            "WebSocket authenticated path=%s client=%s user_id=%s email=%s",
+            path,
+            _client_label(websocket),
+            identity.user_id,
+            identity.email,
+        )
+        return WebSocketAuthResult(identity=identity)
+    except Exception:
+        logger.exception("WebSocket identity resolution crashed path=%s client=%s", path, _client_label(websocket))
+        return WebSocketAuthResult(close_code=1011, close_reason="Internal server error")
