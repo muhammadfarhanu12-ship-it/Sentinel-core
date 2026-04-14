@@ -1,6 +1,6 @@
 const LOCAL_BACKEND_ORIGIN = 'http://localhost:8000';
-const PRODUCTION_BACKEND_ORIGIN = 'https://sentinel-backend-j6zr.onrender.com';
-const PRODUCTION_BACKEND_WS_ORIGIN = 'wss://sentinel-backend-j6zr.onrender.com';
+const PRODUCTION_BACKEND_ORIGIN = 'https://sentinel-core-xcrz.onrender.com';
+const PRODUCTION_BACKEND_WS_ORIGIN = 'wss://sentinel-core-xcrz.onrender.com';
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
