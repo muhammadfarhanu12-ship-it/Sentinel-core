@@ -1,5 +1,5 @@
 fastapi
-uvicorn
+uvicorn[standard]
 motor[srv]
 pydantic
 python-dotenv
@@ -7,4 +7,3 @@ python-jose
 passlib
 httpx
 websockets
-wsproto
