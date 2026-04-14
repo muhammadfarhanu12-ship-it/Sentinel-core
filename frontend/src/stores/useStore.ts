@@ -28,9 +28,11 @@ import {
 } from "../services/enterprise";
 
 const MAX_LOG_BUFFER = 500;
-const REALTIME_RECONNECT_MAX_MS = 10000;
+const REALTIME_RECONNECT_BASE_MS = 1000;
+const REALTIME_RECONNECT_MAX_MS = 30000;
 const REALTIME_AUTH_CLOSE_CODE = 1008;
 const REALTIME_SERVER_ERROR_CLOSE_CODE = 1011;
+const REALTIME_RETRYABLE_CLOSE_CODES = new Set([1001, 1006, 1011, 1012, 1013]);
 
 type LogsQueryParams = {
   limit?: number;
@@ -240,10 +242,17 @@ function connectRealtimeChannel(
       return;
     }
 
+    const closeCode = event.code || REALTIME_SERVER_ERROR_CLOSE_CODE;
+    if (!REALTIME_RETRYABLE_CLOSE_CODES.has(closeCode)) {
+      console.warn(`Realtime ${channel} websocket closed permanently (code=${closeCode}). Reconnect disabled.`);
+      return;
+    }
+
     reconnectAttempts[channel] += 1;
-    const delay = Math.min(REALTIME_RECONNECT_MAX_MS, 500 * 2 ** (reconnectAttempts[channel] - 1));
+    const delay = Math.min(REALTIME_RECONNECT_MAX_MS, REALTIME_RECONNECT_BASE_MS * 2 ** (reconnectAttempts[channel] - 1));
+    clearReconnectTimer(channel);
     console.warn(
-      `Realtime ${channel} websocket closed (code=${event.code || REALTIME_SERVER_ERROR_CLOSE_CODE}). Reconnecting in ${delay}ms.`,
+      `Realtime ${channel} websocket closed (code=${closeCode}). Reconnecting in ${delay}ms.`,
     );
     reconnectTimers[channel] = window.setTimeout(() => {
       connectRealtimeChannel(channel, path, onPayload);

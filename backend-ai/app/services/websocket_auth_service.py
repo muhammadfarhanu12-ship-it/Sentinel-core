@@ -18,6 +18,13 @@ class WebSocketIdentity:
     user_document: dict
 
 
+@dataclass(slots=True)
+class WebSocketAuthResult:
+    identity: WebSocketIdentity | None = None
+    close_code: int = 1008
+    close_reason: str = "Authentication required"
+
+
 def _client_label(websocket: WebSocket) -> str:
     client = websocket.client
     if client is None:
@@ -44,13 +51,12 @@ def _resolve_websocket_token(websocket: WebSocket) -> str:
     return _extract_authorization_token(websocket)
 
 
-async def authenticate_websocket(websocket: WebSocket) -> WebSocketIdentity | None:
+async def authenticate_websocket(websocket: WebSocket) -> WebSocketAuthResult:
     path = websocket.url.path
     token = _resolve_websocket_token(websocket)
     if not token:
         logger.warning("WebSocket rejected path=%s client=%s reason=missing_token", path, _client_label(websocket))
-        await websocket.close(code=1008, reason="Authentication required")
-        return None
+        return WebSocketAuthResult(close_code=1008, close_reason="Authentication required")
 
     try:
         token_data = decode_token(token, expected_type="access")
@@ -62,17 +68,14 @@ async def authenticate_websocket(websocket: WebSocket) -> WebSocketIdentity | No
             _client_label(websocket),
             exc.detail,
         )
-        await websocket.close(code=1008, reason="Invalid token")
-        return None
+        return WebSocketAuthResult(close_code=1008, close_reason="Invalid token")
     except Exception:
         logger.exception("WebSocket authentication crashed path=%s client=%s", path, _client_label(websocket))
-        await websocket.close(code=1011, reason="Internal server error")
-        return None
+        return WebSocketAuthResult(close_code=1011, close_reason="Internal server error")
 
     if user is None:
         logger.warning("WebSocket rejected path=%s client=%s reason=user_not_found", path, _client_label(websocket))
-        await websocket.close(code=1008, reason="Invalid token")
-        return None
+        return WebSocketAuthResult(close_code=1008, close_reason="Invalid token")
     if not bool(user.get("is_active", True)):
         logger.warning(
             "WebSocket rejected path=%s client=%s reason=user_inactive user_id=%s",
@@ -80,8 +83,7 @@ async def authenticate_websocket(websocket: WebSocket) -> WebSocketIdentity | No
             _client_label(websocket),
             user.get("_id"),
         )
-        await websocket.close(code=1008, reason="User inactive")
-        return None
+        return WebSocketAuthResult(close_code=1008, close_reason="User inactive")
 
     identity = WebSocketIdentity(
         user_id=str(user["_id"]),
@@ -95,4 +97,4 @@ async def authenticate_websocket(websocket: WebSocket) -> WebSocketIdentity | No
         identity.user_id,
         identity.email,
     )
-    return identity
+    return WebSocketAuthResult(identity=identity)

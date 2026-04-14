@@ -16,8 +16,8 @@ View your app in AI Studio: https://ai.studio/apps/bdf6d9c8-96b0-4798-bfe7-cb93f
 1. Install dependencies:
    `npm install`
 2. Copy `.env.example` to `.env` and configure the backend URLs:
-   `VITE_API_URL=https://sentinel-core-xcrz.onrender.com`
-   `VITE_API_WS_URL=wss://sentinel-core-xcrz.onrender.com`
-   `VITE_ADMIN_API_BASE_URL=https://sentinel-core-xcrz.onrender.com/api/v1/admin`
+   `VITE_API_URL=https://sentinel-backend-j6zr.onrender.com`
+   `VITE_API_WS_URL=wss://sentinel-backend-j6zr.onrender.com`
+   `VITE_ADMIN_API_BASE_URL=https://sentinel-backend-j6zr.onrender.com/api/v1/admin`
 4. Run the app:
    `npm run dev`

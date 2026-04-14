@@ -1,5 +1,6 @@
 const LOCAL_BACKEND_ORIGIN = 'http://localhost:8000';
-const PRODUCTION_BACKEND_ORIGIN = 'https://sentinel-core-xcrz.onrender.com';
+const PRODUCTION_BACKEND_ORIGIN = 'https://sentinel-backend-j6zr.onrender.com';
+const PRODUCTION_BACKEND_WS_ORIGIN = 'wss://sentinel-backend-j6zr.onrender.com';
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
@@ -107,11 +108,17 @@ function toWebSocketOrigin(origin: string): string {
 }
 
 export function resolveBackendWebSocketOrigin(): string {
-  const configuredWsOrigin = stripTrailingSlash(
+  const configuredWsOrigin = stripApiSuffix(
     import.meta.env.VITE_API_WS_URL || import.meta.env.VITE_WS_URL || import.meta.env.VITE_SOCKET_URL || '',
   );
-  if (configuredWsOrigin) return configuredWsOrigin;
-  return toWebSocketOrigin(resolveBackendOrigin());
+  if (configuredWsOrigin) return toWebSocketOrigin(configuredWsOrigin);
+
+  const backendOrigin = resolveBackendOrigin();
+  if (!isLocalHostname(currentHostname()) && backendOrigin === PRODUCTION_BACKEND_ORIGIN) {
+    return PRODUCTION_BACKEND_WS_ORIGIN;
+  }
+
+  return toWebSocketOrigin(backendOrigin);
 }
 
 export function resolveAdminApiBaseUrl(): string {

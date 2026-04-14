@@ -79,11 +79,17 @@ def schedule_notification(notification_data: dict, *, user_id: str | None = None
 
 @router.websocket("/ws/notifications")
 async def websocket_notifications(websocket: WebSocket) -> None:
-    await websocket.accept()
-    identity = await authenticate_websocket(websocket)
+    auth_result = await authenticate_websocket(websocket)
+    identity = auth_result.identity
     if identity is None:
+        try:
+            await websocket.accept()
+            await websocket.close(code=auth_result.close_code, reason=auth_result.close_reason)
+        except Exception:
+            logger.debug("Notification websocket closed before authentication rejection could be sent")
         return
 
+    await websocket.accept()
     await manager.connect(identity=identity, websocket=websocket)
     try:
         while True:
