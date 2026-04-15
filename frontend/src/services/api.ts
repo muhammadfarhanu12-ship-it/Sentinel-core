@@ -7,7 +7,7 @@ function stripTrailingSlash(value: string): string {
 }
 
 function stripApiSuffix(value: string): string {
-  return stripTrailingSlash(value).replace(/\/api(?:\/v1)?$/i, '');
+  return stripTrailingSlash(value);
 }
 
 function wait(delayMs: number): Promise<void> {
@@ -49,7 +49,7 @@ export function resolveBackendOrigin(): string {
 
 export function buildBackendUrl(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${resolveBackendOrigin()}${normalizedPath}`;
+  return `${API_BASE_URL}${normalizedPath}`;
 }
 
 export async function apiFetch(endpoint: string, options: RequestInit = {}): Promise<Response> {

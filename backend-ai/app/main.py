@@ -142,7 +142,8 @@ app = FastAPI(
 )
 
 origins = [
-    "https://sentinel-admin-beta.vercel.app",
+    "https://sentinel-core-arei.vercel.app",   # MAIN FRONTEND (missing right now ❌)
+    "https://sentinel-admin-beta.vercel.app",  # ADMIN FRONTEND
     "http://localhost:5173",
 ]
 
