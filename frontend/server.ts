@@ -54,7 +54,7 @@ function normalizeHttpBaseUrl(name: string, value: string): string {
 const GATEWAY_PORT = parsePort(readEnv("PORT", readEnv("GATEWAY_PORT", "5173")));
 const BACKEND_AI_URL = normalizeHttpBaseUrl(
   "BACKEND_AI_URL",
-  requireEnv("BACKEND_AI_URL", readEnv("VITE_API_URL", readEnv("VITE_API_BASE_URL"))),
+  requireEnv("BACKEND_AI_URL", readEnv("VITE_API_URL", "https://sentinel-core-xcrz.onrender.com")),
 );
 const ENABLE_LOCAL_FALLBACK = parseBooleanEnv("ENABLE_LOCAL_FALLBACK");
 const ENABLE_BACKEND_WS_BRIDGE = parseBooleanEnv("ENABLE_BACKEND_WS_BRIDGE");

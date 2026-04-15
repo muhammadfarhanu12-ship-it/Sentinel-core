@@ -1,6 +1,6 @@
-const LOCAL_BACKEND_ORIGIN = 'http://localhost:8000';
-export const API_BASE_URL = 'https://sentinel-core-xcrz.onrender.com';
-const API_WS_BASE_URL = 'wss://sentinel-core-xcrz.onrender.com';
+const FALLBACK_API_BASE_URL = 'https://sentinel-core-xcrz.onrender.com';
+const FALLBACK_API_WS_BASE_URL = 'wss://sentinel-core-xcrz.onrender.com';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || FALLBACK_API_BASE_URL;
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
@@ -8,15 +8,6 @@ function stripTrailingSlash(value: string): string {
 
 function stripApiSuffix(value: string): string {
   return stripTrailingSlash(value).replace(/\/api(?:\/v1)?$/i, '');
-}
-
-function currentHostname(): string {
-  if (typeof window === 'undefined') return '';
-  return window.location.hostname;
-}
-
-function isLocalHostname(hostname: string): boolean {
-  return hostname === 'localhost' || hostname === '127.0.0.1';
 }
 
 function wait(delayMs: number): Promise<void> {
@@ -53,11 +44,7 @@ function shouldRetryRequest(method: string | undefined, status?: number, error?:
 }
 
 export function resolveBackendOrigin(): string {
-  const configuredOrigin = stripApiSuffix(
-    import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_BACKEND_URL || '',
-  );
-  if (configuredOrigin) return configuredOrigin;
-  return isLocalHostname(currentHostname()) ? LOCAL_BACKEND_ORIGIN : API_BASE_URL;
+  return stripApiSuffix(API_BASE_URL);
 }
 
 export function buildBackendUrl(path: string): string {
@@ -108,16 +95,12 @@ function toWebSocketOrigin(origin: string): string {
 }
 
 export function resolveBackendWebSocketOrigin(): string {
-  const configuredWsOrigin = stripApiSuffix(
-    import.meta.env.VITE_API_WS_URL || import.meta.env.VITE_WS_URL || import.meta.env.VITE_SOCKET_URL || '',
-  );
+  const configuredWsOrigin = stripApiSuffix(import.meta.env.VITE_API_WS_URL || import.meta.env.VITE_WS_URL || '');
   const normalizedConfiguredWsOrigin = configuredWsOrigin ? toWebSocketOrigin(configuredWsOrigin) : '';
   if (normalizedConfiguredWsOrigin) return normalizedConfiguredWsOrigin;
 
   const backendOrigin = resolveBackendOrigin();
-  if (!isLocalHostname(currentHostname()) && backendOrigin === API_BASE_URL) {
-    return API_WS_BASE_URL;
-  }
+  if (backendOrigin === stripApiSuffix(FALLBACK_API_BASE_URL)) return FALLBACK_API_WS_BASE_URL;
 
   return toWebSocketOrigin(backendOrigin);
 }
