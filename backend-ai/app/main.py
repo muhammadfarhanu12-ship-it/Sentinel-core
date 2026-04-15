@@ -140,23 +140,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-
-def _build_cors_origins() -> list[str]:
-    origins: list[str] = []
-    for origin in [
-        *settings.cors_origins_list,
-        settings.FRONTEND_URL,
-        "https://sentinel-core-arei.vercel.app",
-        "https://sentinel-admin-beta.vercel.app",
-    ]:
-        cleaned_origin = str(origin or "").strip().rstrip("/")
-        if cleaned_origin and cleaned_origin not in origins:
-            origins.append(cleaned_origin)
-    return origins
+origins = [
+    "https://sentinel-admin-beta.vercel.app",
+    "http://localhost:5173",
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_build_cors_origins(),
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

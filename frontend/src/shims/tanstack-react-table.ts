@@ -76,7 +76,7 @@ export function useReactTable<TData>(opts: {
   const [pageIndex, setPageIndex] = React.useState(0);
 
   const sorting = opts.state?.sorting || [];
-  const globalFilter = (opts.state?.globalFilter || '').toString().toLowerCase();
+  const globalFilter = opts.state?.globalFilter?.toString()?.toLowerCase() || '';
 
   const columns: Array<Column<TData>> = opts.columns.map((c, i) => {
     const id = (c.id || (typeof c.accessorKey === 'string' ? c.accessorKey : String(c.accessorKey)) || `col_${i}`) as string;
@@ -120,7 +120,7 @@ export function useReactTable<TData>(opts: {
   });
 
   if (globalFilter) {
-    rows = rows.filter((r) => JSON.stringify(r.original).toLowerCase().includes(globalFilter));
+    rows = rows.filter((r) => ((JSON.stringify(r.original)?.toLowerCase() || '').includes(globalFilter)));
   }
 
   if (sorting.length) {

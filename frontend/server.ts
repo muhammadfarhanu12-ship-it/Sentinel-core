@@ -20,7 +20,7 @@ function requireEnv(name: string, fallback = ""): string {
 }
 
 function parseBooleanEnv(name: string, fallback = "false"): boolean {
-  return readEnv(name, fallback).toLowerCase() === "true";
+  return (readEnv(name, fallback)?.toLowerCase() || "") === "true";
 }
 
 function parsePort(value: string): number {
@@ -60,7 +60,7 @@ const ENABLE_LOCAL_FALLBACK = parseBooleanEnv("ENABLE_LOCAL_FALLBACK");
 const ENABLE_BACKEND_WS_BRIDGE = parseBooleanEnv("ENABLE_BACKEND_WS_BRIDGE");
 
 function runLocalSecurityScan(prompt: string) {
-  const normalized = prompt.toLowerCase();
+  const normalized = prompt?.toLowerCase() || "";
   const isObfuscated =
     /(?:%[0-9a-f]{2}){4,}/i.test(prompt) ||
     /(?:\\u[0-9a-f]{4}|\\x[0-9a-f]{2}){2,}/i.test(prompt) ||

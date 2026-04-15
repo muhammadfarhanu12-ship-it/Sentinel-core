@@ -67,10 +67,10 @@ export default function TeamManagement() {
   }, [loadTeam]);
 
   const filteredMembers = useMemo(() => {
-    const query = deferredSearch.trim().toLowerCase();
+    const query = deferredSearch.trim()?.toLowerCase() || '';
     if (!query) return teamMembers;
     return teamMembers.filter((member) =>
-      `${member.name} ${member.email} ${member.role} ${member.status}`.toLowerCase().includes(query),
+      (`${member.name ?? ''} ${member.email ?? ''} ${member.role ?? ''} ${member.status ?? ''}`?.toLowerCase() || '').includes(query),
     );
   }, [deferredSearch, teamMembers]);
 

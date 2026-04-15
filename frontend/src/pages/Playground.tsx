@@ -253,8 +253,8 @@ export default function Playground() {
                   <CardTitle className="text-lg">Execution Result</CardTitle>
                 </div>
                 {result && result.status && (
-                  <Badge variant={result.status.toLowerCase() as any} className="text-sm px-3 py-1">
-                    {result.status}
+                  <Badge variant={(result.status?.toLowerCase() || 'unknown') as any} className="text-sm px-3 py-1">
+                    {result.status || 'UNKNOWN'}
                   </Badge>
                 )}
               </div>

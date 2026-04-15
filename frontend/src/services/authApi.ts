@@ -114,7 +114,7 @@ export async function logoutFromServer(refreshToken?: string | null): Promise<Au
 }
 
 export function isEmailVerificationRequired(message: string | null | undefined): boolean {
-  const normalized = String(message || '').toLowerCase();
+  const normalized = message?.toLowerCase() || '';
   return normalized.includes('not verified') || normalized.includes('verify your email');
 }
 

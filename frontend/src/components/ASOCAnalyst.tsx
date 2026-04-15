@@ -69,7 +69,8 @@ export function ASOCAnalyst() {
             useStore.getState().addReasoningLog(String(analysis.reasoning), String(analysis.threat_level || 'Safe'));
           }
 
-          if (analysis?.threat_level && String(analysis.threat_level).toLowerCase() !== 'safe') {
+          const normalizedThreatLevel = String(analysis?.threat_level || '')?.toLowerCase() || '';
+          if (analysis?.threat_level && normalizedThreatLevel !== 'safe') {
             setMessages((prev) => [
               ...prev,
               {

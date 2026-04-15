@@ -53,26 +53,38 @@ function unwrapApi<T>(payload: any): T {
 }
 
 function normalizeApiKey(item: any): ApiKey {
-  const status = String(item?.status || "ACTIVE");
-  const normalizedStatus = status.toLowerCase();
+  const rawItem = item && typeof item === "object" ? item : {};
+  const status = String(rawItem?.status || "ACTIVE");
+  const normalizedStatus = status?.toLowerCase() || "";
   return {
-    id: String(item?.id),
-    name: String(item?.name || "API Key"),
-    key: item?.key ? String(item.key) : undefined,
-    created_at: String(item?.created_at ?? ""),
-    last_used: item?.last_used ? String(item.last_used) : null,
+    id: String(rawItem?.id),
+    name: String(rawItem?.name || "API Key"),
+    key: rawItem?.key ? String(rawItem.key) : undefined,
+    created_at: String(rawItem?.created_at ?? ""),
+    last_used: rawItem?.last_used ? String(rawItem.last_used) : null,
     status: normalizedStatus as any,
-    usage_count: Number(item?.usage_count || 0),
+    usage_count: Number(rawItem?.usage_count || 0),
   };
 }
 
 function normalizeLog(item: any): SecurityLog {
+  const rawItem = item && typeof item === "object" ? item : {};
+  const timestampValue = rawItem?.timestamp ?? rawItem?.created_at ?? "";
+
   return {
-    ...item,
-    id: String(item?.id),
-    timestamp: String(item?.timestamp ?? item?.created_at ?? ""),
-    created_at: item?.created_at == null ? (item?.timestamp == null ? null : String(item.timestamp)) : String(item.created_at),
-    api_key_id: item?.api_key_id == null ? null : String(item.api_key_id),
+    ...rawItem,
+    id: String(rawItem?.id ?? rawItem?.request_id ?? timestampValue),
+    timestamp: String(timestampValue),
+    created_at:
+      rawItem?.created_at == null
+        ? (rawItem?.timestamp == null ? null : String(rawItem.timestamp))
+        : String(rawItem.created_at),
+    api_key_id: rawItem?.api_key_id == null ? null : String(rawItem.api_key_id),
+    status: rawItem?.status == null ? "" : String(rawItem.status),
+    threat_type: rawItem?.threat_type == null ? "NONE" : String(rawItem.threat_type),
+    tokens_used: Number(rawItem?.tokens_used ?? 0),
+    endpoint: rawItem?.endpoint == null ? null : String(rawItem.endpoint),
+    method: rawItem?.method == null ? null : String(rawItem.method),
   } as SecurityLog;
 }
 
