@@ -1,8 +1,6 @@
 const LOCAL_BACKEND_ORIGIN = 'http://localhost:8000';
-const LEGACY_PRODUCTION_BACKEND_ORIGIN = 'https://sentinel-core-xcrz.onrender.com';
-const LEGACY_PRODUCTION_BACKEND_WS_ORIGIN = 'wss://sentinel-core-xcrz.onrender.com';
-const PRODUCTION_BACKEND_ORIGIN = 'https://sentinel-backend-j6zr.onrender.com';
-const PRODUCTION_BACKEND_WS_ORIGIN = 'wss://sentinel-backend-j6zr.onrender.com';
+export const API_BASE_URL = 'https://sentinel-core-xcrz.onrender.com';
+const API_WS_BASE_URL = 'wss://sentinel-core-xcrz.onrender.com';
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
@@ -58,8 +56,8 @@ export function resolveBackendOrigin(): string {
   const configuredOrigin = stripApiSuffix(
     import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_BACKEND_URL || '',
   );
-  if (configuredOrigin && configuredOrigin !== LEGACY_PRODUCTION_BACKEND_ORIGIN) return configuredOrigin;
-  return isLocalHostname(currentHostname()) ? LOCAL_BACKEND_ORIGIN : PRODUCTION_BACKEND_ORIGIN;
+  if (configuredOrigin) return configuredOrigin;
+  return isLocalHostname(currentHostname()) ? LOCAL_BACKEND_ORIGIN : API_BASE_URL;
 }
 
 export function buildBackendUrl(path: string): string {
@@ -114,16 +112,11 @@ export function resolveBackendWebSocketOrigin(): string {
     import.meta.env.VITE_API_WS_URL || import.meta.env.VITE_WS_URL || import.meta.env.VITE_SOCKET_URL || '',
   );
   const normalizedConfiguredWsOrigin = configuredWsOrigin ? toWebSocketOrigin(configuredWsOrigin) : '';
-  if (
-    normalizedConfiguredWsOrigin &&
-    normalizedConfiguredWsOrigin !== LEGACY_PRODUCTION_BACKEND_WS_ORIGIN
-  ) {
-    return normalizedConfiguredWsOrigin;
-  }
+  if (normalizedConfiguredWsOrigin) return normalizedConfiguredWsOrigin;
 
   const backendOrigin = resolveBackendOrigin();
-  if (!isLocalHostname(currentHostname()) && backendOrigin === PRODUCTION_BACKEND_ORIGIN) {
-    return PRODUCTION_BACKEND_WS_ORIGIN;
+  if (!isLocalHostname(currentHostname()) && backendOrigin === API_BASE_URL) {
+    return API_WS_BASE_URL;
   }
 
   return toWebSocketOrigin(backendOrigin);
@@ -131,12 +124,7 @@ export function resolveBackendWebSocketOrigin(): string {
 
 export function resolveAdminApiBaseUrl(): string {
   const configuredAdminOrigin = stripTrailingSlash(import.meta.env.VITE_ADMIN_API_BASE_URL || '');
-  if (
-    configuredAdminOrigin &&
-    configuredAdminOrigin !== `${LEGACY_PRODUCTION_BACKEND_ORIGIN}/api/v1/admin`
-  ) {
-    return configuredAdminOrigin;
-  }
+  if (configuredAdminOrigin) return configuredAdminOrigin;
   return `${resolveBackendOrigin()}/api/v1/admin`;
 }
 

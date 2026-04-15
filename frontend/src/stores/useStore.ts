@@ -52,6 +52,26 @@ function unwrapApi<T>(payload: any): T {
   return payload as T;
 }
 
+function extractListPayload<T>(payload: unknown, keys: string[] = []): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  if (!payload || typeof payload !== "object") return [];
+
+  const record = payload as Record<string, unknown>;
+  const candidates: unknown[] = [record.data, record.items, record.results, ...keys.map((key) => record[key])];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate as T[];
+    if (candidate && typeof candidate === "object") {
+      for (const key of keys) {
+        const nestedValue = (candidate as Record<string, unknown>)[key];
+        if (Array.isArray(nestedValue)) return nestedValue as T[];
+      }
+    }
+  }
+
+  return [];
+}
+
 function normalizeApiKey(item: any): ApiKey {
   const rawItem = item && typeof item === "object" ? item : {};
   const status = String(rawItem?.status || "ACTIVE");
@@ -364,15 +384,16 @@ export const useStore = create<AppState>((set, get) => ({
   fetchApiKeys: async () => {
     set({ isLoading: true });
     try {
-      const data = await authedFetchJson<any[]>("/api/v1/keys");
-      set({ apiKeys: (Array.isArray(data) ? data : []).map(normalizeApiKey), isLoading: false });
+      const data = await authedFetchJson<unknown>("/api/v1/keys");
+      const apiKeys = extractListPayload<any>(data, ["keys", "api_keys"]).map(normalizeApiKey);
+      set({ apiKeys, isLoading: false });
     } catch (error) {
       if (error instanceof HttpError && error.status === 404) {
         set({ apiKeys: [], isLoading: false });
         return;
       }
       console.error("Failed to fetch API keys:", error);
-      set({ isLoading: false });
+      set((state) => ({ apiKeys: Array.isArray(state.apiKeys) ? state.apiKeys : [], isLoading: false }));
     }
   },
 
@@ -391,16 +412,16 @@ export const useStore = create<AppState>((set, get) => ({
       if (p.q) search.set("q", p.q);
 
       const qs = search.toString();
-      const data = await authedFetchJson<any[]>(qs ? `/api/v1/logs?${qs}` : "/api/v1/logs");
-      const normalized = (Array.isArray(data) ? data : []).map(normalizeLog) as SecurityLog[];
+      const data = await authedFetchJson<unknown>(qs ? `/api/v1/logs?${qs}` : "/api/v1/logs");
+      const normalized = extractListPayload<any>(data, ["logs"]).map(normalizeLog) as SecurityLog[];
       set({ logs: normalized.slice(0, MAX_LOG_BUFFER), isLoading: false });
     } catch (error) {
       if (error instanceof HttpError && error.status === 404) {
-        set({ isLoading: false });
+        set({ logs: [], isLoading: false });
         return;
       }
       console.error("Failed to fetch logs:", error);
-      set({ isLoading: false });
+      set((state) => ({ logs: Array.isArray(state.logs) ? state.logs : [], isLoading: false }));
     }
   },
 
@@ -518,8 +539,9 @@ export const useStore = create<AppState>((set, get) => ({
 
   fetchNotifications: async () => {
     try {
-      const data = await authedFetchJson<any[]>("/api/v1/notifications");
-      set({ notifications: (Array.isArray(data) ? data : []).map(normalizeNotification) });
+      const data = await authedFetchJson<unknown>("/api/v1/notifications");
+      const notifications = extractListPayload<any>(data, ["notifications"]).map(normalizeNotification);
+      set({ notifications });
     } catch (err) {
       if (err instanceof HttpError && err.status === 404) {
         set({ notifications: [] });
@@ -612,7 +634,9 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   addLiveLog: (log: SecurityLog) => {
-    set((state) => ({ logs: [normalizeLog(log), ...state.logs].slice(0, MAX_LOG_BUFFER) }));
+    set((state) => ({
+      logs: [normalizeLog(log), ...(Array.isArray(state.logs) ? state.logs : [])].slice(0, MAX_LOG_BUFFER),
+    }));
   },
 
   addReasoningLog: (message: string, threat_level: string) => {
@@ -626,7 +650,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   addLiveNotification: (n: NotificationItem) => {
     set((state) => ({
-      notifications: [normalizeNotification(n), ...state.notifications].slice(0, 200),
+      notifications: [normalizeNotification(n), ...(Array.isArray(state.notifications) ? state.notifications : [])].slice(0, 200),
     }));
   },
 }));

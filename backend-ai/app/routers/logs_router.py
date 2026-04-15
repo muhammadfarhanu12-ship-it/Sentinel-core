@@ -7,7 +7,8 @@ from app.services.dashboard_service import list_logs, parse_optional_datetime
 router = APIRouter(tags=["logs"])
 
 
-@router.get("")
+@router.get("/")
+@router.get("", include_in_schema=False)
 async def read_logs(
     request: Request,
     current_user: dict = Depends(get_current_user),
