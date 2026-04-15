@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 
 class UserRoleEnum(str, Enum):
+    USER = "user"
     ADMIN = "admin"
     ANALYST = "user"
 
@@ -23,7 +24,7 @@ class User(BaseModel):
     hashed_password: str
     tier: TierEnum = TierEnum.FREE
     organization_name: str | None = None
-    role: UserRoleEnum = UserRoleEnum.ANALYST
+    role: UserRoleEnum = UserRoleEnum.USER
     is_active: bool = True
     is_verified: bool = False
     email_verified_at: datetime | None = None

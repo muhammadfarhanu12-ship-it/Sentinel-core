@@ -30,9 +30,11 @@ os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
 
 import app.database as database_module
 import app.main as main_module
+from app.admin.admin_auth import create_admin_access_token
 from app.core.config import settings
 from app.main import app
 from app.middleware.rate_limiter import limiter
+from app.routes.admin import get_admin_service
 from app.services import auth_service
 from app.services import admin_user_service
 from app.services.email_service import EmailSendResult
@@ -139,20 +141,62 @@ class InMemoryCollection:
 
         return SimpleNamespace(matched_count=modified_count, modified_count=modified_count)
 
+    async def count_documents(self, query: dict) -> int:
+        return sum(1 for document in self._documents.values() if self._matches(document, query))
+
+    async def delete_one(self, query: dict) -> SimpleNamespace:
+        for key, document in list(self._documents.items()):
+            if not self._matches(document, query):
+                continue
+            del self._documents[key]
+            return SimpleNamespace(deleted_count=1)
+        return SimpleNamespace(deleted_count=0)
+
+    async def delete_many(self, query: dict) -> SimpleNamespace:
+        deleted_count = 0
+        for key, document in list(self._documents.items()):
+            if not self._matches(document, query):
+                continue
+            del self._documents[key]
+            deleted_count += 1
+        return SimpleNamespace(deleted_count=deleted_count)
+
     def _matches(self, document: dict, query: dict) -> bool:
         return all(document.get(field) == value for field, value in query.items())
+
+
+class InMemoryDatabase:
+    def __init__(self, collections: dict[str, InMemoryCollection] | None = None) -> None:
+        self._collections = collections or {}
+
+    def get_collection(self, name: str) -> InMemoryCollection:
+        collection = self._collections.get(name)
+        if collection is None:
+            collection = InMemoryCollection()
+            self._collections[name] = collection
+        return collection
+
+    def __getitem__(self, name: str) -> InMemoryCollection:
+        return self.get_collection(name)
 
 
 @pytest.fixture()
 def auth_client(monkeypatch: pytest.MonkeyPatch):
     users_collection = InMemoryCollection(unique_fields=("email",))
     sessions_collection = InMemoryCollection(unique_fields=("jti_hash",))
+    database = InMemoryDatabase({"users": users_collection, "auth_sessions": sessions_collection})
 
-    async def fake_connect_to_mongo() -> None:
+    async def fake_connect_to_mongo(*, app=None) -> None:
         await users_collection.create_indexes([])
         await sessions_collection.create_indexes([])
+        if app is not None:
+            app.state.database = database
+            app.state.mongodb_client = object()
 
-    async def fake_close_mongo_connection() -> None:
+    async def fake_close_mongo_connection(*, app=None) -> None:
+        if app is not None:
+            app.state.database = None
+            app.state.mongodb_client = None
         return None
 
     async def fake_ping_mongo() -> None:
@@ -193,6 +237,197 @@ def _login(client: TestClient, email: str, password: str):
 
 def _verify(client: TestClient, token: str):
     return client.get(f"/api/auth/verify-email?token={token}")
+
+
+class FakeAdminService:
+    async def get_dashboard(self, admin: dict) -> dict:
+        return {
+            "message": "Welcome Admin",
+            "admin": {
+                "id": str(admin.get("id")),
+                "email": str(admin.get("email")),
+                "role": str(admin.get("role")),
+            },
+        }
+
+    async def get_metrics(self, admin: dict) -> dict:
+        _ = admin
+        return {
+            "total_users": 1,
+            "active_users": 1,
+            "suspended_users": 0,
+            "total_requests": 12,
+            "threats_blocked": 3,
+            "active_api_keys": 2,
+            "quarantined_api_keys": 0,
+            "avg_latency_ms": 17.5,
+            "requests_last_7_days": [],
+        }
+
+    async def get_system_status(self, admin: dict) -> dict:
+        _ = admin
+        return {
+            "status": "ok",
+            "database": "ok",
+            "uptime_hint": "healthy",
+            "admin_count": 1,
+            "last_security_event_at": None,
+        }
+
+    async def list_users(self, admin: dict, limit: int, offset: int, q: str | None, is_active: bool | None, tier: str | None) -> list[dict]:
+        _ = (admin, limit, offset, q, is_active, tier)
+        return [
+            {
+                "id": "admin-1",
+                "email": "platform.admin@example.com",
+                "tier": "FREE",
+                "organization_name": "example.com",
+                "is_active": True,
+                "monthly_limit": 1000,
+                "created_at": auth_service._utcnow(),
+                "api_usage": 0,
+                "api_key_count": 0,
+            }
+        ]
+
+    async def delete_user(self, admin: dict, user_id: str) -> dict:
+        _ = admin
+        return {"deleted": True, "user_id": user_id}
+
+    async def update_user_status(self, admin: dict, user_id: str, payload) -> dict:
+        _ = admin
+        return {
+            "id": user_id,
+            "email": "member@example.com",
+            "tier": "FREE",
+            "organization_name": "example.com",
+            "is_active": bool(payload.is_active),
+            "monthly_limit": 1000,
+            "created_at": auth_service._utcnow(),
+            "api_usage": 0,
+            "api_key_count": 0,
+        }
+
+    async def list_logs(
+        self,
+        admin: dict,
+        limit: int,
+        offset: int,
+        q: str | None,
+        status: str | None,
+        risk_level: str | None,
+        threat_type: str | None,
+        only_quarantined: bool | None,
+    ) -> list[dict]:
+        _ = (admin, limit, offset, q, status, risk_level, threat_type, only_quarantined)
+        return [
+            {
+                "id": "log-1",
+                "timestamp": auth_service._utcnow(),
+                "api_key_id": "key-1",
+                "user_id": "admin-1",
+                "user_email": "platform.admin@example.com",
+                "status": "BLOCKED",
+                "threat_type": "PROMPT_INJECTION",
+                "threat_types": ["PROMPT_INJECTION"],
+                "threat_score": 0.98,
+                "risk_score": 0.99,
+                "attack_vector": "prompt",
+                "risk_level": "high",
+                "endpoint": "/api/v1/brain/analyze",
+                "method": "POST",
+                "model": "gemini-test",
+                "latency_ms": 12,
+                "tokens_used": 123,
+                "ip_address": "127.0.0.1",
+                "is_quarantined": False,
+                "raw_payload": {"prompt": "ignore previous"},
+            }
+        ]
+
+    async def list_threats(self, *args, **kwargs) -> list[dict]:
+        return await self.list_logs(*args, **kwargs)
+
+    async def list_api_keys(self, admin: dict, limit: int, offset: int, q: str | None, status: str | None) -> list[dict]:
+        _ = (admin, limit, offset, q, status)
+        return [
+            {
+                "id": "key-1",
+                "user_id": "admin-1",
+                "user_email": "platform.admin@example.com",
+                "name": "Primary Key",
+                "prefix": "sentinel_sk_",
+                "status": "ACTIVE",
+                "usage_count": 3,
+                "last_used": None,
+                "last_ip": None,
+                "created_at": auth_service._utcnow(),
+                "key": None,
+            }
+        ]
+
+    async def create_gateway_api_key(self, admin: dict, payload) -> dict:
+        _ = admin
+        return {
+            "id": "key-2",
+            "user_id": str(payload.user_id),
+            "user_email": "platform.admin@example.com",
+            "name": str(payload.name),
+            "prefix": "sentinel_sk_",
+            "status": "ACTIVE",
+            "usage_count": 0,
+            "last_used": None,
+            "last_ip": None,
+            "created_at": auth_service._utcnow(),
+            "key": "sentinel_sk_demo",
+        }
+
+    async def revoke_gateway_api_key(self, admin: dict, key_id: str) -> dict:
+        _ = admin
+        return {
+            "id": key_id,
+            "user_id": "admin-1",
+            "user_email": "platform.admin@example.com",
+            "name": "Primary Key",
+            "prefix": "sentinel_sk_",
+            "status": "REVOKED",
+            "usage_count": 3,
+            "last_used": None,
+            "last_ip": None,
+            "created_at": auth_service._utcnow(),
+            "key": None,
+        }
+
+    async def get_settings(self, admin: dict) -> dict:
+        _ = admin
+        return {
+            "enable_gemini_module": True,
+            "enable_openai_module": True,
+            "enable_anthropic_module": True,
+            "ai_kill_switch_enabled": False,
+            "require_mfa_for_admin": False,
+            "admin_rate_limit_per_minute": 120,
+            "admin_rate_limit_window_seconds": 60,
+            "api_key_rate_limit_per_minute": 150,
+            "updated_by_user_id": "admin-1",
+            "updated_at": auth_service._utcnow(),
+        }
+
+    async def update_settings(self, admin: dict, payload) -> dict:
+        _ = admin
+        return {
+            **payload.model_dump(),
+            "updated_by_user_id": "admin-1",
+            "updated_at": auth_service._utcnow(),
+        }
+
+
+def _override_admin_service() -> None:
+    app.dependency_overrides[get_admin_service] = lambda: FakeAdminService()
+
+
+def _clear_admin_service_override() -> None:
+    app.dependency_overrides.pop(get_admin_service, None)
 
 
 def test_signup_sends_verification_email(auth_client, monkeypatch: pytest.MonkeyPatch):
@@ -411,6 +646,86 @@ def test_admin_user_can_access_admin_routes(auth_client):
     assert dashboard_response.json()["data"]["user"]["email"] == "platform.admin@example.com"
     assert users_response.status_code == 200, users_response.text
     assert any(user["email"] == "platform.admin@example.com" for user in users_response.json()["data"])
+
+
+def test_rbac_admin_routes_accept_main_auth_admin_jwt(auth_client):
+    client, _, _ = auth_client
+    _override_admin_service()
+    try:
+        asyncio.run(
+            admin_user_service.ensure_admin_user(
+                email="rbac.admin@example.com",
+                password="AdminPass123",
+                name="RBAC Admin",
+            )
+        )
+
+        login_response = _login(client, "rbac.admin@example.com", "AdminPass123")
+        assert login_response.status_code == 200, login_response.text
+        access_token = login_response.json()["data"]["access_token"]
+
+        stats_response = client.get("/api/v1/admin/stats", headers={"Authorization": f"Bearer {access_token}"})
+        users_response = client.get("/api/v1/admin/users", headers={"Authorization": f"Bearer {access_token}"})
+        logs_response = client.get("/api/v1/admin/logs", headers={"Authorization": f"Bearer {access_token}"})
+
+        assert stats_response.status_code == 200, stats_response.text
+        assert users_response.status_code == 200, users_response.text
+        assert logs_response.status_code == 200, logs_response.text
+        assert stats_response.json()["data"]["total_users"] == 1
+        assert users_response.json()["data"][0]["email"] == "platform.admin@example.com"
+        assert logs_response.json()["data"][0]["status"] == "BLOCKED"
+    finally:
+        _clear_admin_service_override()
+
+
+def test_rbac_admin_routes_reject_normal_user_with_403(auth_client, monkeypatch: pytest.MonkeyPatch):
+    client, _, _ = auth_client
+    _override_admin_service()
+    captured: dict[str, str] = {}
+
+    async def fake_send_verification_email_async(*, recipient_email: str, token: str):
+        captured["token"] = token
+        return EmailSendResult(success=True, message_id="verification-rbac-admin-forbidden")
+
+    monkeypatch.setattr(auth_service, "send_verification_email_async", fake_send_verification_email_async)
+
+    try:
+        signup_response = _signup(client, "rbac.normal@example.com")
+        assert signup_response.status_code == 201, signup_response.text
+        verify_response = _verify(client, captured["token"])
+        assert verify_response.status_code == 200, verify_response.text
+
+        login_response = _login(client, "rbac.normal@example.com", "StrongPass123")
+        assert login_response.status_code == 200, login_response.text
+        access_token = login_response.json()["data"]["access_token"]
+
+        response = client.get("/api/v1/admin/stats", headers={"Authorization": f"Bearer {access_token}"})
+
+        assert response.status_code == 403
+        assert response.json()["error"]["message"] == "Admin access required"
+    finally:
+        _clear_admin_service_override()
+
+
+def test_rbac_admin_routes_accept_existing_admin_access_token(auth_client):
+    client, _, _ = auth_client
+    _override_admin_service()
+    try:
+        admin_user = asyncio.run(
+            admin_user_service.ensure_admin_user(
+                email="dual.auth.admin@example.com",
+                password="AdminPass123",
+                name="Dual Auth Admin",
+            )
+        )
+        admin_token = create_admin_access_token({"id": admin_user.id, "email": admin_user.email, "role": admin_user.role})
+
+        response = client.get("/api/v1/admin/users", headers={"Authorization": f"Bearer {admin_token}"})
+
+        assert response.status_code == 200, response.text
+        assert response.json()["data"][0]["email"] == "platform.admin@example.com"
+    finally:
+        _clear_admin_service_override()
 
 
 def test_token_role_tampering_does_not_bypass_admin_check(auth_client, monkeypatch: pytest.MonkeyPatch):

@@ -26,6 +26,7 @@ from app.db.mongo import (
     ping_mongo,
 )
 from app.middleware.auth_middleware import attach_security_context
+from app.routes.admin import router as admin_router
 from app.routes.auth_routes import router as auth_router
 from app.routers.analytics_router import router as analytics_router
 from app.routers.audit_logs_router import router as audit_logs_router
@@ -253,6 +254,7 @@ api_legacy.include_router(admin_v1_router)
 api_legacy.include_router(email_router)
 api_legacy.include_router(user_router)
 
+app.include_router(admin_router)
 app.include_router(api_v1)
 app.include_router(api_legacy)
 app.include_router(analytics_router, prefix="/api/v1/analytics")
