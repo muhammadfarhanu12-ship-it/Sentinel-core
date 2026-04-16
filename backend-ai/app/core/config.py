@@ -89,8 +89,14 @@ class Settings:
         self.ENABLE_DEMO_MODE: bool = _env_bool("ENABLE_DEMO_MODE", True)
         self.DEMO_USER_EMAIL: str = _env_str("DEMO_USER_EMAIL", "demo@example.com") or "demo@example.com"
         self.TEST_API_KEY: str = _env_str("TEST_API_KEY", "test_key_123") or "test_key_123"
-        self.ADMIN_BOOTSTRAP_EMAIL: str | None = _env_str("ADMIN_BOOTSTRAP_EMAIL", aliases=("SENTINEL_ADMIN_EMAIL",))
-        self.ADMIN_BOOTSTRAP_PASSWORD: str | None = _env_str("ADMIN_BOOTSTRAP_PASSWORD", aliases=("SENTINEL_ADMIN_PASSWORD",))
+        self.ADMIN_BOOTSTRAP_EMAIL: str | None = _env_str(
+            "ADMIN_BOOTSTRAP_EMAIL",
+            aliases=("ADMIN_EMAIL", "SENTINEL_ADMIN_EMAIL"),
+        )
+        self.ADMIN_BOOTSTRAP_PASSWORD: str | None = _env_str(
+            "ADMIN_BOOTSTRAP_PASSWORD",
+            aliases=("ADMIN_PASSWORD", "SENTINEL_ADMIN_PASSWORD"),
+        )
         self.ADMIN_LOGIN_ALERT_EMAIL: str | None = _env_str(
             "ADMIN_LOGIN_ALERT_EMAIL",
             default=self.ADMIN_BOOTSTRAP_EMAIL,

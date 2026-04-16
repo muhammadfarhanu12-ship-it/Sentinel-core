@@ -12,9 +12,11 @@ from app.database import close_mongo_connection, connect_to_mongo
 from app.services.admin_user_service import ensure_admin_user
 
 DEFAULT_ADMIN_EMAIL = "admin@example.com"
-DEFAULT_ADMIN_EMAIL_ENV_VAR = "ADMIN_BOOTSTRAP_EMAIL"
+DEFAULT_ADMIN_EMAIL_ENV_VAR = "ADMIN_EMAIL"
+FALLBACK_ADMIN_EMAIL_ENV_VAR = "ADMIN_BOOTSTRAP_EMAIL"
 LEGACY_ADMIN_EMAIL_ENV_VAR = "SENTINEL_ADMIN_EMAIL"
-DEFAULT_ADMIN_PASSWORD_ENV_VAR = "ADMIN_BOOTSTRAP_PASSWORD"
+DEFAULT_ADMIN_PASSWORD_ENV_VAR = "ADMIN_PASSWORD"
+FALLBACK_ADMIN_PASSWORD_ENV_VAR = "ADMIN_BOOTSTRAP_PASSWORD"
 LEGACY_ADMIN_PASSWORD_ENV_VAR = "SENTINEL_ADMIN_PASSWORD"
 
 logger = logging.getLogger("create_admin_user")
@@ -26,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--email",
         default=(
             os.getenv(DEFAULT_ADMIN_EMAIL_ENV_VAR)
+            or os.getenv(FALLBACK_ADMIN_EMAIL_ENV_VAR)
             or os.getenv(LEGACY_ADMIN_EMAIL_ENV_VAR)
             or settings.ADMIN_BOOTSTRAP_EMAIL
             or DEFAULT_ADMIN_EMAIL
@@ -48,6 +51,8 @@ def build_parser() -> argparse.ArgumentParser:
 def _resolve_password(password_env_var: str) -> str:
     password = os.getenv(password_env_var)
     if not password and password_env_var == DEFAULT_ADMIN_PASSWORD_ENV_VAR:
+        password = os.getenv(FALLBACK_ADMIN_PASSWORD_ENV_VAR)
+    if not password and password_env_var in {DEFAULT_ADMIN_PASSWORD_ENV_VAR, FALLBACK_ADMIN_PASSWORD_ENV_VAR}:
         password = os.getenv(LEGACY_ADMIN_PASSWORD_ENV_VAR)
     if password:
         return password
