@@ -2,7 +2,7 @@ import axios from 'axios';
 
 import { clearAdminToken, getAdminToken } from './auth';
 
-const DEFAULT_API_URL = 'https://sentinel-backend-j6zr.onrender.com';
+const DEFAULT_API_URL = 'https://sentinel-core-xcrz.onrender.com';
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
