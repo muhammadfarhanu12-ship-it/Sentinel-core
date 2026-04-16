@@ -54,9 +54,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 ADMIN_PANEL_ORIGIN = "https://sentinel-admin-beta.vercel.app"
-CORS_ALLOWED_ORIGINS = [ADMIN_PANEL_ORIGIN]
+MAIN_APP_ORIGIN = "https://sentinel-core-arei.vercel.app"
+CORS_ALLOWED_ORIGINS = [ADMIN_PANEL_ORIGIN, MAIN_APP_ORIGIN]
 CORS_ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-CORS_ALLOWED_HEADERS = ["Content-Type", "Authorization"]
+CORS_ALLOWED_HEADERS = ["Content-Type", "Authorization", "Cookie"]
 SENSITIVE_REQUEST_FIELDS = {
     "password",
     "new_password",
