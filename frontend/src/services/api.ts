@@ -2,10 +2,29 @@ const FALLBACK_BACKEND_ORIGIN = 'https://sentinel-core-xcrz.onrender.com';
 const API_PREFIX = '/api/v1';
 const FALLBACK_API_BASE_URL = `${FALLBACK_BACKEND_ORIGIN}${API_PREFIX}`;
 const FALLBACK_API_WS_BASE_URL = 'wss://sentinel-core-xcrz.onrender.com';
-export const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_URL || FALLBACK_API_BASE_URL);
+const ALLOWED_BACKEND_HOSTS = new Set(['sentinel-core-xcrz.onrender.com', 'localhost', '127.0.0.1']);
+const configuredApiUrl = sanitizeConfiguredBackendUrl(import.meta.env.VITE_API_URL || '');
+export const API_BASE_URL = normalizeApiBaseUrl(configuredApiUrl || FALLBACK_API_BASE_URL);
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
+}
+
+function isAllowedBackendHost(value: string): boolean {
+  try {
+    return ALLOWED_BACKEND_HOSTS.has(new URL(stripTrailingSlash(value)).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function sanitizeConfiguredBackendUrl(value: string): string {
+  const normalizedValue = stripTrailingSlash(value);
+  if (!normalizedValue) {
+    return '';
+  }
+
+  return isAllowedBackendHost(normalizedValue) ? normalizedValue : '';
 }
 
 function stripApiSuffix(value: string): string {
@@ -149,7 +168,9 @@ function toWebSocketOrigin(origin: string): string {
 }
 
 export function resolveBackendWebSocketOrigin(): string {
-  const configuredWsOrigin = stripApiSuffix(import.meta.env.VITE_API_WS_URL || import.meta.env.VITE_WS_URL || '');
+  const configuredWsOrigin = stripApiSuffix(
+    sanitizeConfiguredBackendUrl(import.meta.env.VITE_API_WS_URL || import.meta.env.VITE_WS_URL || ''),
+  );
   const normalizedConfiguredWsOrigin = configuredWsOrigin ? toWebSocketOrigin(configuredWsOrigin) : '';
   if (normalizedConfiguredWsOrigin) return normalizedConfiguredWsOrigin;
 
@@ -160,7 +181,9 @@ export function resolveBackendWebSocketOrigin(): string {
 }
 
 export function resolveAdminApiBaseUrl(): string {
-  const configuredAdminOrigin = stripTrailingSlash(import.meta.env.VITE_ADMIN_API_BASE_URL || '');
+  const configuredAdminOrigin = stripTrailingSlash(
+    sanitizeConfiguredBackendUrl(import.meta.env.VITE_ADMIN_API_BASE_URL || ''),
+  );
   if (configuredAdminOrigin) return configuredAdminOrigin;
   return `${resolveBackendOrigin()}/api/v1/admin`;
 }

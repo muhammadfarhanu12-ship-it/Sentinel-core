@@ -56,16 +56,15 @@ export async function signupWithEmail(payload: {
 }
 
 export async function signInWithEmail(email: string, password: string): Promise<LoginResponse> {
-  const body = new URLSearchParams();
-  body.set('username', email.trim());
-  body.set('password', password);
-
-  const data = await authRequest<LoginResponse>('/api/v1/auth/login', {
+  const data = await authRequest<LoginResponse>('/auth/login', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Type': 'application/json',
     },
-    body,
+    body: JSON.stringify({
+      email: email.trim(),
+      password,
+    }),
   });
 
   if (!data?.access_token) {

@@ -55,9 +55,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 ADMIN_PANEL_ORIGIN = "https://sentinel-admin-beta.vercel.app"
 MAIN_APP_ORIGIN = "https://sentinel-core-arei.vercel.app"
-CORS_ALLOWED_ORIGINS = [ADMIN_PANEL_ORIGIN, MAIN_APP_ORIGIN]
-CORS_ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-CORS_ALLOWED_HEADERS = ["Content-Type", "Authorization", "Cookie"]
+LOCAL_FRONTEND_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+]
+CORS_ALLOWED_ORIGINS = [
+    MAIN_APP_ORIGIN,
+    ADMIN_PANEL_ORIGIN,
+    *LOCAL_FRONTEND_ORIGINS,
+]
+CORS_ALLOWED_METHODS = ["*"]
+CORS_ALLOWED_HEADERS = ["*"]
 SENSITIVE_REQUEST_FIELDS = {
     "password",
     "new_password",
@@ -146,17 +156,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-origins = [
-    "https://sentinel-core-arei.vercel.app",   # MAIN FRONTEND (missing right now ❌)
-    "https://sentinel-admin-beta.vercel.app",  # ADMIN FRONTEND
-    "http://localhost:5173",
-]
-
-origins = CORS_ALLOWED_ORIGINS
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=CORS_ALLOWED_METHODS,
     allow_headers=CORS_ALLOWED_HEADERS,

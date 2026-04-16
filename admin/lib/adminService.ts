@@ -1,4 +1,4 @@
-import api, { API_URL } from './api';
+import api, { ADMIN_API_BASE_URL } from './api';
 import type {
   AdminApiKey,
   AdminApiKeysQuery,
@@ -51,14 +51,26 @@ function pageToParams(page = 1, pageSize = 10) {
 }
 
 export async function loginAdmin(payload: AdminLoginPayload) {
-  const response = await fetch(`${API_URL}/api/v1/auth/login`, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
+  const loginUrl = `${ADMIN_API_BASE_URL}/auth/login`;
+  let response: Response;
+
+  try {
+    response = await fetch(loginUrl, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: payload.email.trim(),
+        password: payload.password,
+      }),
+    });
+  } catch {
+    throw new Error(
+      `Unable to reach ${loginUrl}. Check that the Render backend is online and allows requests from the admin panel.`,
+    );
+  }
 
   const responsePayload = (await response.json().catch(() => null)) as ApiEnvelope<AdminLoginResponse> | null;
   if (!response.ok || !responsePayload) {
