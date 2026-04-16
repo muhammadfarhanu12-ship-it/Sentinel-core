@@ -1,13 +1,62 @@
-const FALLBACK_API_BASE_URL = 'https://sentinel-core-xcrz.onrender.com';
+const FALLBACK_BACKEND_ORIGIN = 'https://sentinel-core-xcrz.onrender.com';
+const API_PREFIX = '/api/v1';
+const FALLBACK_API_BASE_URL = `${FALLBACK_BACKEND_ORIGIN}${API_PREFIX}`;
 const FALLBACK_API_WS_BASE_URL = 'wss://sentinel-core-xcrz.onrender.com';
-export const API_BASE_URL = import.meta.env.VITE_API_URL || FALLBACK_API_BASE_URL;
+export const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_URL || FALLBACK_API_BASE_URL);
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
 }
 
 function stripApiSuffix(value: string): string {
-  return stripTrailingSlash(value);
+  return stripTrailingSlash(value).replace(/\/api(?:\/v\d+)?$/i, '');
+}
+
+function normalizeApiBaseUrl(value: string): string {
+  const normalizedValue = stripTrailingSlash(value);
+  if (!normalizedValue) {
+    return FALLBACK_API_BASE_URL;
+  }
+
+  if (/\/api(?:\/v\d+)?$/i.test(normalizedValue)) {
+    return normalizedValue;
+  }
+
+  return `${normalizedValue}${API_PREFIX}`;
+}
+
+function isAbsoluteBackendPath(path: string): boolean {
+  return /^\/(?:api|health)(?:\/|$)/i.test(path);
+}
+
+function createNetworkError(url: string, error: unknown): Error {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return new Error(`The request to ${url} timed out before the server responded.`);
+  }
+
+  if (error instanceof Error && error.message && error.message !== 'Failed to fetch') {
+    return new Error(`Request to ${url} failed: ${error.message}`);
+  }
+
+  return new Error(
+    `Unable to reach ${url}. Check that the Render backend is online and allows requests from this frontend.`,
+  );
+}
+
+async function parseResponsePayload(response: Response): Promise<any> {
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return response.json().catch(() => ({}));
+  }
+
+  const text = await response.text().catch(() => '');
+  if (!text.trim()) {
+    return {};
+  }
+
+  return {
+    detail: response.statusText || text.trim().slice(0, 200),
+  };
 }
 
 function wait(delayMs: number): Promise<void> {
@@ -49,7 +98,8 @@ export function resolveBackendOrigin(): string {
 
 export function buildBackendUrl(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE_URL}${normalizedPath}`;
+  const baseUrl = isAbsoluteBackendPath(normalizedPath) ? resolveBackendOrigin() : API_BASE_URL;
+  return `${baseUrl}${normalizedPath}`;
 }
 
 export async function apiFetch(endpoint: string, options: RequestInit = {}): Promise<Response> {
@@ -66,20 +116,24 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}): Pro
     }
 
     await wait(800);
-    return fetch(url, requestInit);
+    return await fetch(url, requestInit);
   } catch (error) {
     if (!shouldRetryRequest(requestInit.method, undefined, error)) {
-      throw error;
+      throw createNetworkError(url, error);
     }
 
     await wait(800);
-    return fetch(url, requestInit);
+    try {
+      return await fetch(url, requestInit);
+    } catch (retryError) {
+      throw createNetworkError(url, retryError);
+    }
   }
 }
 
 export async function apiRequest<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const response = await apiFetch(endpoint, options);
-  const payload = await response.json().catch(() => ({}));
+  const payload = await parseResponsePayload(response);
 
   if (!response.ok) {
     throw new Error(parseApiErrorMessage(payload, 'API request failed'));
@@ -100,7 +154,7 @@ export function resolveBackendWebSocketOrigin(): string {
   if (normalizedConfiguredWsOrigin) return normalizedConfiguredWsOrigin;
 
   const backendOrigin = resolveBackendOrigin();
-  if (backendOrigin === stripApiSuffix(FALLBACK_API_BASE_URL)) return FALLBACK_API_WS_BASE_URL;
+  if (backendOrigin === FALLBACK_BACKEND_ORIGIN) return FALLBACK_API_WS_BASE_URL;
 
   return toWebSocketOrigin(backendOrigin);
 }
