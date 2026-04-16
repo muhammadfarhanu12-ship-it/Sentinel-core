@@ -1,8 +1,6 @@
-import { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Navigate, Routes, Route } from 'react-router-dom';
-import AdminLayout from './components/admin/AdminLayout';
+import { Suspense, lazy, useEffect } from 'react';
+import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
-import ProtectedAdminRoute from './components/auth/ProtectedAdminRoute';
 import { LoadingSkeleton } from './components/enterprise/LoadingSkeleton';
 import { ScrollToTop } from './components/ScrollToTop';
 import { ToastProvider } from './components/ui/ToastProvider';
@@ -15,21 +13,13 @@ import Documentation from './pages/Documentation';
 import Playground from './pages/Playground';
 import Reports from './pages/Reports';
 import LandingPage from './pages/LandingPage';
-import AdminApiKeys from '@admin/AdminApiKeys';
-import AdminLogin from '@admin/AdminLogin';
-import AdminLogs from '@admin/AdminLogs';
-import AdminMetrics from '@admin/AdminMetrics';
-import AdminPortal from '@admin/AdminPortal';
-import AdminSettings from '@admin/AdminSettings';
-import AdminThreats from '@admin/AdminThreats';
-import AdminUsers from '@admin/AdminUsers';
 import SignIn from './pages/auth/SignIn';
 import SignUp from './pages/auth/SignUp';
 import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetPassword from './pages/auth/ResetPassword';
 import OAuthCallback from './pages/auth/OAuthCallback';
 import VerifyEmail from './pages/auth/VerifyEmail';
-import { getAdminToken } from './services/adminAuth';
+import { ADMIN_APP_ORIGIN } from './services/api';
 
 const AuditLogs = lazy(() => import('./pages/AuditLogs'));
 const UsageAnalytics = lazy(() => import('./pages/UsageAnalytics'));
@@ -37,6 +27,18 @@ const TeamManagement = lazy(() => import('./pages/TeamManagement'));
 
 function RouteFallback() {
   return <LoadingSkeleton rows={2} compact />;
+}
+
+function AdminAppRedirect() {
+  const location = useLocation();
+
+  useEffect(() => {
+    const pathname = location.pathname === '/admin' ? '/admin/login' : location.pathname;
+    const destination = `${ADMIN_APP_ORIGIN}${pathname}${location.search}${location.hash}`;
+    window.location.replace(destination);
+  }, [location]);
+
+  return <RouteFallback />;
 }
 
 export default function App() {
@@ -54,19 +56,7 @@ export default function App() {
           <Route path="/oauth/callback" element={<OAuthCallback />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/verify" element={<VerifyEmail />} />
-          <Route path="/admin" element={<Navigate to={getAdminToken() ? '/admin/dashboard' : '/admin/login'} replace />} />
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/admin" element={<ProtectedAdminRoute />}>
-            <Route element={<AdminLayout />}>
-              <Route path="dashboard" element={<AdminPortal />} />
-              <Route path="metrics" element={<AdminMetrics />} />
-              <Route path="users" element={<AdminUsers />} />
-              <Route path="logs" element={<AdminLogs />} />
-              <Route path="threats" element={<AdminThreats />} />
-              <Route path="api-keys" element={<AdminApiKeys />} />
-              <Route path="settings" element={<AdminSettings />} />
-            </Route>
-          </Route>
+          <Route path="/admin/*" element={<AdminAppRedirect />} />
           <Route path="/app" element={<AppLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="playground" element={<Playground />} />

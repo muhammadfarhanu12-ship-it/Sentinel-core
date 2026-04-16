@@ -1,7 +1,7 @@
 import { apiRequest, resolveBackendOrigin } from './api';
 
 export const AUTH_SERVICE_UNAVAILABLE_MESSAGE =
-  `Unable to reach the authentication service. Make sure FastAPI is running on ${resolveBackendOrigin()}.`;
+  'Authentication service is currently unavailable. Please try again later.';
 
 export const PASSWORD_POLICY_HINT =
   'Use 12+ characters with at least one uppercase letter, one lowercase letter, and one number.';
@@ -32,11 +32,26 @@ const passwordPolicyChecks = [
   /\d/,
 ];
 
+function isAuthServiceUnavailable(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const normalizedMessage = error.message.toLowerCase();
+  return (
+    normalizedMessage.includes('unable to reach') ||
+    normalizedMessage.includes('failed to fetch') ||
+    normalizedMessage.includes('networkerror') ||
+    normalizedMessage.includes('timed out') ||
+    normalizedMessage.includes(resolveBackendOrigin().toLowerCase())
+  );
+}
+
 async function authRequest<T>(endpoint: string, init: RequestInit): Promise<T> {
   try {
     return await apiRequest<T>(endpoint, init);
   } catch (error) {
-    if (error instanceof TypeError) {
+    if (error instanceof TypeError || isAuthServiceUnavailable(error)) {
       throw new Error(AUTH_SERVICE_UNAVAILABLE_MESSAGE);
     }
     throw error;

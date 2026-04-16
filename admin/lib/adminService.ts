@@ -28,6 +28,9 @@ type AdminLoginResponse = {
   };
 };
 
+export const ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE =
+  'Authentication service is currently unavailable. Please try again later.';
+
 function unwrapEnvelope<T>(payload: ApiEnvelope<T> | T): T {
   if (payload && typeof payload === 'object' && 'data' in (payload as ApiEnvelope<T>)) {
     return (payload as ApiEnvelope<T>).data as T;
@@ -67,13 +70,14 @@ export async function loginAdmin(payload: AdminLoginPayload) {
       }),
     });
   } catch {
-    throw new Error(
-      `Unable to reach ${loginUrl}. Check that the Render backend is online and allows requests from the admin panel.`,
-    );
+    throw new Error(ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE);
   }
 
   const responsePayload = (await response.json().catch(() => null)) as ApiEnvelope<AdminLoginResponse> | null;
   if (!response.ok || !responsePayload) {
+    if (response.status >= 500) {
+      throw new Error(ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE);
+    }
     throw new Error(responsePayload?.error?.message || 'Unable to authenticate with the admin backend.');
   }
 

@@ -4,7 +4,7 @@ import { AlertTriangle, LockKeyhole, Mail } from 'lucide-react';
 
 import { useToast } from '../hooks/useToast';
 import { isAdminAuthenticated, setAdminToken } from '../lib/auth';
-import { loginAdmin } from '../lib/adminService';
+import { ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE, loginAdmin } from '../lib/adminService';
 import { getErrorMessage } from '../lib/errors';
 
 function validateEmail(email: string) {
@@ -50,7 +50,7 @@ export default function AdminLogin() {
       notify({ title: 'Login successful', message: 'Admin session established.', tone: 'success' });
       navigate(redirectTarget, { replace: true });
     } catch (error: unknown) {
-      setError(getErrorMessage(error, 'Unable to authenticate with the admin backend.'));
+      setError(getErrorMessage(error, ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE));
     } finally {
       setLoading(false);
     }

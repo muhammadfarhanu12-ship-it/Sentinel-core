@@ -1,9 +1,10 @@
 const FALLBACK_BACKEND_ORIGIN = 'https://sentinel-core-xcrz.onrender.com';
+export const ADMIN_APP_ORIGIN = 'https://sentinel-admin-beta.vercel.app';
 const API_PREFIX = '/api/v1';
 const FALLBACK_API_BASE_URL = `${FALLBACK_BACKEND_ORIGIN}${API_PREFIX}`;
 const FALLBACK_API_WS_BASE_URL = 'wss://sentinel-core-xcrz.onrender.com';
 const ALLOWED_BACKEND_HOSTS = new Set(['sentinel-core-xcrz.onrender.com', 'localhost', '127.0.0.1']);
-const configuredApiUrl = sanitizeConfiguredBackendUrl(import.meta.env.VITE_API_URL || '');
+const configuredApiUrl = sanitizeConfiguredBackendUrl(import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '');
 export const API_BASE_URL = normalizeApiBaseUrl(configuredApiUrl || FALLBACK_API_BASE_URL);
 
 function stripTrailingSlash(value: string): string {
