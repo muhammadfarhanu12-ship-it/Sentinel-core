@@ -53,6 +53,10 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 logger = logging.getLogger(__name__)
+ADMIN_PANEL_ORIGIN = "https://sentinel-admin-beta.vercel.app"
+CORS_ALLOWED_ORIGINS = [ADMIN_PANEL_ORIGIN]
+CORS_ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+CORS_ALLOWED_HEADERS = ["Content-Type", "Authorization"]
 SENSITIVE_REQUEST_FIELDS = {
     "password",
     "new_password",
@@ -147,12 +151,15 @@ origins = [
     "http://localhost:5173",
 ]
 
+origins = CORS_ALLOWED_ORIGINS
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=CORS_ALLOWED_METHODS,
+    allow_headers=CORS_ALLOWED_HEADERS,
+    max_age=600,
 )
 app.middleware("http")(attach_security_context)
 

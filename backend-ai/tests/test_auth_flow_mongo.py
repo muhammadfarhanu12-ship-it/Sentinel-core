@@ -547,6 +547,26 @@ def test_login_accepts_json_and_returns_role(auth_client, monkeypatch: pytest.Mo
     assert payload["role"] == "user"
 
 
+def test_admin_panel_cors_preflight_allows_v1_auth_login(auth_client):
+    client, _, _ = auth_client
+
+    response = client.options(
+        "/api/v1/auth/login",
+        headers={
+            "Origin": "https://sentinel-admin-beta.vercel.app",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type,authorization",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["access-control-allow-origin"] == "https://sentinel-admin-beta.vercel.app"
+    assert "POST" in response.headers["access-control-allow-methods"]
+    assert "OPTIONS" in response.headers["access-control-allow-methods"]
+    assert "content-type" in response.headers["access-control-allow-headers"].lower()
+    assert "authorization" in response.headers["access-control-allow-headers"].lower()
+
+
 def test_admin_bootstrap_promotes_existing_user_and_hashes_password(auth_client):
     _, collection, _ = auth_client
     user_id = ObjectId()
