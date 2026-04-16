@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -30,9 +31,14 @@ from app.admin.admin_schema import (
 )
 from app.middleware.rate_limiter import check_rate_limit
 from app.security.roles import ADMIN_ROLE, is_admin_role
+from app.services import admin_login_notification_service
 from app.utils.api_key_generator import generate_api_key
 from app.utils.hashing import get_password_hash, verify_password
 from app.utils.token_generator import create_access_token
+
+logger = logging.getLogger(__name__)
+_ADMIN_LOGIN_FAILURE_ALERT_THRESHOLD = 5
+_ADMIN_LOGIN_ATTEMPTS_COLLECTION = "admin_login_attempts"
 
 
 class AdminService:
@@ -59,11 +65,139 @@ class AdminService:
         return request.client.host if request.client else "unknown"
 
     @staticmethod
+    def _get_user_agent(request: Request) -> str | None:
+        user_agent = request.headers.get("user-agent")
+        return user_agent.strip() if isinstance(user_agent, str) and user_agent.strip() else None
+
+    @staticmethod
+    def _build_login_attempt_keys(normalized_email: str, ip_address: str) -> list[tuple[str, str]]:
+        keys: list[tuple[str, str]] = []
+        if normalized_email:
+            keys.append(("email", normalized_email))
+        if ip_address and all(existing_identifier != ip_address for _, existing_identifier in keys):
+            keys.append(("ip", ip_address))
+        return keys
+
+    @staticmethod
     def _parse_object_id(value: str) -> ObjectId:
         try:
             return ObjectId(value)
         except (InvalidId, TypeError) as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found") from exc
+
+    async def _record_failed_login_attempt(
+        self,
+        *,
+        normalized_email: str,
+        ip_address: str,
+        user_agent: str | None,
+    ) -> int:
+        attempts_collection = self.db[_ADMIN_LOGIN_ATTEMPTS_COLLECTION]
+        now = self._utcnow()
+        highest_attempt_count = 0
+        alert_updates: list[tuple[Any, int]] = []
+
+        for scope, identifier in self._build_login_attempt_keys(normalized_email, ip_address):
+            lookup_key = f"{scope}:{identifier}"
+            existing = await attempts_collection.find_one({"key": lookup_key})
+            current_count = int(existing.get("count") or 0) + 1 if existing else 1
+            highest_attempt_count = max(highest_attempt_count, current_count)
+            last_alert_count = int(existing.get("last_alert_count") or 0) if existing else 0
+            update_payload = {
+                "key": lookup_key,
+                "scope": scope,
+                "identifier": identifier,
+                "attempted_email": normalized_email,
+                "ip_address": ip_address,
+                "user_agent": user_agent,
+                "count": current_count,
+                "first_failed_at": existing.get("first_failed_at") if existing else now,
+                "last_failed_at": now,
+                "updated_at": now,
+            }
+
+            if existing is None:
+                insert_result = await attempts_collection.insert_one(
+                    {
+                        **update_payload,
+                        "created_at": now,
+                        "last_alert_count": 0,
+                    }
+                )
+                record_id = insert_result.inserted_id
+            else:
+                await attempts_collection.update_one({"_id": existing["_id"]}, {"$set": update_payload})
+                record_id = existing["_id"]
+
+            if current_count >= _ADMIN_LOGIN_FAILURE_ALERT_THRESHOLD and current_count >= last_alert_count + _ADMIN_LOGIN_FAILURE_ALERT_THRESHOLD:
+                alert_updates.append((record_id, current_count))
+
+        if alert_updates:
+            result = await admin_login_notification_service.send_admin_login_failed_attempt_alert_async(
+                attempted_email=normalized_email,
+                attempt_count=highest_attempt_count,
+                attempted_at=now,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            if result.success:
+                for record_id, alert_count in alert_updates:
+                    await attempts_collection.update_one(
+                        {"_id": record_id},
+                        {"$set": {"last_alert_count": alert_count, "updated_at": now}},
+                    )
+            else:
+                logger.warning(
+                    "Failed to send admin failed-login alert email email=%s ip=%s error=%s",
+                    normalized_email,
+                    ip_address,
+                    result.error,
+                )
+
+        return highest_attempt_count
+
+    async def _reset_failed_login_attempts(self, *, normalized_email: str, ip_address: str) -> None:
+        attempts_collection = self.db[_ADMIN_LOGIN_ATTEMPTS_COLLECTION]
+        for scope, identifier in self._build_login_attempt_keys(normalized_email, ip_address):
+            await attempts_collection.delete_one({"key": f"{scope}:{identifier}"})
+
+    async def _capture_failed_login_attempt(
+        self,
+        *,
+        normalized_email: str,
+        ip_address: str,
+        user_agent: str | None,
+    ) -> None:
+        try:
+            await self._record_failed_login_attempt(
+                normalized_email=normalized_email,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+        except Exception:
+            logger.exception("Failed to record admin login attempt email=%s ip=%s", normalized_email, ip_address)
+
+    async def _send_success_login_notification(
+        self,
+        *,
+        admin_email: str,
+        login_at: datetime,
+        ip_address: str,
+        user_agent: str | None,
+    ) -> None:
+        result = await admin_login_notification_service.send_admin_login_success_email_async(
+            admin_email=admin_email,
+            login_at=login_at,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        if not result.success:
+            logger.warning(
+                "Failed to send admin login activity email email=%s ip=%s error=%s",
+                admin_email,
+                ip_address,
+                result.error,
+            )
 
     async def _get_user_or_404(self, user_id: str) -> dict[str, Any]:
         user = await self.db["users"].find_one({"_id": self._parse_object_id(user_id)})
@@ -73,8 +207,10 @@ class AdminService:
 
     async def login(self, email: str, password: str, request: Request) -> AdminTokenResponse:
         normalized_email = self._normalize_email(email)
+        ip_address = self._get_client_ip(request)
+        user_agent = self._get_user_agent(request)
         check_rate_limit(
-            f"admin-login:{self._get_client_ip(request) or normalized_email}",
+            f"admin-login:{ip_address or normalized_email}",
             scope="admin-login",
             limit=5,
             window_seconds=60,
@@ -82,10 +218,25 @@ class AdminService:
 
         user = await self.db["users"].find_one({"email": normalized_email})
         if user is None or not verify_password(password, str(user.get("hashed_password", ""))):
+            await self._capture_failed_login_attempt(
+                normalized_email=normalized_email,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin credentials")
         if not bool(user.get("is_active", True)):
+            await self._capture_failed_login_attempt(
+                normalized_email=normalized_email,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin account is inactive")
         if not is_admin_role(user.get("role")):
+            await self._capture_failed_login_attempt(
+                normalized_email=normalized_email,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
         now = self._utcnow()
@@ -93,6 +244,19 @@ class AdminService:
             {"_id": user["_id"]},
             {"$set": {"last_login_at": now, "updated_at": now, "role": ADMIN_ROLE}},
         )
+        try:
+            await self._reset_failed_login_attempts(normalized_email=normalized_email, ip_address=ip_address)
+        except Exception:
+            logger.exception("Failed to reset admin login attempts email=%s ip=%s", normalized_email, ip_address)
+        try:
+            await self._send_success_login_notification(
+                admin_email=normalized_email,
+                login_at=now,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+        except Exception:
+            logger.exception("Failed to send admin login activity email email=%s ip=%s", normalized_email, ip_address)
 
         access_token = create_access_token(
             data={

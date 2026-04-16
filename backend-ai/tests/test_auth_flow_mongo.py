@@ -35,6 +35,7 @@ from app.core.config import settings
 from app.main import app
 from app.middleware.rate_limiter import limiter
 from app.routes.admin import get_admin_service
+from app.services import admin_login_notification_service
 from app.services import auth_service
 from app.services import admin_user_service
 from app.services.email_service import EmailSendResult
@@ -646,6 +647,127 @@ def test_admin_user_can_access_admin_routes(auth_client):
     assert dashboard_response.json()["data"]["user"]["email"] == "platform.admin@example.com"
     assert users_response.status_code == 200, users_response.text
     assert any(user["email"] == "platform.admin@example.com" for user in users_response.json()["data"])
+
+
+def test_admin_login_sends_activity_email(auth_client, monkeypatch: pytest.MonkeyPatch):
+    client, _, _ = auth_client
+    captured: dict[str, object] = {}
+
+    asyncio.run(
+        admin_user_service.ensure_admin_user(
+            email="alerts.admin@example.com",
+            password="AdminPass123",
+            name="Alerts Admin",
+        )
+    )
+
+    async def fake_send_admin_login_success_email_async(*, admin_email: str, login_at, ip_address: str | None, user_agent: str | None):
+        captured["admin_email"] = admin_email
+        captured["login_at"] = login_at
+        captured["ip_address"] = ip_address
+        captured["user_agent"] = user_agent
+        return EmailSendResult(success=True, message_id="admin-login-success-1")
+
+    async def fake_send_admin_login_failed_attempt_alert_async(**_kwargs):
+        raise AssertionError("Failed-attempt alert should not be sent for a successful admin login")
+
+    monkeypatch.setattr(
+        admin_login_notification_service,
+        "send_admin_login_success_email_async",
+        fake_send_admin_login_success_email_async,
+    )
+    monkeypatch.setattr(
+        admin_login_notification_service,
+        "send_admin_login_failed_attempt_alert_async",
+        fake_send_admin_login_failed_attempt_alert_async,
+    )
+
+    response = client.post(
+        "/api/admin/auth/login",
+        json={"email": "alerts.admin@example.com", "password": "AdminPass123"},
+        headers={
+            "x-forwarded-for": "203.0.113.25",
+            "user-agent": "SentinelAdminTests/1.0",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["access_token"]
+    assert captured["admin_email"] == "alerts.admin@example.com"
+    assert captured["ip_address"] == "203.0.113.25"
+    assert captured["user_agent"] == "SentinelAdminTests/1.0"
+    assert captured["login_at"] is not None
+
+
+def test_admin_failed_login_alert_triggers_at_threshold_and_resets_after_success(
+    auth_client,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    client, _, _ = auth_client
+    alert_counts: list[int] = []
+
+    asyncio.run(
+        admin_user_service.ensure_admin_user(
+            email="threshold.admin@example.com",
+            password="AdminPass123",
+            name="Threshold Admin",
+        )
+    )
+
+    async def fake_send_admin_login_success_email_async(**_kwargs):
+        return EmailSendResult(success=True, message_id="admin-login-success-2")
+
+    async def fake_send_admin_login_failed_attempt_alert_async(*, attempt_count: int, **kwargs):
+        alert_counts.append(attempt_count)
+        assert kwargs["attempted_email"] == "threshold.admin@example.com"
+        assert kwargs["ip_address"] in {"198.51.100.8", "198.51.100.10"}
+        return EmailSendResult(success=True, message_id=f"admin-login-alert-{attempt_count}")
+
+    monkeypatch.setattr(
+        admin_login_notification_service,
+        "send_admin_login_success_email_async",
+        fake_send_admin_login_success_email_async,
+    )
+    monkeypatch.setattr(
+        admin_login_notification_service,
+        "send_admin_login_failed_attempt_alert_async",
+        fake_send_admin_login_failed_attempt_alert_async,
+    )
+
+    for _ in range(4):
+        response = client.post(
+            "/api/admin/auth/login",
+            json={"email": "threshold.admin@example.com", "password": "WrongPass123"},
+            headers={"x-forwarded-for": "198.51.100.8", "user-agent": "SentinelAdminTests/threshold"},
+        )
+        assert response.status_code == 401, response.text
+
+    assert alert_counts == []
+
+    fifth_attempt = client.post(
+        "/api/admin/auth/login",
+        json={"email": "threshold.admin@example.com", "password": "WrongPass123"},
+        headers={"x-forwarded-for": "198.51.100.8", "user-agent": "SentinelAdminTests/threshold"},
+    )
+    assert fifth_attempt.status_code == 401, fifth_attempt.text
+    assert alert_counts == [5]
+
+    success_response = client.post(
+        "/api/admin/auth/login",
+        json={"email": "threshold.admin@example.com", "password": "AdminPass123"},
+        headers={"x-forwarded-for": "198.51.100.9", "user-agent": "SentinelAdminTests/threshold"},
+    )
+    assert success_response.status_code == 200, success_response.text
+
+    for _ in range(5):
+        response = client.post(
+            "/api/admin/auth/login",
+            json={"email": "threshold.admin@example.com", "password": "WrongPass123"},
+            headers={"x-forwarded-for": "198.51.100.10", "user-agent": "SentinelAdminTests/threshold"},
+        )
+        assert response.status_code == 401, response.text
+
+    assert alert_counts == [5, 5]
 
 
 def test_rbac_admin_routes_accept_main_auth_admin_jwt(auth_client):

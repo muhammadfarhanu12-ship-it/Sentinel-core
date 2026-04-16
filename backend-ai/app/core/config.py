@@ -91,6 +91,11 @@ class Settings:
         self.TEST_API_KEY: str = _env_str("TEST_API_KEY", "test_key_123") or "test_key_123"
         self.ADMIN_BOOTSTRAP_EMAIL: str | None = _env_str("ADMIN_BOOTSTRAP_EMAIL", aliases=("SENTINEL_ADMIN_EMAIL",))
         self.ADMIN_BOOTSTRAP_PASSWORD: str | None = _env_str("ADMIN_BOOTSTRAP_PASSWORD", aliases=("SENTINEL_ADMIN_PASSWORD",))
+        self.ADMIN_LOGIN_ALERT_EMAIL: str | None = _env_str(
+            "ADMIN_LOGIN_ALERT_EMAIL",
+            default=self.ADMIN_BOOTSTRAP_EMAIL,
+            aliases=("SENTINEL_ADMIN_ALERT_EMAIL",),
+        )
 
         self.GEMINI_API_KEY: str | None = _env_str("GEMINI_API_KEY")
         self.OPENAI_API_KEY: str | None = _env_str("OPENAI_API_KEY")
@@ -189,6 +194,7 @@ class Settings:
         self.AUTH_VERIFY_EMAIL_PATH = verify_path
         self.AUTH_RESET_PASSWORD_PATH = reset_path
         self.ADMIN_BOOTSTRAP_EMAIL = str(self.ADMIN_BOOTSTRAP_EMAIL or "").strip().lower() or None
+        self.ADMIN_LOGIN_ALERT_EMAIL = str(self.ADMIN_LOGIN_ALERT_EMAIL or "").strip().lower() or None
 
     def _validate_values(self) -> None:
         required = {
