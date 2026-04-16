@@ -1,4 +1,4 @@
-import api, { ADMIN_API_BASE_URL } from './api';
+import api, { API_URL } from './api';
 import type {
   AdminApiKey,
   AdminApiKeysQuery,
@@ -29,7 +29,7 @@ type AdminLoginResponse = {
 };
 
 export const ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE =
-  'Authentication service is currently unavailable. Please try again later.';
+  'Admin authentication service is currently unavailable.';
 
 function unwrapEnvelope<T>(payload: ApiEnvelope<T> | T): T {
   if (payload && typeof payload === 'object' && 'data' in (payload as ApiEnvelope<T>)) {
@@ -54,7 +54,7 @@ function pageToParams(page = 1, pageSize = 10) {
 }
 
 export async function loginAdmin(payload: AdminLoginPayload) {
-  const loginUrl = `${ADMIN_API_BASE_URL}/auth/login`;
+  const loginUrl = `${API_URL}/auth/login`;
   let response: Response;
 
   try {
@@ -75,7 +75,7 @@ export async function loginAdmin(payload: AdminLoginPayload) {
 
   const responsePayload = (await response.json().catch(() => null)) as ApiEnvelope<AdminLoginResponse> | null;
   if (!response.ok || !responsePayload) {
-    if (response.status >= 500) {
+    if (response.status === 404 || response.status >= 500) {
       throw new Error(ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE);
     }
     throw new Error(responsePayload?.error?.message || 'Unable to authenticate with the admin backend.');
