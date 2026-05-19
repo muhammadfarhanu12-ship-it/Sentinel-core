@@ -1,22 +1,32 @@
-const FALLBACK_BACKEND_ORIGIN = 'https://sentinel-core-xcrz.onrender.com';
-export const ADMIN_APP_ORIGIN = 'https://sentinel-admin-beta.vercel.app';
+export const ADMIN_APP_ORIGIN = import.meta.env.VITE_ADMIN_APP_ORIGIN || 'https://sentinel-admin-beta.vercel.app';
 const API_PREFIX = '/api/v1';
-const FALLBACK_API_BASE_URL = `${FALLBACK_BACKEND_ORIGIN}${API_PREFIX}`;
-const FALLBACK_API_WS_BASE_URL = 'wss://sentinel-core-xcrz.onrender.com';
-const ALLOWED_BACKEND_HOSTS = new Set(['sentinel-core-xcrz.onrender.com', 'localhost', '127.0.0.1']);
 const configuredApiUrl = sanitizeConfiguredBackendUrl(import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '');
-export const API_BASE_URL = normalizeApiBaseUrl(configuredApiUrl || FALLBACK_API_BASE_URL);
+const DEFAULT_BACKEND_ORIGIN = 'http://127.0.0.1:8000';
+export const API_BASE_URL = normalizeApiBaseUrl(configuredApiUrl || defaultApiBaseUrl());
+
+export class ApiRequestError extends Error {
+  status: number;
+  payload: unknown;
+  code?: string;
+
+  constructor(message: string, status: number, payload: unknown, code?: string) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+    this.payload = payload;
+    this.code = code;
+  }
+}
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
 }
 
-function isAllowedBackendHost(value: string): boolean {
-  try {
-    return ALLOWED_BACKEND_HOSTS.has(new URL(stripTrailingSlash(value)).hostname);
-  } catch {
-    return false;
+function defaultApiBaseUrl(): string {
+  if (typeof window !== 'undefined' && /^https?:$/i.test(window.location.protocol)) {
+    return `${window.location.origin}${API_PREFIX}`;
   }
+  return `${DEFAULT_BACKEND_ORIGIN}${API_PREFIX}`;
 }
 
 function sanitizeConfiguredBackendUrl(value: string): string {
@@ -25,7 +35,15 @@ function sanitizeConfiguredBackendUrl(value: string): string {
     return '';
   }
 
-  return isAllowedBackendHost(normalizedValue) ? normalizedValue : '';
+  try {
+    const parsed = new URL(normalizedValue);
+    if (!/^https?:$/i.test(parsed.protocol)) {
+      return '';
+    }
+    return stripTrailingSlash(parsed.toString());
+  } catch {
+    return '';
+  }
 }
 
 function stripApiSuffix(value: string): string {
@@ -35,7 +53,7 @@ function stripApiSuffix(value: string): string {
 function normalizeApiBaseUrl(value: string): string {
   const normalizedValue = stripTrailingSlash(value);
   if (!normalizedValue) {
-    return FALLBACK_API_BASE_URL;
+    return defaultApiBaseUrl();
   }
 
   if (/\/api(?:\/v\d+)?$/i.test(normalizedValue)) {
@@ -59,7 +77,7 @@ function createNetworkError(url: string, error: unknown): Error {
   }
 
   return new Error(
-    `Unable to reach ${url}. Check that the Render backend is online and allows requests from this frontend.`,
+    `Unable to reach ${url}. Check that the backend server is online and allows requests from this frontend.`,
   );
 }
 
@@ -127,6 +145,7 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}): Pro
   const requestInit: RequestInit = {
     ...options,
     headers: buildRequestHeaders(options.headers, options.body),
+    credentials: options.credentials ?? 'include',
   };
 
   try {
@@ -156,7 +175,12 @@ export async function apiRequest<T = unknown>(endpoint: string, options: Request
   const payload = await parseResponsePayload(response);
 
   if (!response.ok) {
-    throw new Error(parseApiErrorMessage(payload, 'API request failed'));
+    throw new ApiRequestError(
+      parseApiErrorMessage(payload, 'API request failed'),
+      response.status,
+      payload,
+      typeof payload?.error?.code === 'string' ? payload.error.code : undefined,
+    );
   }
 
   return unwrapApiData<T>(payload);
@@ -175,10 +199,7 @@ export function resolveBackendWebSocketOrigin(): string {
   const normalizedConfiguredWsOrigin = configuredWsOrigin ? toWebSocketOrigin(configuredWsOrigin) : '';
   if (normalizedConfiguredWsOrigin) return normalizedConfiguredWsOrigin;
 
-  const backendOrigin = resolveBackendOrigin();
-  if (backendOrigin === FALLBACK_BACKEND_ORIGIN) return FALLBACK_API_WS_BASE_URL;
-
-  return toWebSocketOrigin(backendOrigin);
+  return toWebSocketOrigin(resolveBackendOrigin());
 }
 
 export function resolveAdminApiBaseUrl(): string {
@@ -214,5 +235,26 @@ export function parseApiErrorMessage(payload: any, fallback: string): string {
     }
   }
 
-  return String(payload?.error?.message || payload?.detail || payload?.message || fallback);
+  const errorMessage = payload?.error?.message;
+  if (typeof errorMessage === 'string' && errorMessage.trim()) {
+    return errorMessage.trim();
+  }
+
+  const detail = payload?.detail;
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail.trim();
+  }
+  if (detail && typeof detail === 'object') {
+    const detailMessage = detail.message || detail.reason || detail.error;
+    if (typeof detailMessage === 'string' && detailMessage.trim()) {
+      return detailMessage.trim();
+    }
+  }
+
+  const topLevelMessage = payload?.message;
+  if (typeof topLevelMessage === 'string' && topLevelMessage.trim()) {
+    return topLevelMessage.trim();
+  }
+
+  return fallback;
 }

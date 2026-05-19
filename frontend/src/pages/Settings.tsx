@@ -739,7 +739,7 @@ export default function Settings() {
                         }))
                       }
                       className={cn(inputClassName, 'flex-1')}
-                      placeholder="whsec_live_xxxxxxxxx"
+                      placeholder="example_webhook_secret_replace_me"
                     />
                     <Button type="button" variant="outline" onClick={() => setShowWebhookSecret((current) => !current)}>
                       {showWebhookSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

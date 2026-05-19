@@ -16,6 +16,7 @@ import type {
 import { getAccessToken, getDisplayName, hasStoredSession } from "../services/auth";
 import { buildBackendWebSocketUrl } from "../services/api";
 import { HttpError, authedFetch, authedFetchJson } from "../services/authenticatedFetch";
+import { normalizeRiskLevel, normalizeRiskScore } from "../lib/riskScore";
 import {
   fetchAuditLogs as fetchAuditLogsApi,
   fetchTeamMembers as fetchTeamMembersApi,
@@ -90,6 +91,7 @@ function normalizeApiKey(item: any): ApiKey {
 function normalizeLog(item: any): SecurityLog {
   const rawItem = item && typeof item === "object" ? item : {};
   const timestampValue = rawItem?.timestamp ?? rawItem?.created_at ?? "";
+  const normalizedRiskScore = normalizeRiskScore(rawItem);
 
   return {
     ...rawItem,
@@ -105,6 +107,9 @@ function normalizeLog(item: any): SecurityLog {
     tokens_used: Number(rawItem?.tokens_used ?? 0),
     endpoint: rawItem?.endpoint == null ? null : String(rawItem.endpoint),
     method: rawItem?.method == null ? null : String(rawItem.method),
+    risk_score: normalizedRiskScore,
+    threat_score: normalizedRiskScore / 100,
+    risk_level: normalizeRiskLevel(rawItem?.risk_level, normalizedRiskScore),
   } as SecurityLog;
 }
 
@@ -130,6 +135,14 @@ function emptyAnalytics(): Analytics {
     securityScore: 0,
     threatsOverTime: [],
     usageVsLimit: { used: 0, limit: 1 },
+    threatActivityFeed: [],
+    policyTriggerCounts: {},
+    attackSeverityChart: [],
+    toolInterceptionMetrics: { totalToolCalls: 0, requires2FA: 0, intercepted: 0, approved: 0 },
+    leakPreventionMetrics: { findings: 0, blockedEvents: 0, redactedEvents: 0 },
+    topAttackSignatures: [],
+    userRiskHeatmap: [],
+    securityTimeline: [],
   };
 }
 

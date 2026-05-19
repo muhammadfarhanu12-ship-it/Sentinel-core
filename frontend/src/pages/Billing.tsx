@@ -63,7 +63,7 @@ export default function Billing() {
       period: '/month',
       description: 'For enterprise teams requiring maximum security.',
       features: [
-        'Unlimited requests',
+        '250,000 requests/month',
         'Dedicated threat intelligence',
         'Team dashboard',
         'Priority 24/7 support',
@@ -198,7 +198,7 @@ export default function Billing() {
       <div className="mt-16 text-center">
         <p className="text-sm text-slate-500 flex items-center justify-center space-x-2">
           <Shield className="w-4 h-4" />
-          <span>Secure payments processed by Stripe. Cancel anytime.</span>
+          <span>Stripe checkout is required for paid plan activation in production.</span>
         </p>
       </div>
     </motion.div>

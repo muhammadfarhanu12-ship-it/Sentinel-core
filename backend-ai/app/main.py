@@ -26,6 +26,7 @@ from app.db.mongo import (
     ping_mongo,
 )
 from app.middleware.auth_middleware import attach_security_context
+from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.routes.admin import router as admin_router
 from app.routes.auth_routes import router as auth_router
 from app.routers.analytics_router import router as analytics_router
@@ -33,6 +34,7 @@ from app.routers.audit_logs_router import router as audit_logs_router
 from app.routers.billing_router import router as billing_router
 from app.routers.brain_router import router as brain_router
 from app.routers.email_router import router as email_router
+from app.routers.gateway_router import router as gateway_router
 from app.routers.keys_router import router as keys_router
 from app.routers.logs_router import router as logs_router
 from app.routers.user_router import router as user_router
@@ -41,11 +43,16 @@ from app.routers.notification_ws import router as notification_ws_router
 from app.routers.notifications_router import router as notifications_router
 from app.routers.reports_router import router as reports_router
 from app.routers.scan_router import router as scan_router
+from app.routers.security_tools_router import router as security_tools_router
 from app.routers.settings_router import router as settings_router
 from app.routers.team_router import router as team_router
 from app.routers.usage_router import router as usage_router
 from app.schemas.api_schema import fail
+from app.security.security_enforcement_layer import SecurityEnforcementInput
+from app.security.sentinel_core import process_request as process_sentinel_request
+from app.security.startup import initialize_security_stack
 from app.services.email_service import verify_smtp_connection
+from app.services.security_service import scan_prompt
 from app.services.sentinel_core import build_sentinel_verdict
 from app.services.threat_detection import ThreatDetectionService
 logging.basicConfig(
@@ -53,19 +60,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 logger = logging.getLogger(__name__)
-ADMIN_PANEL_ORIGIN = "https://sentinel-admin-beta.vercel.app"
-MAIN_APP_ORIGIN = "https://sentinel-core-arei.vercel.app"
-LOCAL_FRONTEND_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
-]
-CORS_ALLOWED_ORIGINS = [
-    MAIN_APP_ORIGIN,
-    ADMIN_PANEL_ORIGIN,
-    *LOCAL_FRONTEND_ORIGINS,
-]
+CORS_ALLOWED_ORIGINS = settings.cors_origins_list
 CORS_ALLOWED_METHODS = ["*"]
 CORS_ALLOWED_HEADERS = ["*"]
 SENSITIVE_REQUEST_FIELDS = {
@@ -124,9 +119,14 @@ async def lifespan(app: FastAPI):
     app.state.mongo_startup_error = None
     app.state.smtp_startup_error = None
     app.state.admin_startup_error = None
+    app.state.security_startup_error = None
+    app.state.security_startup_status = None
 
     try:
-        await connect_to_mongo(app=app)
+        try:
+            await connect_to_mongo(app=app)
+        except TypeError:
+            await connect_to_mongo()
     except Exception as exc:
         app.state.mongo_startup_error = str(exc)
         logger.exception("MongoDB startup failed; continuing in degraded mode")
@@ -145,9 +145,25 @@ async def lifespan(app: FastAPI):
             logger.exception("SMTP startup verification failed; continuing in degraded mode")
 
     try:
+        security_startup_status = initialize_security_stack()
+        app.state.security_startup_status = security_startup_status
+        if not bool(security_startup_status.get("ready")):
+            app.state.security_startup_error = "Security startup checks failed."
+            logger.error(
+                "Security startup checks failed failed_modules=%s",
+                security_startup_status.get("failed_modules"),
+            )
+    except Exception as exc:
+        app.state.security_startup_error = str(exc)
+        logger.exception("Security startup initialization failed; continuing in degraded mode")
+
+    try:
         yield
     finally:
-        await close_mongo_connection(app=app)
+        try:
+            await close_mongo_connection(app=app)
+        except TypeError:
+            await close_mongo_connection()
 
 
 app = FastAPI(
@@ -164,7 +180,34 @@ app.add_middleware(
     allow_headers=CORS_ALLOWED_HEADERS,
     max_age=600,
 )
+app.add_middleware(
+    SecurityHeadersMiddleware,
+    enable_hsts=settings.HSTS_ENABLED,
+    hsts_max_age=settings.HSTS_MAX_AGE,
+    hsts_include_subdomains=settings.HSTS_INCLUDE_SUBDOMAINS,
+    hsts_preload=settings.HSTS_PRELOAD,
+)
 app.middleware("http")(attach_security_context)
+
+
+@app.middleware("http")
+async def request_size_limit_middleware(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            request_size = int(content_length)
+        except ValueError:
+            request_size = 0
+        if request_size > settings.MAX_REQUEST_SIZE_BYTES:
+            return JSONResponse(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                content=fail(
+                    code="request_too_large",
+                    message="Request body exceeds the configured maximum size.",
+                    details={"max_request_size_bytes": settings.MAX_REQUEST_SIZE_BYTES},
+                ).model_dump(mode="json"),
+            )
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -278,8 +321,11 @@ app.include_router(usage_router, prefix="/api/v1/usage")
 app.include_router(billing_router, prefix="/api/v1/billing")
 app.include_router(audit_logs_router, prefix="/api/v1/audit-logs")
 app.include_router(notifications_router, prefix="/api/v1/notifications")
+app.include_router(gateway_router, prefix="/api/v1/gateway")
 app.include_router(brain_router, prefix="/api/v1/brain")
 app.include_router(scan_router, prefix="/api/v1/scan")
+app.include_router(security_tools_router, prefix="/api/v1/security")
+app.include_router(security_tools_router, prefix="/api/security", include_in_schema=False)
 app.include_router(log_ws_router)
 app.include_router(notification_ws_router)
 
@@ -287,6 +333,9 @@ app.include_router(notification_ws_router)
 class SecurityRequest(BaseModel):
     prompt: str
     image_data: str | None = None
+    session_id: str | None = None
+    request_id: str | None = None
+    context: dict[str, object] | None = None
 
 
 @app.get("/")
@@ -297,12 +346,56 @@ async def root() -> dict[str, str]:
 @app.post("/analyze", include_in_schema=False)
 @app.post("/api/v1/analyze")
 async def analyze(payload: SecurityRequest) -> dict[str, object]:
-    assessment = ThreatDetectionService().analyze(payload.prompt, security_tier="PRO")
-    verdict = build_sentinel_verdict(assessment)
-    if verdict["execution_output"] != "BLOCKED":
-        execution_output = get_clean_execution_output(payload.prompt)
-        if execution_output:
-            verdict = build_sentinel_verdict(assessment, execution_output=execution_output)
+    request_context = dict(payload.context or {})
+    if payload.session_id:
+        request_context["session_id"] = payload.session_id
+    if payload.request_id:
+        request_context["request_id"] = payload.request_id
+    scan_result = scan_prompt(
+        payload.prompt,
+        provider="gemini",
+        model="gemini-3.1-pro",
+        security_tier="PRO",
+        enforcement_input=SecurityEnforcementInput(
+            prompt=payload.prompt,
+            session_id=payload.session_id,
+            metadata={"context": request_context, "request_id": payload.request_id} if request_context or payload.request_id else None,
+        ),
+    )
+    verdict = dict(scan_result.get("sentinel_verdict") or {})
+    if verdict.get("execution_output") != "BLOCKED":
+        protected_result = process_sentinel_request(
+            payload.prompt,
+            context=request_context,
+            llm_callable=get_clean_execution_output,
+        )
+        if protected_result.get("verdict") == "block":
+            verdict["execution_output"] = "BLOCKED"
+            verdict["category"] = "Policy Violation"
+            verdict["detail"] = protected_result.get("response")
+        elif protected_result.get("response"):
+            assessment = ThreatDetectionService().analyze(
+                payload.prompt,
+                provider="gemini",
+                model="gemini-3.1-pro",
+                security_tier="PRO",
+            )
+            verdict = build_sentinel_verdict(
+                assessment,
+                execution_output=str(protected_result.get("response") or ""),
+                provider="gemini",
+                model="gemini-3.1-pro",
+                security_tier="PRO",
+            )
+        verdict["protected_flow"] = {
+            "verdict": protected_result.get("verdict"),
+            "risk_score": protected_result.get("risk_score"),
+            "risk_level": protected_result.get("risk_level"),
+            "context_analysis": protected_result.get("context_analysis"),
+            "anonymization": protected_result.get("anonymization"),
+            "prompt_scan": protected_result.get("prompt_scan"),
+            "logic_check": protected_result.get("logic_check"),
+        }
     return verdict
 
 
@@ -338,6 +431,7 @@ async def health(response: Response) -> dict[str, object]:
     mongo_status = get_mongo_connection_status()
     database_state = "ok"
     database_error: str | None = None
+    security_state = "ok"
 
     try:
         await ping_mongo()
@@ -346,7 +440,10 @@ async def health(response: Response) -> dict[str, object]:
         database_error = str(exc)
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
-    overall_status = "ok" if database_state == "ok" else "degraded"
+    if getattr(app.state, "security_startup_error", None):
+        security_state = "degraded"
+
+    overall_status = "ok" if database_state == "ok" and security_state == "ok" else "degraded"
     if overall_status != "ok":
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
@@ -355,6 +452,7 @@ async def health(response: Response) -> dict[str, object]:
         "database": database_state,
         "database_name": get_mongo_db_name(),
         "database_error": _summarize_dependency_error(database_error or mongo_status.get("last_error")),
+        "security": security_state,
         "mongo_ready": bool(mongo_status.get("ready")),
         "mongo_last_checked_at": mongo_status.get("last_checked_at"),
         "mongo_last_connected_at": mongo_status.get("last_connected_at"),
@@ -362,4 +460,6 @@ async def health(response: Response) -> dict[str, object]:
         "smtp_verify_on_startup": settings.SMTP_VERIFY_ON_STARTUP,
         "smtp_startup_error": getattr(app.state, "smtp_startup_error", None),
         "mongo_startup_error": _summarize_dependency_error(getattr(app.state, "mongo_startup_error", None)),
+        "security_startup_error": getattr(app.state, "security_startup_error", None),
+        "security_startup_status": getattr(app.state, "security_startup_status", None),
     }

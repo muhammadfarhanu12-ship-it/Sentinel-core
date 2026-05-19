@@ -31,6 +31,12 @@ type AdminLoginResponse = {
 export const ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE =
   'Admin authentication service is currently unavailable.';
 
+type AdminDashboardResponse = {
+  user?: {
+    role?: string;
+  };
+};
+
 function unwrapEnvelope<T>(payload: ApiEnvelope<T> | T): T {
   if (payload && typeof payload === 'object' && 'data' in (payload as ApiEnvelope<T>)) {
     return (payload as ApiEnvelope<T>).data as T;
@@ -53,12 +59,85 @@ function pageToParams(page = 1, pageSize = 10) {
   };
 }
 
+function resolveRole(payload: { role?: string; user?: { role?: string } } | null | undefined): string {
+  return String(payload?.role || payload?.user?.role || '').trim().toLowerCase();
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 15000): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: init.signal || controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+async function assertAdminBackendHealthy(): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(`${API_URL}/health`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+  } catch {
+    throw new Error(ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE);
+  }
+
+  if (!response.ok) {
+    throw new Error(ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE);
+  }
+}
+
+export async function verifyAdminSession(accessToken: string): Promise<void> {
+  const normalizedToken = String(accessToken || '').trim();
+  if (!normalizedToken) {
+    throw new Error('Admin authentication failed.');
+  }
+
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(`${API_URL}/admin/dashboard`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${normalizedToken}`,
+      },
+      cache: 'no-store',
+    });
+  } catch {
+    throw new Error(ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE);
+  }
+
+  const payload = (await response.json().catch(() => null)) as ApiEnvelope<AdminDashboardResponse> | null;
+  if (!response.ok || !payload) {
+    if (response.status === 401 || response.status === 403) {
+      throw new Error('Admin session expired. Please sign in again.');
+    }
+    if (response.status >= 500 || response.status === 404) {
+      throw new Error(ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE);
+    }
+    throw new Error(payload?.error?.message || 'Unable to verify admin session.');
+  }
+
+  const dashboard = unwrapEnvelope(payload);
+  const role = resolveRole(dashboard?.user || null);
+  if (role !== 'admin') {
+    throw new Error('Admin access required.');
+  }
+}
+
 export async function loginAdmin(payload: AdminLoginPayload) {
+  await assertAdminBackendHealthy();
   const loginUrl = `${API_URL}/auth/login`;
   let response: Response;
 
   try {
-    response = await fetch(loginUrl, {
+    response = await fetchWithTimeout(loginUrl, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -86,10 +165,12 @@ export async function loginAdmin(payload: AdminLoginPayload) {
     throw new Error('Admin login did not return an access token.');
   }
 
-  const resolvedRole = authPayload.role || authPayload.user?.role;
+  const resolvedRole = resolveRole(authPayload);
   if (resolvedRole !== 'admin') {
     throw new Error('Admin access required.');
   }
+
+  await verifyAdminSession(authPayload.access_token);
 
   return {
     access_token: authPayload.access_token,

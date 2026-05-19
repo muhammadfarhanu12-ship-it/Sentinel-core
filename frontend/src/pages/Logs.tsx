@@ -20,6 +20,7 @@ import {
   safeTimeValue,
   safeToISOString,
 } from "../lib/date";
+import { formatRiskScore, normalizeRiskScore } from "../lib/riskScore";
 
 export default function Logs() {
   const { logs, apiKeys, fetchApiKeys, fetchLogs, isLoading } = useStore();
@@ -308,6 +309,7 @@ export default function Logs() {
               const threatType = log.threat_type || "NONE";
               const apiKey = log.api_key_id ?? "-";
               const tokens = log.tokens_used ?? 0;
+              const riskScore = normalizeRiskScore(log as unknown as Record<string, unknown>);
               const logId = String(
                 log.id || log.timestamp || log.created_at || `${apiKey}-${threatType}-${status}`,
               );
@@ -341,6 +343,7 @@ export default function Logs() {
                     </div>
                     <div className="col-span-3 text-sm text-slate-300">
                       {threatType !== "NONE" ? threatType : "-"}
+                      <span className="block text-xs text-slate-500">Risk {formatRiskScore(riskScore)}</span>
                     </div>
                     <div className="col-span-2 text-sm font-mono text-slate-400">
                       {apiKey}

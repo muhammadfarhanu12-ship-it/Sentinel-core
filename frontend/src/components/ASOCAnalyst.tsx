@@ -5,15 +5,14 @@ import { Terminal, Send, Loader2, ShieldAlert, CheckCircle2, Activity } from 'lu
 import { motion, AnimatePresence } from 'framer-motion';
 import html2canvas from 'html2canvas';
 import { useStore } from '../stores/useStore';
-import { authHeaders } from '../services/auth';
-import { apiRequest } from '../services/api';
+import { authedFetchJson } from '../services/authenticatedFetch';
 
 type AnalystMessage = { role: 'user' | 'model' | 'system'; text: string; type?: 'action' | 'text' };
 
 async function brainAnalyze(payload: { prompt: string; image_data?: string | null }) {
-  const data = await apiRequest<any>('/api/v1/brain/analyze', {
+  const data = await authedFetchJson<any>('/api/v1/brain/analyze', {
     method: 'POST',
-    headers: { ...authHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   return data?.analysis ?? data;

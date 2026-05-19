@@ -25,7 +25,9 @@ from app.admin.admin_schema import (
 from app.admin.admin_service import AdminService
 from app.core.database import get_db
 from app.middleware.auth_middleware import get_current_admin
+from app.models.user_model import user_model
 from app.schemas.api_schema import ApiResponse, ok
+from app.schemas.user_schema import UserResponse
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -39,7 +41,9 @@ async def get_dashboard(
     current_admin: dict = Depends(get_current_admin),
     service: AdminService = Depends(get_admin_service),
 ):
-    return ok(await service.get_dashboard(current_admin))
+    payload = await service.get_dashboard(current_admin)
+    payload.setdefault("user", UserResponse.model_validate(user_model(current_admin)).model_dump(mode="json"))
+    return ok(payload)
 
 
 @router.post("/login", response_model=ApiResponse[AdminTokenResponse])

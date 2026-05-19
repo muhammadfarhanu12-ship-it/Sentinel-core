@@ -5,6 +5,24 @@ type JsonValue = any;
 
 let refreshInFlight: Promise<string | null> | null = null;
 
+type RedirectReason =
+  | 'session-expired'
+  | 'not-authenticated'
+  | 'server-unavailable'
+  | 'backend-connection-lost'
+  | 'authentication-failed';
+
+function redirectToSignIn(reason: RedirectReason = 'session-expired'): void {
+  if (!window.location.pathname.startsWith('/app')) return;
+  const target = `/signin?reason=${encodeURIComponent(reason)}`;
+  window.location.assign(target);
+}
+
+function clearSessionAndRedirect(reason: RedirectReason): void {
+  clearTokens();
+  redirectToSignIn(reason);
+}
+
 export class HttpError extends Error {
   status: number;
   payload: any;
@@ -43,6 +61,7 @@ async function refreshAccessTokenOnce(): Promise<string | null> {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refresh_token: refreshToken }),
+        credentials: 'include',
       });
       if (!res.ok) return null;
       const payload = unwrapEnvelope<any>(await res.json().catch(() => null));
@@ -67,6 +86,23 @@ function buildHeaders(initHeaders: HeadersInit | undefined, accessToken: string 
   return headers;
 }
 
+function createSyntheticErrorResponse(status: number, message: string): Response {
+  return new Response(
+    JSON.stringify({
+      error: {
+        code: 'backend_unreachable',
+        message,
+      },
+      detail: message,
+    }),
+    {
+      status,
+      statusText: message,
+      headers: { 'Content-Type': 'application/json' },
+    },
+  );
+}
+
 export async function authedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   let accessToken = getAccessToken();
   const refreshToken = getRefreshToken();
@@ -76,29 +112,49 @@ export async function authedFetch(input: RequestInfo | URL, init?: RequestInit):
   }
 
   if (!accessToken && !refreshToken) {
-    clearTokens();
-    if (window.location.pathname.startsWith('/app')) window.location.assign('/signin');
+    clearSessionAndRedirect('not-authenticated');
     return new Response(null, { status: 401, statusText: 'Unauthorized' });
   }
 
-  const firstInit: RequestInit = { ...(init || {}), headers: buildHeaders(init?.headers, accessToken) };
+  const firstInit: RequestInit = {
+    ...(init || {}),
+    headers: buildHeaders(init?.headers, accessToken),
+    credentials: init?.credentials ?? 'include',
+  };
 
-  let res = await fetch(resolveRequestTarget(input), firstInit);
+  let res: Response;
+  try {
+    res = await fetch(resolveRequestTarget(input), firstInit);
+  } catch {
+    clearSessionAndRedirect('backend-connection-lost');
+    return createSyntheticErrorResponse(503, 'Backend connection lost.');
+  }
+  if (res.status === 403) {
+    clearSessionAndRedirect('authentication-failed');
+    return res;
+  }
   if (res.status !== 401) return res;
 
   // If the access token expired/was rotated, refresh once and retry.
   const refreshed = await refreshAccessTokenOnce();
   if (!refreshed) {
-    clearTokens();
-    if (window.location.pathname.startsWith('/app')) window.location.assign('/signin');
+    clearSessionAndRedirect('session-expired');
     return res;
   }
 
-  const retryInit: RequestInit = { ...(init || {}), headers: buildHeaders(init?.headers, refreshed) };
-  res = await fetch(resolveRequestTarget(input), retryInit);
-  if (res.status === 401) {
-    clearTokens();
-    if (window.location.pathname.startsWith('/app')) window.location.assign('/signin');
+  const retryInit: RequestInit = {
+    ...(init || {}),
+    headers: buildHeaders(init?.headers, refreshed),
+    credentials: init?.credentials ?? 'include',
+  };
+  try {
+    res = await fetch(resolveRequestTarget(input), retryInit);
+  } catch {
+    clearSessionAndRedirect('backend-connection-lost');
+    return createSyntheticErrorResponse(503, 'Backend connection lost.');
+  }
+  if (res.status === 401 || res.status === 403) {
+    clearSessionAndRedirect('session-expired');
   }
   return res;
 }

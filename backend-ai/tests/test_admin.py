@@ -49,7 +49,7 @@ def seed_security_data(db, user: User) -> APIKey:
     api_key = APIKey(
         user_id=user.id,
         prefix="sentinel_sk_",
-        key_hash=get_password_hash("sentinel_sk_live_ABCDEF1234567890ABCDEF1234567890"),
+        key_hash=get_password_hash("test_api_key_placeholder_for_admin_tests"),
         name="Primary Key",
         status=KeyStatusEnum.ACTIVE,
         usage_count=25,

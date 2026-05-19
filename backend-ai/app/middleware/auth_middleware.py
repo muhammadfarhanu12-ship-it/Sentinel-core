@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 from typing import Any
 
+from bson import ObjectId
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 
 from app.core.config import settings
+from app.db.mongo import get_database_from_request
 from app.schemas.auth_schema import TokenData
-from app.security.roles import ADMIN_ROLE, is_admin_role, normalize_user_role
+from app.security.roles import is_admin_role, normalize_user_role
 from app.services.auth_service import get_user_by_id
+from app.utils.hashing import get_password_hash
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
@@ -61,29 +65,7 @@ def decode_token(token: str, expected_type: str = "access") -> TokenData:
         raise credentials_exception from exc
 
 
-def _build_current_user_context(mongo_user: dict[str, Any] | None = None) -> CurrentUserContext:
-    if mongo_user is None:
-        created_at = _utcnow()
-        return CurrentUserContext(
-            {
-                "_id": settings.DEMO_USER_EMAIL.lower(),
-                "id": settings.DEMO_USER_EMAIL.lower(),
-                "email": settings.DEMO_USER_EMAIL.lower(),
-                "name": None,
-                "tier": "PRO",
-                "role": ADMIN_ROLE,
-                "organization_name": "sentinel.demo",
-                "is_active": True,
-                "is_verified": True,
-                "email_verified_at": created_at,
-                "last_login_at": None,
-                "created_at": created_at,
-                "updated_at": created_at,
-                "monthly_limit": 1000,
-                "is_admin": True,
-            }
-        )
-
+def _build_current_user_context(mongo_user: dict[str, Any]) -> CurrentUserContext:
     identifier = str(mongo_user.get("_id") or mongo_user.get("id") or mongo_user.get("email"))
     created_at = mongo_user.get("created_at") or _utcnow()
     updated_at = mongo_user.get("updated_at") or created_at
@@ -94,7 +76,7 @@ def _build_current_user_context(mongo_user: dict[str, Any] | None = None) -> Cur
             **mongo_user,
             "_id": identifier,
             "id": identifier,
-            "email": str(mongo_user.get("email", settings.DEMO_USER_EMAIL)).lower(),
+            "email": str(mongo_user.get("email") or "").lower(),
             "name": mongo_user.get("name"),
             "tier": str(mongo_user.get("tier", "FREE")).upper(),
             "role": normalized_role,
@@ -122,14 +104,53 @@ async def _resolve_user_from_token(token: str) -> CurrentUserContext:
         )
     if not bool(user.get("is_active", True)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive")
+    if not bool(user.get("is_verified", False)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified")
     return _build_current_user_context(user)
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+async def _resolve_user_from_api_key(request: Request, raw_key: str) -> CurrentUserContext:
+    key_value = str(raw_key or "").strip()
+    if not key_value:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    try:
+        database = get_database_from_request(request)
+        key_hash = hashlib.sha256(key_value.encode("utf-8")).hexdigest()
+        key_document = await database.get_collection("keys").find_one(
+            {"key_hash": key_hash, "status": {"$in": ["ACTIVE", "active"]}}
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate API key") from exc
+
+    if key_document is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate API key")
+
+    user_id = str(key_document.get("user_id") or "")
+    user = None
+    if ObjectId.is_valid(user_id):
+        user = await database.get_collection("users").find_one({"_id": ObjectId(user_id)})
+    if user is None and user_id:
+        user = await database.get_collection("users").find_one({"id": user_id})
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate API key")
+    if not bool(user.get("is_active", True)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive")
+    if not bool(user.get("is_verified", False)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified")
+    request.state.api_key = {
+        "id": key_document.get("id"),
+        "prefix": key_document.get("prefix"),
+        "user_id": user_id,
+    }
+    return _build_current_user_context(user)
+
+
+async def get_current_user(request: Request, token: str = Depends(oauth2_scheme)):
     if token:
         return await _resolve_user_from_token(token)
-    if settings.ENABLE_DEMO_MODE:
-        return _build_current_user_context()
+    api_key = request.headers.get("x-api-key") or request.headers.get("authorization", "").removeprefix("ApiKey ").strip()
+    if api_key:
+        return await _resolve_user_from_api_key(request, api_key)
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Not authenticated",
@@ -137,8 +158,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     )
 
 
-async def get_authenticated_user(token: str = Depends(oauth2_scheme)):
-    return await get_current_user(token)
+async def get_authenticated_user(request: Request, token: str = Depends(oauth2_scheme)):
+    return await get_current_user(request, token)
 
 
 async def get_current_admin(token: str = Depends(oauth2_scheme)):

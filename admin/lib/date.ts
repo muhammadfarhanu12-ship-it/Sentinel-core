@@ -1,11 +1,13 @@
-function toSafeDate(value: any): Date | null {
+type DateInput = string | number | Date | null | undefined;
+
+function toSafeDate(value: DateInput): Date | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return date;
 }
 
-export function safeFormatDate(value: any): string {
+export function safeFormatDate(value: DateInput): string {
   if (!value) return '—';
   const date = toSafeDate(value);
   if (!date) return '—';

@@ -2,21 +2,12 @@ import axios from 'axios';
 
 import { clearAdminToken, getAdminToken } from './auth';
 
-const DEFAULT_BACKEND_ORIGIN = 'https://sentinel-core-xcrz.onrender.com';
+const DEFAULT_BACKEND_ORIGIN = 'http://127.0.0.1:8000';
 const API_PREFIX = '/api/v1';
 const ADMIN_API_PREFIX = `${API_PREFIX}/admin`;
-const ALLOWED_BACKEND_HOSTS = new Set(['sentinel-core-xcrz.onrender.com', 'localhost', '127.0.0.1']);
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
-}
-
-function isAllowedBackendHost(value: string): boolean {
-  try {
-    return ALLOWED_BACKEND_HOSTS.has(new URL(stripTrailingSlash(value)).hostname);
-  } catch {
-    return false;
-  }
 }
 
 function sanitizeConfiguredBackendUrl(value: string): string {
@@ -25,7 +16,15 @@ function sanitizeConfiguredBackendUrl(value: string): string {
     return '';
   }
 
-  return isAllowedBackendHost(normalizedValue) ? normalizedValue : '';
+  try {
+    const parsed = new URL(normalizedValue);
+    if (!/^https?:$/i.test(parsed.protocol)) {
+      return '';
+    }
+    return stripTrailingSlash(parsed.toString());
+  } catch {
+    return '';
+  }
 }
 
 function normalizeApiBaseUrl(value: string): string {
@@ -84,6 +83,7 @@ export const ADMIN_API_BASE_URL = resolveAdminApiBaseUrl();
 const api = axios.create({
   baseURL: ADMIN_API_BASE_URL,
   withCredentials: true,
+  timeout: 15000,
 });
 
 api.interceptors.request.use((config) => {

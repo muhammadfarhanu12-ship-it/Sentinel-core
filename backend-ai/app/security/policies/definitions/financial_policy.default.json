@@ -1,0 +1,111 @@
+{
+  "policy_name": "Financial_Action_Control",
+  "policy_version": "2026.05.07",
+  "enabled": true,
+
+  "severity": "HIGH",
+
+  "action": "INTERCEPT_AND_FORCE_2FA",
+
+  "restricted_intents": [
+    "fund_transfer",
+    "money_movement",
+    "account_modification",
+    "payment_execution",
+    "withdrawal_request",
+    "limit_change",
+    "credential_access"
+  ],
+
+  "restricted_keywords": [
+    "transfer",
+    "wire",
+    "withdraw",
+    "pay",
+    "send money",
+    "send tokens",
+    "transfer tokens",
+    "wallet",
+    "wallet address",
+    "approve transaction",
+    "sign transaction",
+    "drain wallet",
+    "crypto",
+    "token",
+    "DRB",
+    "USDT",
+    "ETH",
+    "BTC",
+    "move funds",
+    "reallocate",
+    "disburse",
+    "settle payment",
+    "execute payment"
+  ],
+
+  "semantic_triggers": [
+    "send money to",
+    "send tokens to",
+    "transfer tokens to",
+    "approve transaction",
+    "sign transaction",
+    "drain wallet",
+    "move balance to",
+    "update account balance",
+    "adjust funds",
+    "process payment immediately",
+    "correct transaction by sending"
+  ],
+
+  "bypass_phrases": [
+    "skip confirmation",
+    "do not ask",
+    "automated",
+    "bypass",
+    "override",
+    "ignore verification",
+    "no approval needed"
+  ],
+
+  "obfuscation_signals": {
+    "allow_unicode_variants": false,
+    "detect_leetspeak": true,
+    "detect_base64_payloads": true,
+    "detect_hex_encoding": true,
+    "detect_url_encoding": true
+  },
+
+  "risk_weights": {
+    "keyword_match": 0.25,
+    "semantic_match": 0.45,
+    "bypass_attempt": 0.35,
+    "tool_invocation": 0.60,
+    "encoded_payload": 0.50
+  },
+
+  "tool_restrictions": {
+    "transfer_funds": "CRITICAL",
+    "transfer_tokens": "CRITICAL",
+    "send_tokens": "CRITICAL",
+    "approve_transaction": "CRITICAL",
+    "sign_transaction": "CRITICAL",
+    "wallet_transfer": "CRITICAL",
+    "wire_transfer": "CRITICAL",
+    "withdraw_funds": "HIGH",
+    "update_account_limits": "HIGH",
+    "send_payment": "HIGH"
+  },
+
+  "enforcement": {
+    "require_2fa_on": ["HIGH", "CRITICAL"],
+    "block_on_confidence": 0.85,
+    "log_all_attempts": true,
+    "audit_trail": true
+  },
+
+  "context_awareness": {
+    "enable_multi_turn_detection": true,
+    "detect_split_instructions": true,
+    "track_intent_evolution": true
+  }
+}

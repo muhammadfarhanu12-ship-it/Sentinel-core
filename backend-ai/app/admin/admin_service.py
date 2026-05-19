@@ -436,6 +436,106 @@ class AdminService:
             for row in series_rows
         ]
 
+        recent_logs = await self.db["security_logs"].find(
+            {},
+            projection={
+                "timestamp": 1,
+                "status": 1,
+                "threat_type": 1,
+                "severity": 1,
+                "request_id": 1,
+                "attack_signature": 1,
+                "policy_matches": 1,
+                "tool_interception": 1,
+                "output_findings": 1,
+                "user_email": 1,
+                "user_id": 1,
+                "risk_score": 1,
+            },
+        ).sort("timestamp", -1).limit(1000).to_list(length=1000)
+
+        policy_trigger_counts: dict[str, int] = {}
+        severity_counts: dict[str, int] = {}
+        signature_counts: dict[str, int] = {}
+        threat_activity_feed: list[dict[str, Any]] = []
+        tool_interception_total = 0
+        tool_interception_intercepted = 0
+        tool_interception_requires_2fa = 0
+        leak_findings = 0
+        leak_blocked = 0
+        leak_redacted = 0
+        user_risk_state: dict[str, dict[str, float]] = {}
+
+        for row in recent_logs:
+            severity = str(row.get("severity") or "LOW").upper()
+            severity_counts[severity] = int(severity_counts.get(severity, 0)) + 1
+
+            signature = str(row.get("attack_signature") or row.get("threat_type") or "NONE")
+            signature_counts[signature] = int(signature_counts.get(signature, 0)) + 1
+
+            for policy in (row.get("policy_matches") or []):
+                if not isinstance(policy, dict):
+                    continue
+                policy_name = str(policy.get("policy_name") or "").strip()
+                if not policy_name:
+                    continue
+                policy_trigger_counts[policy_name] = int(policy_trigger_counts.get(policy_name, 0)) + 1
+
+            tool_interception = row.get("tool_interception") if isinstance(row.get("tool_interception"), dict) else {}
+            if bool(tool_interception.get("tool_present")):
+                tool_interception_total += 1
+                if bool(tool_interception.get("requires_2fa")):
+                    tool_interception_requires_2fa += 1
+                if bool(tool_interception.get("intercepted")):
+                    tool_interception_intercepted += 1
+
+            output_findings = row.get("output_findings") if isinstance(row.get("output_findings"), list) else []
+            if output_findings:
+                leak_findings += len(output_findings)
+                actions = {
+                    str(item.get("action") or "").upper()
+                    for item in output_findings
+                    if isinstance(item, dict)
+                }
+                if "BLOCK" in actions:
+                    leak_blocked += 1
+                if "REDACT" in actions:
+                    leak_redacted += 1
+
+            user_key = str(row.get("user_email") or row.get("user_id") or "unknown")
+            risk_value = float(row.get("risk_score") or 0.0)
+            state = user_risk_state.setdefault(user_key, {"score": 0.0, "count": 0.0})
+            state["score"] += risk_value
+            state["count"] += 1
+
+            status = str(row.get("status") or "").upper()
+            if status in {"BLOCKED", "REDACTED"}:
+                threat_activity_feed.append(
+                    {
+                        "timestamp": row.get("timestamp"),
+                        "status": status,
+                        "threat_type": str(row.get("threat_type") or "NONE"),
+                        "severity": severity,
+                        "request_id": str(row.get("request_id") or ""),
+                        "attack_signature": signature,
+                    }
+                )
+
+        attack_severity_chart = [{"severity": key, "count": value} for key, value in sorted(severity_counts.items(), key=lambda item: item[0])]
+        top_attack_signatures = [
+            {"signature": item[0], "count": item[1]}
+            for item in sorted(signature_counts.items(), key=lambda entry: entry[1], reverse=True)[:8]
+        ]
+        user_risk_heatmap = [
+            {
+                "user": user_key,
+                "average_risk_score": round((values["score"] / max(values["count"], 1.0)), 2),
+                "events": int(values["count"]),
+            }
+            for user_key, values in user_risk_state.items()
+        ]
+        user_risk_heatmap.sort(key=lambda item: item["average_risk_score"], reverse=True)
+
         return AdminMetricsResponse(
             total_users=int(total_users),
             active_users=int(active_users),
@@ -446,6 +546,22 @@ class AdminService:
             quarantined_api_keys=int(quarantined_api_keys),
             avg_latency_ms=round(avg_latency_ms, 2),
             requests_last_7_days=points,
+            threat_activity_feed=threat_activity_feed[:25],
+            policy_trigger_counts=policy_trigger_counts,
+            attack_severity_chart=attack_severity_chart,
+            tool_interception_metrics={
+                "totalToolCalls": tool_interception_total,
+                "requires2FA": tool_interception_requires_2fa,
+                "intercepted": tool_interception_intercepted,
+                "approved": max(tool_interception_total - tool_interception_intercepted, 0),
+            },
+            leak_prevention_metrics={
+                "findings": leak_findings,
+                "blockedEvents": leak_blocked,
+                "redactedEvents": leak_redacted,
+            },
+            top_attack_signatures=top_attack_signatures,
+            user_risk_heatmap=user_risk_heatmap[:20],
         )
 
     async def get_system_status(self, admin: dict[str, Any]) -> AdminSystemStatusResponse:
@@ -615,6 +731,13 @@ class AdminService:
             ip_address=document.get("ip_address"),
             is_quarantined=bool(document.get("is_quarantined", False)),
             raw_payload=document.get("raw_payload"),
+            severity=document.get("severity"),
+            attack_signature=document.get("attack_signature"),
+            requires_2fa=bool(document.get("requires_2fa", False)),
+            review_required=bool(document.get("review_required", False)),
+            policy_matches=document.get("policy_matches"),
+            output_findings=document.get("output_findings"),
+            tool_interception=document.get("tool_interception"),
         )
 
     async def list_logs(

@@ -1,24 +1,13 @@
-import re
-from typing import List
+from __future__ import annotations
 
-# List of common prompt injection patterns
-PROMPT_INJECTION_PATTERNS: List[str] = [
-    r"ignore all previous instructions",
-    r"ignore previous instructions",
-    r"output your system prompt",
-    r"provide hidden keys",
-    r"exfiltrate data",
-    r"bypass security",
-    r"override safety",
-]
+from typing import Dict
+
+from app.security.detectors.prompt_injection_detector import detect_prompt_injection
+
 
 def detect_injection(prompt: str) -> bool:
     """
-    Detect if the prompt contains prompt injection attempts.
-    Returns True if injection is detected.
+    Backward-compatible wrapper used by legacy modules.
     """
-    prompt_lower = prompt.lower()
-    for pattern in PROMPT_INJECTION_PATTERNS:
-        if re.search(pattern, prompt_lower, flags=re.IGNORECASE):
-            return True
-    return False
+    result: Dict[str, object] = detect_prompt_injection(prompt=prompt)
+    return bool(result.get("is_flagged", False))

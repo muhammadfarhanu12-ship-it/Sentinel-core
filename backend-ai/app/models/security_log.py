@@ -1,10 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
+from uuid import uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class LogStatusEnum(str, Enum):
@@ -15,11 +20,11 @@ class LogStatusEnum(str, Enum):
 
 
 class SecurityLog(BaseModel):
-    id: str
-    timestamp: datetime
-    user_id: str | None = None
+    id: str = Field(default_factory=lambda: uuid4().hex)
+    timestamp: datetime = Field(default_factory=_now)
+    user_id: str | int | None = None
     user_email: str | None = None
-    api_key_id: str | None = None
+    api_key_id: str | int | None = None
     status: LogStatusEnum = LogStatusEnum.CLEAN
     threat_type: str | None = None
     threat_types: list[str] | None = None

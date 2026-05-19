@@ -78,6 +78,13 @@ class AdminMetricsResponse(BaseModel):
     quarantined_api_keys: int
     avg_latency_ms: float
     requests_last_7_days: list[AdminMetricsSeriesPoint]
+    threat_activity_feed: list[dict] = Field(default_factory=list)
+    policy_trigger_counts: dict[str, int] = Field(default_factory=dict)
+    attack_severity_chart: list[dict] = Field(default_factory=list)
+    tool_interception_metrics: dict = Field(default_factory=dict)
+    leak_prevention_metrics: dict = Field(default_factory=dict)
+    top_attack_signatures: list[dict] = Field(default_factory=list)
+    user_risk_heatmap: list[dict] = Field(default_factory=list)
 
 
 class AdminSystemStatusResponse(BaseModel):
@@ -125,6 +132,13 @@ class AdminSecurityLogResponse(BaseModel):
     ip_address: str | None = None
     is_quarantined: bool = False
     raw_payload: object | None = None
+    severity: str | None = None
+    attack_signature: str | None = None
+    requires_2fa: bool = False
+    review_required: bool = False
+    policy_matches: list[dict] | None = None
+    output_findings: list[dict] | None = None
+    tool_interception: dict | None = None
 
 
 class AdminApiKeyResponse(BaseModel):
@@ -142,8 +156,15 @@ class AdminApiKeyResponse(BaseModel):
 
 
 class AdminApiKeyCreateRequest(BaseModel):
-    user_id: str = Field(min_length=1)
+    user_id: str | int
     name: str = Field(min_length=1, max_length=120)
+
+    @field_validator("user_id")
+    @classmethod
+    def validate_user_id(cls, value: str | int) -> str | int:
+        if str(value).strip() == "":
+            raise ValueError("user_id is required")
+        return value
 
 
 class AdminSettingsResponse(BaseModel):

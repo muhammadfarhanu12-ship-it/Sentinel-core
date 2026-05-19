@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 
 from app.admin.admin_auth import decode_admin_token
 from app.middleware.auth_middleware import (
@@ -39,7 +39,7 @@ async def _resolve_admin_from_admin_token(token: str):
     return _build_current_user_context(admin_user)
 
 
-async def get_admin_user(token: str = Depends(oauth2_scheme)):
+async def get_admin_user(request: Request, token: str = Depends(oauth2_scheme)):
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -49,7 +49,7 @@ async def get_admin_user(token: str = Depends(oauth2_scheme)):
 
     current_user = None
     try:
-        current_user = await get_current_user(token)
+        current_user = await get_current_user(request, token)
     except HTTPException as exc:
         if exc.status_code != status.HTTP_401_UNAUTHORIZED:
             raise

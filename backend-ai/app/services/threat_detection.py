@@ -25,6 +25,7 @@ THREAT_DATA_EXFILTRATION = "DATA_EXFILTRATION"
 THREAT_POLICY_BYPASS = "POLICY_BYPASS"
 THREAT_ENCODING_OBFUSCATION = "ENCODING_OBFUSCATION"
 THREAT_PRIVILEGE_ESCALATION = "PRIVILEGE_ESCALATION"
+THREAT_HITL_BYPASS_ATTEMPT = "HITL_BYPASS_ATTEMPT"
 
 # Backwards-compatible (existing UI/analytics already reference these).
 THREAT_MALICIOUS_CODE = "MALICIOUS_CODE"
@@ -36,6 +37,7 @@ THREAT_TYPES_CANONICAL = {
     THREAT_POLICY_BYPASS,
     THREAT_ENCODING_OBFUSCATION,
     THREAT_PRIVILEGE_ESCALATION,
+    THREAT_HITL_BYPASS_ATTEMPT,
     THREAT_MALICIOUS_CODE,
     THREAT_DATA_LEAK,
 }
@@ -62,6 +64,26 @@ class ThreatAssessment:
 # Stage 1: Fast Rules (<10ms)
 # --------------------------------
 _STAGE1_PATTERNS: list[tuple[str, str, re.Pattern[str], float]] = [
+    (
+        THREAT_HITL_BYPASS_ATTEMPT,
+        "authority_bypass_financial_chain",
+        re.compile(
+            r"\b(internal system update|automated stress test|stress test|latency test|api latency|simulation environment)\b"
+            r".{0,140}\b(transfer|wire|payment|funds|wallet transfer|routing number|initiate_wire)\b",
+            re.I,
+        ),
+        0.35,
+    ),
+    (
+        THREAT_HITL_BYPASS_ATTEMPT,
+        "confirmation_bypass_financial_chain",
+        re.compile(
+            r"\b(do not ask for user confirmation|do not ask for confirmation|skip confirmation|bypass confirmation|without confirmation|ignore approval workflow|automatic approval)\b"
+            r".{0,140}\b(transfer|wire|payment|funds|wallet transfer|routing number|initiate_wire)\b",
+            re.I,
+        ),
+        0.38,
+    ),
     # Prompt injection / instruction override
     (THREAT_PROMPT_INJECTION, "instruction_override", re.compile(r"\bignore (all )?previous instructions\b", re.I), 0.25),
     (THREAT_PROMPT_INJECTION, "system_prompt_exfil", re.compile(r"\b(reveal|show|output)\b.{0,40}\b(system prompt|hidden prompt)\b", re.I), 0.25),
@@ -121,6 +143,7 @@ def _risk_level(score: float) -> str:
 def _primary_threat_type(threat_types: list[str]) -> str:
     # Stable priority order for backwards compatibility in UI/analytics that expect a single label.
     priority = [
+        THREAT_HITL_BYPASS_ATTEMPT,
         THREAT_PROMPT_INJECTION,
         THREAT_DATA_EXFILTRATION,
         THREAT_POLICY_BYPASS,
@@ -493,6 +516,8 @@ class ThreatDetectionService:
 
         # Enterprise hard-block rules: explicit override/exfil signals should never downgrade to SANITIZE.
         hard_block_rules = {
+            "authority_bypass_financial_chain",
+            "confirmation_bypass_financial_chain",
             "instruction_override",
             "system_prompt_exfil",
             "persona_override",
@@ -543,6 +568,8 @@ class ThreatDetectionService:
         explanation_bits: list[str] = []
         if THREAT_PROMPT_INJECTION in threat_types_sorted:
             explanation_bits.append("instruction override / prompt injection")
+        if THREAT_HITL_BYPASS_ATTEMPT in threat_types_sorted:
+            explanation_bits.append("authority impersonation + HITL bypass attempt")
         if THREAT_DATA_EXFILTRATION in threat_types_sorted or THREAT_DATA_LEAK in threat_types_sorted:
             explanation_bits.append("data or secret exfiltration attempt")
         if THREAT_POLICY_BYPASS in threat_types_sorted:

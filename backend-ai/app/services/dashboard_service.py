@@ -6,7 +6,7 @@ import io
 import logging
 import re
 import secrets
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -14,9 +14,11 @@ from bson import ObjectId
 from fastapi import HTTPException, Request
 
 from app.core.config import settings
+from app.core.tier import TIER_LIMITS, tier_limits_for
 from app.db.mongo import get_database, get_database_from_request, mongo_connection_state
 from app.routers.log_ws import schedule_broadcast
 from app.routers.notification_ws import schedule_notification
+from app.security.redaction_engine import redact_sensitive_data
 from app.utils.api_key_generator import generate_api_key
 
 logger = logging.getLogger(__name__)
@@ -24,12 +26,8 @@ UTC = timezone.utc
 THREAT_STATUS_VALUES = {"BLOCKED", "REDACTED", "CLEAN"}
 AUDIT_SEVERITY_VALUES = {"INFO", "WARNING", "CRITICAL"}
 NOTIFICATION_TYPE_VALUES = {"INFO", "WARNING", "REMEDIATION", "CRITICAL"}
-RISK_LEVEL_VALUES = {"low", "medium", "high"}
-PLAN_LIMITS = {
-    "FREE": 1_000,
-    "PRO": 50_000,
-    "BUSINESS": 250_000,
-}
+RISK_LEVEL_VALUES = {"low", "medium", "high", "critical"}
+PLAN_LIMITS = {tier: limits.monthly_requests for tier, limits in TIER_LIMITS.items()}
 DEFAULT_SETTINGS = {
     "theme": "dark",
     "notifications": True,
@@ -114,6 +112,33 @@ def normalize_log_status(value: Any) -> str:
 def normalize_risk_level(value: Any) -> str:
     normalized = str(value or "").strip().lower()
     return normalized if normalized in RISK_LEVEL_VALUES else "low"
+
+
+def normalize_score_100(*values: Any) -> float:
+    candidates: list[float] = []
+    for value in values:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed <= 1:
+            parsed *= 100
+        candidates.append(parsed)
+    return round(max(0.0, min(100.0, max(candidates or [0.0]))), 2)
+
+
+def normalize_score_01(*values: Any) -> float:
+    return round(normalize_score_100(*values) / 100.0, 4)
+
+
+def risk_level_from_score(score: float) -> str:
+    if score >= 71:
+        return "critical"
+    if score >= 46:
+        return "high"
+    if score >= 21:
+        return "medium"
+    return "low"
 
 
 def parse_optional_int(value: Any) -> int | None:
@@ -275,6 +300,11 @@ def db_from_request(request: Request):
 def collection_from_request(request: Request, name: str):
     database = db_from_request(request)
     if database is None:
+        if settings.is_production:
+            raise HTTPException(
+                status_code=503,
+                detail="Database is unavailable; in-memory compatibility fallback is disabled in production.",
+            )
         return None
     return database.get_collection(name)
 
@@ -509,6 +539,15 @@ async def list_api_keys(request: Request, current_user: dict[str, Any]) -> list[
 async def create_api_key_record(request: Request, current_user: dict[str, Any], *, name: str) -> dict[str, Any]:
     user_id = user_id_for(current_user)
     workspace_id = workspace_id_for(current_user)
+    limits = tier_limits_for(tier_for(current_user))
+    if limits.max_api_keys is not None:
+        existing_keys = await list_api_keys(request, current_user)
+        active_count = sum(1 for key in existing_keys if is_active_key_status(key.get("status")))
+        if active_count >= limits.max_api_keys:
+            raise HTTPException(
+                status_code=403,
+                detail=f"The {limits.name} plan allows up to {limits.max_api_keys} active API key(s).",
+            )
     raw_key = generate_api_key()
     now = utcnow()
     document = {
@@ -953,6 +992,9 @@ async def invite_team_member_record(
     role: str,
     generate_invite_link: bool,
 ) -> dict[str, Any]:
+    if tier_for(current_user) == "FREE":
+        raise HTTPException(status_code=403, detail="Team invitations require a Pro or Business plan.")
+
     workspace_id = workspace_id_for(current_user)
     member = {
         "id": await next_numeric_id(request, namespace="team", collection_name="team", fallback_items=_fallback_store["team"]),
@@ -1113,6 +1155,8 @@ async def list_audit_logs(
     end_date: datetime | None = None,
 ) -> list[dict[str, Any]]:
     workspace_id = workspace_id_for(current_user)
+    retention_start = utcnow() - timedelta(days=tier_limits_for(tier_for(current_user)).audit_retention_days)
+    effective_start = max(ensure_datetime(start_date), retention_start) if start_date else retention_start
     collection = collection_from_request(request, "audit_logs")
 
     if collection is not None:
@@ -1120,13 +1164,10 @@ async def list_audit_logs(
             query: dict[str, Any] = {"workspace_id": workspace_id}
             if severity:
                 query["severity"] = normalize_audit_severity(severity)
-            if start_date or end_date:
-                range_query: dict[str, Any] = {}
-                if start_date:
-                    range_query["$gte"] = ensure_datetime(start_date)
-                if end_date:
-                    range_query["$lte"] = ensure_datetime(end_date)
-                query["timestamp"] = range_query
+            range_query: dict[str, Any] = {"$gte": effective_start}
+            if end_date:
+                range_query["$lte"] = ensure_datetime(end_date)
+            query["timestamp"] = range_query
             documents = await list_collection_documents(
                 request,
                 collection_name="audit_logs",
@@ -1150,8 +1191,7 @@ async def list_audit_logs(
         documents = [item for item in _fallback_store["audit_logs"] if item.get("workspace_id") == workspace_id]
         if severity:
             documents = [item for item in documents if normalize_audit_severity(item.get("severity")) == normalize_audit_severity(severity)]
-        if start_date:
-            documents = [item for item in documents if ensure_datetime(item.get("timestamp")) >= start_date]
+        documents = [item for item in documents if ensure_datetime(item.get("timestamp")) >= effective_start]
         if end_date:
             documents = [item for item in documents if ensure_datetime(item.get("timestamp")) <= end_date]
         documents.sort(key=lambda item: ensure_datetime(item.get("timestamp")), reverse=True)
@@ -1204,6 +1244,8 @@ async def get_subscription(request: Request, current_user: dict[str, Any]) -> di
         "tier": tier,
         "monthly_limit": monthly_limit_for(current_user),
         "status": "active",
+        "billing_provider": "stripe" if settings.STRIPE_SECRET_KEY else "placeholder",
+        "payment_collection": "configured" if settings.STRIPE_SECRET_KEY else "not_configured",
         "updated_at": utcnow(),
     }
 
@@ -1225,10 +1267,29 @@ async def create_checkout_session(request: Request, current_user: dict[str, Any]
     user_id = user_id_for(current_user)
     tier = str(plan_name or tier_for(current_user)).strip().upper() or "FREE"
     resolved_tier = tier if tier in PLAN_LIMITS else tier_for(current_user)
+    if resolved_tier != "FREE" and not settings.STRIPE_SECRET_KEY:
+        await record_audit_event(
+            request,
+            current_user=current_user,
+            action="CHECKOUT_REQUESTED",
+            resource="billing",
+            severity="INFO",
+            new_value={"requested_tier": resolved_tier, "payment_collection": "not_configured"},
+        )
+        return {
+            "tier": tier_for(current_user),
+            "requested_tier": resolved_tier,
+            "monthly_limit": monthly_limit_for(current_user),
+            "status": "payment_not_configured",
+            "payment_collection": "not_configured",
+            "message": "Stripe billing is not configured. No subscription change was applied.",
+        }
     document = {
         "tier": resolved_tier,
         "monthly_limit": PLAN_LIMITS[resolved_tier],
         "status": "active",
+        "billing_provider": "stripe" if settings.STRIPE_SECRET_KEY else "placeholder",
+        "payment_collection": "configured" if settings.STRIPE_SECRET_KEY else "not_configured",
         "updated_at": utcnow(),
     }
 
@@ -1515,6 +1576,17 @@ async def get_analytics_summary(request: Request, current_user: dict[str, Any]) 
     prompt_injections = 0
     data_leaks = 0
     api_requests_today = 0
+    policy_trigger_counts: Counter[str] = Counter()
+    severity_counts: Counter[str] = Counter()
+    attack_signatures: Counter[str] = Counter()
+    threat_activity_feed: list[dict[str, Any]] = []
+    tool_interception_total = 0
+    tool_interception_denied = 0
+    tool_requires_2fa = 0
+    leak_findings_count = 0
+    leak_block_events = 0
+    leak_redaction_events = 0
+    user_risk_totals: dict[str, dict[str, float]] = defaultdict(lambda: {"score": 0.0, "count": 0.0})
 
     for log in logs:
         timestamp = ensure_datetime(log.get("timestamp"))
@@ -1537,9 +1609,77 @@ async def get_analytics_summary(request: Request, current_user: dict[str, Any]) 
             else:
                 trend_buckets[day_key]["blocked"] += 1
 
+        severity_value = str(log.get("severity") or ("HIGH" if status == "BLOCKED" else "LOW")).upper()
+        severity_counts[severity_value] += 1
+
+        for policy in (log.get("policy_matches") or []):
+            if isinstance(policy, dict):
+                policy_name = str(policy.get("policy_name") or "").strip()
+                if policy_name:
+                    policy_trigger_counts[policy_name] += 1
+
+        signature = str(log.get("attack_signature") or threat_type or "NONE")
+        attack_signatures[signature] += 1
+
+        tool_interception = log.get("tool_interception") if isinstance(log.get("tool_interception"), dict) else {}
+        if tool_interception.get("tool_present"):
+            tool_interception_total += 1
+            if tool_interception.get("requires_2fa"):
+                tool_requires_2fa += 1
+            if tool_interception.get("intercepted"):
+                tool_interception_denied += 1
+
+        output_findings = log.get("output_findings") if isinstance(log.get("output_findings"), list) else []
+        if output_findings:
+            leak_findings_count += len(output_findings)
+            finding_actions = {
+                str(item.get("action") or "").upper()
+                for item in output_findings
+                if isinstance(item, dict)
+            }
+            if "BLOCK" in finding_actions:
+                leak_block_events += 1
+            if "REDACT" in finding_actions:
+                leak_redaction_events += 1
+
+        risk_value = normalize_score_100(log.get("risk_score"), log.get("threat_score"))
+        user_key = str(log.get("user_email") or log.get("user_id") or "unknown")
+        user_risk_totals[user_key]["score"] += risk_value
+        user_risk_totals[user_key]["count"] += 1
+
+        if status in {"BLOCKED", "REDACTED"}:
+            threat_activity_feed.append(
+                {
+                    "timestamp": timestamp.isoformat(),
+                    "status": status,
+                    "threat_type": threat_type or "NONE",
+                    "severity": severity_value,
+                    "request_id": str(log.get("request_id") or ""),
+                    "attack_signature": signature,
+                }
+            )
+
     usage = await get_usage_summary(request, current_user)
     total_events = max(len(logs), 1)
     security_score = max(0, min(100, round(100 - ((blocked / total_events) * 65) - ((data_leaks / total_events) * 20))))
+
+    attack_severity_chart = [
+        {"severity": severity, "count": count}
+        for severity, count in sorted(severity_counts.items(), key=lambda item: item[0])
+    ]
+    top_attack_signatures = [
+        {"signature": signature, "count": count}
+        for signature, count in attack_signatures.most_common(6)
+    ]
+    user_risk_heatmap = [
+        {
+            "user": user_key,
+            "average_risk_score": round(values["score"] / max(values["count"], 1), 2),
+            "events": int(values["count"]),
+        }
+        for user_key, values in user_risk_totals.items()
+    ]
+    user_risk_heatmap.sort(key=lambda row: row["average_risk_score"], reverse=True)
 
     return {
         "totalThreatsBlocked": blocked,
@@ -1553,6 +1693,23 @@ async def get_analytics_summary(request: Request, current_user: dict[str, Any]) 
             "used": usage["quota"]["used"],
             "limit": usage["quota"]["limit"],
         },
+        "threatActivityFeed": threat_activity_feed[:25],
+        "policyTriggerCounts": dict(policy_trigger_counts),
+        "attackSeverityChart": attack_severity_chart,
+        "toolInterceptionMetrics": {
+            "totalToolCalls": tool_interception_total,
+            "requires2FA": tool_requires_2fa,
+            "intercepted": tool_interception_denied,
+            "approved": max(tool_interception_total - tool_interception_denied, 0),
+        },
+        "leakPreventionMetrics": {
+            "findings": leak_findings_count,
+            "blockedEvents": leak_block_events,
+            "redactedEvents": leak_redaction_events,
+        },
+        "topAttackSignatures": top_attack_signatures,
+        "userRiskHeatmap": user_risk_heatmap[:20],
+        "securityTimeline": list(trend_buckets.values()),
     }
 
 
@@ -1582,8 +1739,20 @@ async def persist_scan_result(
     if not normalized_threat_types and threat_type != "NONE":
         normalized_threat_types = [threat_type]
     request_ip = client_ip_for(request)
-    threat_score = parse_bounded_float(scan_result.get("threat_score"), default=0.0)
-    risk_score = parse_bounded_float(scan_result.get("risk_score"), default=threat_score)
+    risk_score = normalize_score_100(scan_result.get("risk_score"), scan_result.get("threat_score"))
+    threat_score = normalize_score_01(scan_result.get("threat_score"), risk_score)
+    security_enforcement = scan_result.get("security_enforcement") if isinstance(scan_result.get("security_enforcement"), dict) else {}
+    policy_matches = security_enforcement.get("policy_matches") if isinstance(security_enforcement.get("policy_matches"), list) else []
+    output_findings = security_enforcement.get("output_findings") if isinstance(security_enforcement.get("output_findings"), list) else []
+    tool_interception = security_enforcement.get("tool_interception") if isinstance(security_enforcement.get("tool_interception"), dict) else {}
+    detection_labels = [
+        str(item.get("label"))
+        for item in (security_enforcement.get("detections") or [])
+        if isinstance(item, dict) and str(item.get("label") or "").strip()
+    ]
+    attack_signature = str(detection_labels[0] if detection_labels else threat_type or "none")
+    requires_2fa = bool(scan_result.get("requires_2fa") or tool_interception.get("requires_2fa"))
+    review_required = bool(scan_result.get("review_required") or security_enforcement.get("review_required"))
 
     log_doc = {
         "id": await next_numeric_id(request, namespace="logs", collection_name="logs", fallback_items=_fallback_store["logs"]),
@@ -1597,7 +1766,7 @@ async def persist_scan_result(
         "threat_types": normalized_threat_types,
         "threat_score": threat_score,
         "risk_score": risk_score,
-        "risk_level": normalize_risk_level(scan_result.get("risk_level")),
+        "risk_level": normalize_risk_level(scan_result.get("risk_level")) if scan_result.get("risk_level") else risk_level_from_score(risk_score),
         "tokens_used": max(parse_non_negative_int(runtime.get("input_tokens"), default=len(prompt.split())), 1),
         "latency_ms": parse_non_negative_int(runtime.get("duration_ms")),
         "endpoint": "/api/v1/scan",
@@ -1607,8 +1776,19 @@ async def persist_scan_result(
         "provider": provider,
         "security_tier": str(security_tier or "PRO").strip().upper() or "PRO",
         "request_id": request_id,
-        "raw_payload": {"prompt": prompt[:2_000]},
+        "raw_payload": {"prompt_preview": redact_sensitive_data(prompt[:2_000])},
         "sanitized_content": scan_result.get("sanitized_content"),
+        "security_enforcement": security_enforcement,
+        "policy_matches": policy_matches,
+        "output_findings": output_findings,
+        "tool_interception": tool_interception,
+        "requires_2fa": requires_2fa,
+        "review_required": review_required,
+        "severity": str(security_enforcement.get("severity") or "").upper() or ("HIGH" if status == "BLOCKED" else "LOW"),
+        "attack_signature": attack_signature,
+        "detection_labels": detection_labels,
+        "session_id": security_enforcement.get("session_id"),
+        "conversation_id": security_enforcement.get("conversation_id"),
         "created_at": now,
         "updated_at": now,
     }
@@ -1652,6 +1832,16 @@ async def persist_scan_result(
                     "type": "ALERT_EMAIL" if status == "BLOCKED" else "ALERT_WEBHOOK",
                     "status": "SUCCESS",
                 },
+                *(
+                    [
+                        {
+                            "type": "FORCE_2FA_VERIFICATION",
+                            "status": "SUCCESS" if requires_2fa else "SKIPPED",
+                        }
+                    ]
+                    if requires_2fa
+                    else []
+                ),
             ],
             "email_to": email_for(current_user),
             "webhook_urls": settings.remediation_webhook_urls_list,

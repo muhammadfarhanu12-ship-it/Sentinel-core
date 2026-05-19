@@ -1,10 +1,10 @@
-import { useMemo, useState, type FormEvent } from 'react';
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, LockKeyhole, Mail } from 'lucide-react';
 
 import { useToast } from '../hooks/useToast';
-import { isAdminAuthenticated, setAdminToken } from '../lib/auth';
-import { ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE, loginAdmin } from '../lib/adminService';
+import { clearAdminToken, getAdminToken, setAdminToken } from '../lib/auth';
+import { ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE, loginAdmin, verifyAdminSession } from '../lib/adminService';
 import { getErrorMessage } from '../lib/errors';
 
 function validateEmail(email: string) {
@@ -19,14 +19,44 @@ export default function AdminLogin() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checkingExistingSession, setCheckingExistingSession] = useState(true);
 
   const redirectTarget = useMemo(() => {
     const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
     return from || '/admin/dashboard';
   }, [location.state]);
 
-  if (isAdminAuthenticated()) {
-    return <Navigate to="/admin/dashboard" replace />;
+  useEffect(() => {
+    let cancelled = false;
+    const token = getAdminToken();
+    if (!token) {
+      setCheckingExistingSession(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void (async () => {
+      try {
+        await verifyAdminSession(token);
+        if (!cancelled) {
+          navigate('/admin/dashboard', { replace: true });
+        }
+      } catch {
+        clearAdminToken();
+        if (!cancelled) {
+          setCheckingExistingSession(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
+
+  if (checkingExistingSession) {
+    return null;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

@@ -66,7 +66,7 @@ def _env_float(name: str, default: float, aliases: tuple[str, ...] = ()) -> floa
 
 class Settings:
     def __init__(self) -> None:
-        self.API_KEY_PREFIX: str = _env_str("API_KEY_PREFIX", "sentinel_sk_live_") or "sentinel_sk_live_"
+        self.API_KEY_PREFIX: str = _env_str("API_KEY_PREFIX", "sentinel_sk_gateway_") or "sentinel_sk_gateway_"
         self.API_KEY_MASK: str = _env_str("API_KEY_MASK", "sentinel_sk_****") or "sentinel_sk_****"
 
         self.PROJECT_NAME: str = _env_str("PROJECT_NAME", "Sentinel AI Security Gateway") or "Sentinel AI Security Gateway"
@@ -85,8 +85,9 @@ class Settings:
         self.API_KEY_SECRET: str = _env_str("API_KEY_SECRET", "") or ""
 
         self.LOG_LEVEL: str = _env_str("LOG_LEVEL", "INFO") or "INFO"
-        self.CORS_ORIGINS: str = _env_str("CORS_ORIGINS", "*") or "*"
-        self.ENABLE_DEMO_MODE: bool = _env_bool("ENABLE_DEMO_MODE", True)
+        self.APP_ENV: str = _env_str("APP_ENV", _env_str("ENVIRONMENT", "development")) or "development"
+        self.CORS_ORIGINS: str = _env_str("CORS_ORIGINS", "*", aliases=("ALLOWED_ORIGINS",)) or "*"
+        self.ENABLE_DEMO_MODE: bool = _env_bool("ENABLE_DEMO_MODE", False)
         self.DEMO_USER_EMAIL: str = _env_str("DEMO_USER_EMAIL", "demo@example.com") or "demo@example.com"
         self.TEST_API_KEY: str = _env_str("TEST_API_KEY", "test_key_123") or "test_key_123"
         self.ADMIN_BOOTSTRAP_EMAIL: str | None = _env_str(
@@ -107,8 +108,10 @@ class Settings:
         self.OPENAI_API_KEY: str | None = _env_str("OPENAI_API_KEY")
         self.AI_PROVIDER: str | None = _env_str("AI_PROVIDER", "gemini")
         self.FALLBACK_AI_PROVIDER: str | None = _env_str("FALLBACK_AI_PROVIDER", "openai")
-        self.FRONTEND_URL: str = _env_str("FRONTEND_URL", "http://localhost:5173") or "http://localhost:5173"
-        self.BACKEND_PUBLIC_URL: str = _env_str("BACKEND_PUBLIC_URL", "http://localhost:8000") or "http://localhost:8000"
+        self.AI_PROVIDER_TIMEOUT_SECONDS: float = _env_float("AI_PROVIDER_TIMEOUT_SECONDS", 30.0)
+        self.FRONTEND_URL: str = _env_str("FRONTEND_URL", "https://sentinel-core-arei.vercel.app") or "https://sentinel-core-arei.vercel.app"
+        self.ADMIN_FRONTEND_URL: str | None = _env_str("ADMIN_FRONTEND_URL", "https://sentinel-admin-beta.vercel.app")
+        self.BACKEND_PUBLIC_URL: str = _env_str("BACKEND_PUBLIC_URL", "https://sentinel-core-xcrz.onrender.com") or "https://sentinel-core-xcrz.onrender.com"
         self.AUTH_VERIFY_EMAIL_PATH: str = _env_str("AUTH_VERIFY_EMAIL_PATH", "/verify-email") or "/verify-email"
         self.AUTH_RESET_PASSWORD_PATH: str = _env_str("AUTH_RESET_PASSWORD_PATH", "/reset-password") or "/reset-password"
         self.EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES: int = _env_int("EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES", 30)
@@ -166,6 +169,22 @@ class Settings:
         self.SCAN_SYNC_LOG_BUDGET_SECONDS: float = _env_float("SCAN_SYNC_LOG_BUDGET_SECONDS", 0.25)
         self.SCAN_SUSPICIOUS_PROMPT_LENGTH: int = _env_int("SCAN_SUSPICIOUS_PROMPT_LENGTH", 4000)
 
+        self.SENTINEL_ENABLE_DECODER: bool = _env_bool("SENTINEL_ENABLE_DECODER", True)
+        self.SENTINEL_ENABLE_JAILBREAK_DETECTION: bool = _env_bool("SENTINEL_ENABLE_JAILBREAK_DETECTION", True)
+        self.SENTINEL_ENABLE_OUTPUT_SCANNER: bool = _env_bool("SENTINEL_ENABLE_OUTPUT_SCANNER", True)
+        self.SENTINEL_ENABLE_CONTEXT_MONITOR: bool = _env_bool("SENTINEL_ENABLE_CONTEXT_MONITOR", True)
+        self.SENTINEL_RISK_THRESHOLD: int = _env_int("SENTINEL_RISK_THRESHOLD", 70)
+        self.SENTINEL_MAX_DECODE_DEPTH: int = _env_int("SENTINEL_MAX_DECODE_DEPTH", 3)
+        self.SENTINEL_MAX_DECODE_PAYLOAD_CHARS: int = _env_int("SENTINEL_MAX_DECODE_PAYLOAD_CHARS", 24000)
+        self.SENTINEL_DECODE_TIMEOUT_MS: int = _env_int("SENTINEL_DECODE_TIMEOUT_MS", 400)
+        self.SENTINEL_POLICY_DIR: str | None = _env_str("SENTINEL_POLICY_DIR")
+        self.SENTINEL_UNTRUSTED_OPEN_DELIMITER: str = _env_str("SENTINEL_UNTRUSTED_OPEN_DELIMITER", "<UNTRUSTED_DATA>") or "<UNTRUSTED_DATA>"
+        self.SENTINEL_UNTRUSTED_CLOSE_DELIMITER: str = _env_str("SENTINEL_UNTRUSTED_CLOSE_DELIMITER", "</UNTRUSTED_DATA>") or "</UNTRUSTED_DATA>"
+        self.SENTINEL_REQUIRE_2FA_FOR_SENSITIVE_TOOLS: bool = _env_bool("SENTINEL_REQUIRE_2FA_FOR_SENSITIVE_TOOLS", True)
+        self.SENTINEL_ENABLE_2FA_ENFORCEMENT: bool = _env_bool("SENTINEL_ENABLE_2FA_ENFORCEMENT", True)
+        self.SENTINEL_2FA_STATIC_CODE: str | None = _env_str("SENTINEL_2FA_STATIC_CODE")
+        self.SENTINEL_2FA_ALLOW_DEMO_BYPASS: bool = _env_bool("SENTINEL_2FA_ALLOW_DEMO_BYPASS", False)
+
         self.REMEDIATION_EMAIL_ENABLED: bool = _env_bool("REMEDIATION_EMAIL_ENABLED", True)
         self.REMEDIATION_EMAIL_FROM: str | None = _env_str("REMEDIATION_EMAIL_FROM", aliases=("FROM_EMAIL", "EMAIL_FROM"))
         self.REMEDIATION_EMAIL_FROM_NAME: str = _env_str("REMEDIATION_EMAIL_FROM_NAME", "Sentinel Core Alerts") or "Sentinel Core Alerts"
@@ -216,6 +235,32 @@ class Settings:
             raise ValueError("JWT_SECRET must be set to a non-placeholder value")
         if str(self.API_KEY_SECRET).lower() in {"change-me", "changeme", "your_secret_here"}:
             raise ValueError("API_KEY_SECRET must be set to a non-placeholder value")
+        placeholder_fragments = {
+            "replace-with",
+            "placeholder",
+            "your-",
+            "example-secret",
+            "test-secret",
+        }
+        for secret_name, secret_value in {
+            "JWT_SECRET": str(self.JWT_SECRET or ""),
+            "API_KEY_SECRET": str(self.API_KEY_SECRET or ""),
+        }.items():
+            normalized_secret = secret_value.strip().lower()
+            if any(fragment in normalized_secret for fragment in placeholder_fragments):
+                raise ValueError(f"{secret_name} must not contain placeholder text")
+            if self.is_production and len(secret_value) < 32:
+                raise ValueError(f"{secret_name} must be at least 32 characters in production")
+
+        if self.is_production:
+            if self.CORS_ORIGINS.strip() == "*":
+                raise ValueError("CORS_ORIGINS must be explicit in production")
+            if self.ENABLE_DEMO_MODE:
+                raise ValueError("ENABLE_DEMO_MODE cannot be enabled in production")
+            if self.AUTH_TEST_FLOW_ENABLED:
+                raise ValueError("AUTH_TEST_FLOW_ENABLED cannot be enabled in production")
+            if self.SENTINEL_2FA_ALLOW_DEMO_BYPASS:
+                raise ValueError("SENTINEL_2FA_ALLOW_DEMO_BYPASS cannot be enabled in production")
 
         if bool(self.ADMIN_BOOTSTRAP_EMAIL) != bool(self.ADMIN_BOOTSTRAP_PASSWORD):
             raise ValueError(
@@ -251,26 +296,48 @@ class Settings:
         if self.SMTP_USE_TLS and self.SMTP_USE_SSL:
             raise ValueError("Configure either SMTP_USE_TLS or SMTP_USE_SSL, not both")
 
+        if int(self.SENTINEL_RISK_THRESHOLD) < 1 or int(self.SENTINEL_RISK_THRESHOLD) > 100:
+            raise ValueError("SENTINEL_RISK_THRESHOLD must be between 1 and 100")
+        if int(self.SENTINEL_MAX_DECODE_DEPTH) < 1 or int(self.SENTINEL_MAX_DECODE_DEPTH) > 8:
+            raise ValueError("SENTINEL_MAX_DECODE_DEPTH must be between 1 and 8")
+
     @property
     def cors_origins_list(self) -> list[str]:
         raw = (self.CORS_ORIGINS or "").strip()
-        if not raw or raw == "*":
-            return [
-                "http://localhost:5173",
-                "http://127.0.0.1:5173",
-                "http://localhost:5174",
-                "http://127.0.0.1:5174",
-            ]
-        origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
-        for origin in (
+        baseline_origins = [
+            "https://sentinel-core-arei.vercel.app",
+            "https://sentinel-admin-beta.vercel.app",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
             "http://localhost:5173",
             "http://127.0.0.1:5173",
             "http://localhost:5174",
             "http://127.0.0.1:5174",
-        ):
-            if origin not in origins:
-                origins.append(origin)
-        return origins
+        ]
+        if raw and raw != "*":
+            origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
+            default_candidates = (self.FRONTEND_URL, self.ADMIN_FRONTEND_URL) if self.is_production else (
+                self.FRONTEND_URL,
+                self.ADMIN_FRONTEND_URL,
+                *baseline_origins,
+            )
+            for origin in default_candidates:
+                normalized = str(origin or "").strip()
+                if normalized and normalized not in origins:
+                    origins.append(normalized)
+            return origins
+
+        defaults: list[str] = []
+        default_candidates = (self.FRONTEND_URL, self.ADMIN_FRONTEND_URL) if self.is_production else (
+            self.FRONTEND_URL,
+            self.ADMIN_FRONTEND_URL,
+            *baseline_origins,
+        )
+        for origin in default_candidates:
+            normalized = str(origin or "").strip()
+            if normalized and normalized not in defaults:
+                defaults.append(normalized)
+        return defaults
 
     @property
     def allowed_upload_types_list(self) -> list[str]:
@@ -306,6 +373,10 @@ class Settings:
         if raw_timeout > 120:
             return max(raw_timeout / 1000.0, 5.0)
         return max(float(raw_timeout), 5.0)
+
+    @property
+    def is_production(self) -> bool:
+        return str(self.APP_ENV or "").strip().lower() in {"prod", "production"}
 
 
 settings = Settings()

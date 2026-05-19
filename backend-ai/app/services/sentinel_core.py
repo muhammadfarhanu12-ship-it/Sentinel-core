@@ -13,15 +13,16 @@ from app.services.threat_detection import (
     ThreatAssessment,
 )
 
-SENTINEL_PROVIDER = "gemini"
-SENTINEL_MODEL = "gemini-3.1-pro"
-SENTINEL_SECURITY_TIER = "PRO"
 SENTINEL_BLOCK_THRESHOLD = 0.5
+THREAT_HITL_BYPASS_ATTEMPT = "HITL_BYPASS_ATTEMPT"
+THREAT_AUTHORITY_IMPERSONATION = "AUTHORITY_IMPERSONATION"
 
 
 def sentinel_category_for_threats(threat_types: Iterable[str]) -> str:
     normalized = {str(threat_type).upper() for threat_type in threat_types if str(threat_type)}
 
+    if THREAT_HITL_BYPASS_ATTEMPT in normalized or THREAT_AUTHORITY_IMPERSONATION in normalized:
+        return THREAT_HITL_BYPASS_ATTEMPT
     if THREAT_ENCODING_OBFUSCATION in normalized:
         return "Obfuscation"
     if normalized.intersection({THREAT_PROMPT_INJECTION, THREAT_POLICY_BYPASS}):
@@ -39,6 +40,7 @@ def sentinel_blocks(verdict: dict[str, Any]) -> bool:
 
 def _coerce_assessment_fields(assessment: ThreatAssessment | dict[str, Any]) -> dict[str, Any]:
     if isinstance(assessment, ThreatAssessment):
+        debug = assessment.debug or {}
         return {
             "threat_types": assessment.threat_types,
             "threat_score": assessment.threat_score,
@@ -46,9 +48,13 @@ def _coerce_assessment_fields(assessment: ThreatAssessment | dict[str, Any]) -> 
             "explanation": assessment.explanation,
             "attack_vector": assessment.attack_vector,
             "sanitized_content": assessment.sanitized_content,
-            "debug": assessment.debug,
+            "debug": debug,
+            "provider": str(debug.get("provider") or "").strip(),
+            "model": str(debug.get("model") or "").strip(),
+            "security_tier": str(debug.get("tier") or "").strip().upper(),
         }
 
+    debug = assessment.get("debug") or {}
     return {
         "threat_types": assessment.get("threat_types") or [],
         "threat_score": float(assessment.get("threat_score") or 0.0),
@@ -56,7 +62,10 @@ def _coerce_assessment_fields(assessment: ThreatAssessment | dict[str, Any]) -> 
         "explanation": str(assessment.get("explanation") or "").strip(),
         "attack_vector": str(assessment.get("attack_vector") or "").strip(),
         "sanitized_content": assessment.get("sanitized_content"),
-        "debug": assessment.get("debug") or {},
+        "debug": debug,
+        "provider": str(assessment.get("provider") or debug.get("provider") or "").strip(),
+        "model": str(assessment.get("model") or debug.get("model") or "").strip(),
+        "security_tier": str(assessment.get("security_tier") or debug.get("tier") or "").strip().upper(),
     }
 
 
@@ -69,6 +78,9 @@ def _stage_rule_names(fields: dict[str, Any]) -> set[str]:
 def _specific_attack_vector(fields: dict[str, Any], category: str) -> str:
     threat_types = {str(threat_type).upper() for threat_type in fields.get("threat_types") or [] if str(threat_type)}
     rule_names = _stage_rule_names(fields)
+
+    if category == THREAT_HITL_BYPASS_ATTEMPT:
+        return "Authority Impersonation via confirmation bypass"
 
     if category == "Obfuscation":
         if threat_types.intersection({THREAT_DATA_EXFILTRATION, THREAT_DATA_LEAK}):
@@ -98,6 +110,8 @@ def _specific_attack_vector(fields: dict[str, Any], category: str) -> str:
 
 def _normalized_threat_score(fields: dict[str, Any], category: str) -> float:
     score = max(0.0, min(1.0, float(fields.get("threat_score") or 0.0)))
+    if category == THREAT_HITL_BYPASS_ATTEMPT:
+        return max(score, 0.95)
     if category == "Obfuscation":
         return max(score, 0.72)
     if category == "Injection":
@@ -115,10 +129,16 @@ def build_sentinel_verdict(
     assessment: ThreatAssessment | dict[str, Any],
     *,
     execution_output: str | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+    security_tier: str | None = None,
 ) -> dict[str, Any]:
     fields = _coerce_assessment_fields(assessment)
     category = sentinel_category_for_threats(fields["threat_types"])
     threat_score = _normalized_threat_score(fields, category)
+    provider_value = str(provider or fields.get("provider") or "unknown").strip() or "unknown"
+    model_value = str(model or fields.get("model") or "unknown").strip() or "unknown"
+    security_tier_value = str(security_tier or fields.get("security_tier") or "PRO").strip().upper() or "PRO"
 
     if category == "Clean" and threat_score >= SENTINEL_BLOCK_THRESHOLD:
         category = "Malicious"
@@ -135,12 +155,11 @@ def build_sentinel_verdict(
         execution_value = execution_output or "PASSTHROUGH_APPROVED"
 
     return {
-        "provider": SENTINEL_PROVIDER,
-        "model": SENTINEL_MODEL,
-        "security_tier": SENTINEL_SECURITY_TIER,
+        "provider": provider_value,
+        "model": model_value,
+        "security_tier": security_tier_value,
         "threat_score": max(0.0, min(1.0, threat_score)),
         "category": category,
         "detail": detail,
         "execution_output": execution_value,
     }
-

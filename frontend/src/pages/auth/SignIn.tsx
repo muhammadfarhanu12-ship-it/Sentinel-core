@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Shield, Mail, Lock, ArrowRight } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { setDisplayName, setTokens } from '../../services/auth';
 import {
+  AuthApiError,
+  AUTH_FAILED_MESSAGE,
+  AUTH_INVALID_CREDENTIALS_MESSAGE,
   AUTH_SERVICE_UNAVAILABLE_MESSAGE,
   isEmailVerificationRequired,
   resendVerificationEmail,
@@ -19,7 +22,39 @@ export default function SignIn() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const canResendVerification = isEmailVerificationRequired(error);
+
+  const resolveSignInError = (err: unknown): string => {
+    if (err instanceof AuthApiError) {
+      if (err.code === 'invalid-credentials') {
+        return AUTH_INVALID_CREDENTIALS_MESSAGE;
+      }
+      if (err.code === 'server-unavailable') {
+        return AUTH_SERVICE_UNAVAILABLE_MESSAGE;
+      }
+      return String(err.message || AUTH_FAILED_MESSAGE);
+    }
+    if (err instanceof Error && err.message.trim()) {
+      return err.message;
+    }
+    return AUTH_SERVICE_UNAVAILABLE_MESSAGE;
+  };
+
+  useEffect(() => {
+    const reason = searchParams.get('reason');
+    if (reason === 'session-expired') {
+      setInfo('Your session expired. Please sign in again.');
+    } else if (reason === 'not-authenticated') {
+      setInfo('Sign in to continue.');
+    } else if (reason === 'backend-connection-lost') {
+      setInfo('Backend connection lost. Sign in again after the server is available.');
+    } else if (reason === 'server-unavailable') {
+      setInfo('Server unavailable. Please try again in a moment.');
+    } else if (reason === 'authentication-failed') {
+      setInfo('Authentication failed. Please sign in again.');
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,8 +81,8 @@ export default function SignIn() {
         const container = document.querySelector('#app-scroll-container') as HTMLElement | null;
         if (container) container.scrollTop = 0;
       });
-    } catch (err: any) {
-      setError(String(err?.message || AUTH_SERVICE_UNAVAILABLE_MESSAGE));
+    } catch (err: unknown) {
+      setError(resolveSignInError(err));
     } finally {
       setIsSubmitting(false);
     }

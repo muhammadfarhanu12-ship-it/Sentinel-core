@@ -2,6 +2,7 @@ import os
 import base64
 import logging
 
+from app.core.config import settings
 from app.services.sentinel_core import build_sentinel_verdict
 from app.services.threat_detection import ThreatDetectionService, least_privilege_guard, primary_threat_type
 
@@ -57,7 +58,12 @@ def get_security_analysis(prompt: str, image_data: str | None = None):
             "threat_types": assessment.threat_types,
             "threat_score": assessment.threat_score,
             "risk_level": assessment.risk_level,
-            "sentinel_verdict": build_sentinel_verdict(assessment),
+            "sentinel_verdict": build_sentinel_verdict(
+                assessment,
+                provider="local-guard",
+                model="threat-detection-rules",
+                security_tier="FREE",
+            ),
         }
 
     assessment = ThreatDetectionService().analyze(prompt, security_tier="FREE")
@@ -88,7 +94,12 @@ def get_security_analysis(prompt: str, image_data: str | None = None):
             "confidence": confidence,
             "provider": "local-fallback",
             "image_attached": bool(image_data),
-            "sentinel_verdict": build_sentinel_verdict(assessment),
+            "sentinel_verdict": build_sentinel_verdict(
+                assessment,
+                provider="local-fallback",
+                model="threat-detection-rules",
+                security_tier="FREE",
+            ),
         }
 
     try:
@@ -108,7 +119,12 @@ def get_security_analysis(prompt: str, image_data: str | None = None):
             "confidence": confidence,
             "provider": "gemini",
             "image_attached": bool(image_data),
-            "sentinel_verdict": build_sentinel_verdict(assessment),
+            "sentinel_verdict": build_sentinel_verdict(
+                assessment,
+                provider="gemini",
+                model="gemini-2.5-flash",
+                security_tier="FREE",
+            ),
         }
     except Exception as exc:  # pragma: no cover - provider/network failure fallback
         logger.warning("Gemini analysis failed, using local fallback: %s", exc)
@@ -119,7 +135,12 @@ def get_security_analysis(prompt: str, image_data: str | None = None):
             "confidence": confidence,
             "provider": "local-fallback",
             "image_attached": bool(image_data),
-            "sentinel_verdict": build_sentinel_verdict(assessment),
+            "sentinel_verdict": build_sentinel_verdict(
+                assessment,
+                provider="local-fallback",
+                model="threat-detection-rules",
+                security_tier="FREE",
+            ),
         }
 
 

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, Shield } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { setTokens } from '../../services/auth';
+import { AuthApiError, AUTH_SERVICE_UNAVAILABLE_MESSAGE, verifyBackendSession } from '../../services/authApi';
 import { parseOAuthCallbackHash } from '../../services/oauth';
 
 type CallbackState = 'loading' | 'success' | 'error';
@@ -13,29 +14,51 @@ export default function OAuthCallback() {
   const [message, setMessage] = useState('Completing sign-in...');
 
   useEffect(() => {
-    const result = parseOAuthCallbackHash(window.location.hash);
+    let timeout: number | null = null;
+    let cancelled = false;
 
-    if (result.error) {
-      setStatus('error');
-      setMessage(result.message || 'OAuth sign-in failed.');
-      return;
-    }
+    void (async () => {
+      const result = parseOAuthCallbackHash(window.location.hash);
 
-    if (!result.accessToken) {
-      setStatus('error');
-      setMessage('OAuth sign-in did not return an access token.');
-      return;
-    }
+      if (result.error) {
+        setStatus('error');
+        setMessage(result.message || 'OAuth sign-in failed.');
+        return;
+      }
 
-    setTokens(result.accessToken, result.refreshToken || undefined);
-    setStatus('success');
-    setMessage('Sign-in completed successfully. Redirecting...');
+      if (!result.accessToken) {
+        setStatus('error');
+        setMessage('OAuth sign-in did not return an access token.');
+        return;
+      }
 
-    const timeout = window.setTimeout(() => {
-      navigate('/app', { replace: true });
-    }, 600);
+      try {
+        await verifyBackendSession(result.accessToken);
+      } catch (error) {
+        if (cancelled) return;
+        setStatus('error');
+        if (error instanceof AuthApiError && error.code === 'server-unavailable') {
+          setMessage(AUTH_SERVICE_UNAVAILABLE_MESSAGE);
+          return;
+        }
+        setMessage('Authentication failed. Please sign in again.');
+        return;
+      }
 
-    return () => window.clearTimeout(timeout);
+      if (cancelled) return;
+      setTokens(result.accessToken, result.refreshToken || undefined);
+      setStatus('success');
+      setMessage('Sign-in completed successfully. Redirecting...');
+
+      timeout = window.setTimeout(() => {
+        navigate('/app', { replace: true });
+      }, 600);
+    })();
+
+    return () => {
+      cancelled = true;
+      if (timeout !== null) window.clearTimeout(timeout);
+    };
   }, [navigate]);
 
   return (

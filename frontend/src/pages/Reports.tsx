@@ -16,6 +16,7 @@ import {
   type ThreatCountsPoint,
 } from '../lib/reports';
 import { safeFormatDate } from '../lib/date';
+import { formatRiskScore, normalizeRiskScore } from '../lib/riskScore';
 import { ReportStatCard } from '../components/reports/ReportStatCard';
 import { authedFetch, authedFetchJson } from '../services/authenticatedFetch';
 
@@ -260,7 +261,7 @@ export default function Reports() {
                         <Badge variant={hasFailure ? 'blocked' : 'clean'}>{hasFailure ? 'ATTENTION' : 'OK'}</Badge>
                         {r.threat_type ? <Badge variant="warning">{r.threat_type}</Badge> : <Badge variant="outline">UNKNOWN</Badge>}
                         {typeof r.threat_score === 'number' && (
-                          <span className="text-xs text-slate-400">score {r.threat_score.toFixed(2)}</span>
+                          <span className="text-xs text-slate-400">score {formatRiskScore(normalizeRiskScore(r as unknown as Record<string, unknown>))}</span>
                         )}
                       </div>
                       <div className="text-sm text-slate-300 mt-1 truncate">

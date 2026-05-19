@@ -4,7 +4,7 @@ import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { LoadingSkeleton } from '../enterprise/LoadingSkeleton';
 import { useStore } from '../../stores/useStore';
-import { hasStoredSession } from '../../services/auth';
+import { hasStoredSession, onAuthStorageChange } from '../../services/auth';
 
 export function AppLayout() {
   const initSocket = useStore((state) => state.initSocket);
@@ -43,6 +43,15 @@ export function AppLayout() {
       disconnectRealtime();
     };
   }, [disconnectRealtime, initSocket, loadMe]);
+
+  useEffect(() => {
+    return onAuthStorageChange(() => {
+      if (!hasStoredSession()) {
+        disconnectRealtime();
+        setAuthState('redirect');
+      }
+    });
+  }, [disconnectRealtime]);
 
   if (!hasStoredSession() || authState === 'redirect') {
     return <Navigate to="/signin" replace state={{ from: location }} />;
