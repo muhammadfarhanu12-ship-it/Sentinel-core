@@ -64,9 +64,14 @@ def _normalize(text: str) -> str:
 
 def _word_boundary_match(text: str, keyword: str) -> bool:
     normalized_keyword = _normalize(str(keyword or "").replace("_", " ").replace("-", " "))
+
     if not normalized_keyword:
         return False
-    pattern = rf"\b{re.escape(normalized_keyword).replace('\\ ', r'\s+')}\b"
+
+    escaped_keyword = re.escape(normalized_keyword)
+    escaped_keyword = escaped_keyword.replace(r"\ ", r"\s+")
+    pattern = rf"\b{escaped_keyword}\b"
+
     return bool(re.search(pattern, text))
 
 
