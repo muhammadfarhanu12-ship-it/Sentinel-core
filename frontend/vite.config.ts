@@ -6,7 +6,9 @@ import { defineConfig, loadEnv } from 'vite';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   const frontendNodeModules = path.resolve(__dirname, 'node_modules');
-  const apiProxyTarget = (env.VITE_API_URL || env.BACKEND_AI_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
+  const rawApiProxyTarget =
+    env.VITE_API_BASE_URL || env.VITE_API_URL || env.VITE_BACKEND_URL || env.BACKEND_AI_URL || 'http://localhost:8000';
+  const apiProxyTarget = rawApiProxyTarget.replace(/\/api(?:\/v\d+)?\/?$/i, '').replace(/\/+$/, '');
   const devServerPort = Number(env.PORT || env.VITE_DEV_PORT || 5173);
 
   return {

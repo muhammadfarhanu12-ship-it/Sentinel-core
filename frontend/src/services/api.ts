@@ -1,7 +1,10 @@
-export const ADMIN_APP_ORIGIN = import.meta.env.VITE_ADMIN_APP_ORIGIN || 'https://sentinel-admin-beta.vercel.app';
+export const ADMIN_APP_ORIGIN = import.meta.env.VITE_ADMIN_APP_ORIGIN || '';
 const API_PREFIX = '/api/v1';
-const configuredApiUrl = sanitizeConfiguredBackendUrl(import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '');
-const DEFAULT_BACKEND_ORIGIN = 'http://127.0.0.1:8000';
+const configuredApiUrl = sanitizeConfiguredBackendUrl(
+  import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '',
+);
+const DEFAULT_BACKEND_ORIGIN = 'http://localhost:8000';
+const isDevelopment = Boolean(import.meta.env.DEV);
 export const API_BASE_URL = normalizeApiBaseUrl(configuredApiUrl || defaultApiBaseUrl());
 
 export class ApiRequestError extends Error {
@@ -23,10 +26,7 @@ function stripTrailingSlash(value: string): string {
 }
 
 function defaultApiBaseUrl(): string {
-  if (typeof window !== 'undefined' && /^https?:$/i.test(window.location.protocol)) {
-    return `${window.location.origin}${API_PREFIX}`;
-  }
-  return `${DEFAULT_BACKEND_ORIGIN}${API_PREFIX}`;
+  return isDevelopment ? `${DEFAULT_BACKEND_ORIGIN}${API_PREFIX}` : '';
 }
 
 function sanitizeConfiguredBackendUrl(value: string): string {
@@ -38,6 +38,23 @@ function sanitizeConfiguredBackendUrl(value: string): string {
   try {
     const parsed = new URL(normalizedValue);
     if (!/^https?:$/i.test(parsed.protocol)) {
+      return '';
+    }
+    return stripTrailingSlash(parsed.toString());
+  } catch {
+    return '';
+  }
+}
+
+function sanitizeConfiguredWebSocketUrl(value: string): string {
+  const normalizedValue = stripTrailingSlash(value);
+  if (!normalizedValue) {
+    return '';
+  }
+
+  try {
+    const parsed = new URL(normalizedValue);
+    if (!/^(https?|wss?):$/i.test(parsed.protocol)) {
       return '';
     }
     return stripTrailingSlash(parsed.toString());
@@ -69,16 +86,31 @@ function isAbsoluteBackendPath(path: string): boolean {
 
 function createNetworkError(url: string, error: unknown): Error {
   if (error instanceof DOMException && error.name === 'AbortError') {
-    return new Error(`The request to ${url} timed out before the server responded.`);
+    return new Error(
+      isDevelopment
+        ? `The request to ${url} timed out before the server responded.`
+        : 'Server unavailable. Please check your backend connection and try again.',
+    );
   }
 
   if (error instanceof Error && error.message && error.message !== 'Failed to fetch') {
-    return new Error(`Request to ${url} failed: ${error.message}`);
+    return new Error(
+      isDevelopment
+        ? `Request to ${url} failed: ${error.message}`
+        : 'Server unavailable. Please check your backend connection and try again.',
+    );
   }
 
   return new Error(
-    `Unable to reach ${url}. Check that the backend server is online and allows requests from this frontend.`,
+    isDevelopment
+      ? `Unable to reach ${url}. Check that the backend server is online and allows requests from this frontend.`
+      : 'Server unavailable. Please check your backend connection and try again.',
   );
+}
+
+function logApiFailure(kind: 'network' | 'api', details: Record<string, unknown>): void {
+  if (!isDevelopment) return;
+  console.warn('[Sentinel API]', kind, details);
 }
 
 async function parseResponsePayload(response: Response): Promise<any> {
@@ -131,6 +163,9 @@ function shouldRetryRequest(method: string | undefined, status?: number, error?:
 }
 
 export function resolveBackendOrigin(): string {
+  if (!API_BASE_URL) {
+    throw new Error('VITE_API_BASE_URL must be set to the backend origin in production.');
+  }
   return stripApiSuffix(API_BASE_URL);
 }
 
@@ -158,6 +193,11 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}): Pro
     return await fetch(url, requestInit);
   } catch (error) {
     if (!shouldRetryRequest(requestInit.method, undefined, error)) {
+      logApiFailure('network', {
+        url,
+        method: requestInit.method || 'GET',
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw createNetworkError(url, error);
     }
 
@@ -165,6 +205,11 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}): Pro
     try {
       return await fetch(url, requestInit);
     } catch (retryError) {
+      logApiFailure('network', {
+        url,
+        method: requestInit.method || 'GET',
+        error: retryError instanceof Error ? retryError.message : String(retryError),
+      });
       throw createNetworkError(url, retryError);
     }
   }
@@ -175,6 +220,12 @@ export async function apiRequest<T = unknown>(endpoint: string, options: Request
   const payload = await parseResponsePayload(response);
 
   if (!response.ok) {
+    logApiFailure('api', {
+      url: response.url,
+      status: response.status,
+      method: options.method || 'GET',
+      code: typeof payload?.error?.code === 'string' ? payload.error.code : undefined,
+    });
     throw new ApiRequestError(
       parseApiErrorMessage(payload, 'API request failed'),
       response.status,
@@ -194,7 +245,7 @@ function toWebSocketOrigin(origin: string): string {
 
 export function resolveBackendWebSocketOrigin(): string {
   const configuredWsOrigin = stripApiSuffix(
-    sanitizeConfiguredBackendUrl(import.meta.env.VITE_API_WS_URL || import.meta.env.VITE_WS_URL || ''),
+    sanitizeConfiguredWebSocketUrl(import.meta.env.VITE_API_WS_URL || import.meta.env.VITE_WS_URL || ''),
   );
   const normalizedConfiguredWsOrigin = configuredWsOrigin ? toWebSocketOrigin(configuredWsOrigin) : '';
   if (normalizedConfiguredWsOrigin) return normalizedConfiguredWsOrigin;

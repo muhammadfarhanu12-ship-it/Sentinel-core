@@ -58,13 +58,21 @@ function isAuthServiceUnavailable(error: unknown): boolean {
   }
 
   const normalizedMessage = error.message.toLowerCase();
+  let backendOrigin = '';
+  try {
+    backendOrigin = resolveBackendOrigin().toLowerCase();
+  } catch {
+    backendOrigin = '';
+  }
   return (
+    normalizedMessage.includes('server unavailable') ||
+    normalizedMessage.includes('vite_api_base_url') ||
     normalizedMessage.includes('unable to reach') ||
     normalizedMessage.includes('failed to fetch') ||
     normalizedMessage.includes('cors') ||
     normalizedMessage.includes('networkerror') ||
     normalizedMessage.includes('timed out') ||
-    normalizedMessage.includes(resolveBackendOrigin().toLowerCase())
+    Boolean(backendOrigin && normalizedMessage.includes(backendOrigin))
   );
 }
 

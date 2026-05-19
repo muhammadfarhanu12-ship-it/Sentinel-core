@@ -2,9 +2,10 @@ import axios from 'axios';
 
 import { clearAdminToken, getAdminToken } from './auth';
 
-const DEFAULT_BACKEND_ORIGIN = 'http://127.0.0.1:8000';
+const DEFAULT_BACKEND_ORIGIN = 'http://localhost:8000';
 const API_PREFIX = '/api/v1';
 const ADMIN_API_PREFIX = `${API_PREFIX}/admin`;
+const isDevelopment = Boolean(import.meta.env.DEV);
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
@@ -30,7 +31,7 @@ function sanitizeConfiguredBackendUrl(value: string): string {
 function normalizeApiBaseUrl(value: string): string {
   const normalizedValue = stripTrailingSlash(value);
   if (!normalizedValue) {
-    return `${DEFAULT_BACKEND_ORIGIN}${API_PREFIX}`;
+    return isDevelopment ? `${DEFAULT_BACKEND_ORIGIN}${API_PREFIX}` : '';
   }
 
   if (/\/api(?:\/v\d+)?\/admin$/i.test(normalizedValue)) {
@@ -47,7 +48,7 @@ function normalizeApiBaseUrl(value: string): string {
 function normalizeAdminApiBaseUrl(value: string): string {
   const normalizedValue = stripTrailingSlash(value);
   if (!normalizedValue) {
-    return `${DEFAULT_BACKEND_ORIGIN}${ADMIN_API_PREFIX}`;
+    return isDevelopment ? `${DEFAULT_BACKEND_ORIGIN}${ADMIN_API_PREFIX}` : '';
   }
 
   if (/\/api(?:\/v\d+)?\/admin$/i.test(normalizedValue)) {
@@ -63,9 +64,9 @@ function normalizeAdminApiBaseUrl(value: string): string {
 
 function resolveApiUrl(): string {
   const configuredApiUrl = sanitizeConfiguredBackendUrl(
-    import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '',
+    import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '',
   );
-  return normalizeApiBaseUrl(configuredApiUrl || DEFAULT_BACKEND_ORIGIN);
+  return normalizeApiBaseUrl(configuredApiUrl || (isDevelopment ? DEFAULT_BACKEND_ORIGIN : ''));
 }
 
 function resolveAdminApiBaseUrl(): string {
