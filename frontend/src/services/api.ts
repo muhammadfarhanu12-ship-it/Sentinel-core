@@ -6,6 +6,7 @@ const configuredApiUrl = sanitizeConfiguredBackendUrl(
 const DEFAULT_BACKEND_ORIGIN = 'http://localhost:8000';
 const isDevelopment = Boolean(import.meta.env.DEV);
 export const API_BASE_URL = normalizeApiBaseUrl(configuredApiUrl || defaultApiBaseUrl());
+const SENSITIVE_RESPONSE_FIELDS = new Set(['password', 'new_password', 'token', 'refresh_token', 'access_token']);
 
 export class ApiRequestError extends Error {
   status: number;
@@ -113,6 +114,26 @@ function logApiFailure(kind: 'network' | 'api', details: Record<string, unknown>
   console.warn('[Sentinel API]', kind, details);
 }
 
+function redactSensitivePayload(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSensitivePayload(item));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => {
+        const normalizedKey = key.toLowerCase();
+        if (SENSITIVE_RESPONSE_FIELDS.has(normalizedKey) || normalizedKey.endsWith('_token')) {
+          return [key, '[redacted]'];
+        }
+        return [key, redactSensitivePayload(item)];
+      }),
+    );
+  }
+
+  return value;
+}
+
 async function parseResponsePayload(response: Response): Promise<any> {
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
@@ -175,6 +196,8 @@ export function buildBackendUrl(path: string): string {
   return `${baseUrl}${normalizedPath}`;
 }
 
+export const buildApiUrl = buildBackendUrl;
+
 export async function apiFetch(endpoint: string, options: RequestInit = {}): Promise<Response> {
   const url = /^https?:\/\//i.test(endpoint) ? endpoint : buildBackendUrl(endpoint);
   const requestInit: RequestInit = {
@@ -225,6 +248,7 @@ export async function apiRequest<T = unknown>(endpoint: string, options: Request
       status: response.status,
       method: options.method || 'GET',
       code: typeof payload?.error?.code === 'string' ? payload.error.code : undefined,
+      responseBody: redactSensitivePayload(payload),
     });
     throw new ApiRequestError(
       parseApiErrorMessage(payload, 'API request failed'),

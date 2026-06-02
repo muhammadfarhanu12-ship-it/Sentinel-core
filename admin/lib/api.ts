@@ -81,6 +81,16 @@ function resolveAdminApiBaseUrl(): string {
 export const API_URL = resolveApiUrl();
 export const ADMIN_API_BASE_URL = resolveAdminApiBaseUrl();
 
+export function buildApiUrl(path: string): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${API_URL}${normalizedPath}`;
+}
+
+export function buildAdminApiUrl(path: string): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${ADMIN_API_BASE_URL}${normalizedPath}`;
+}
+
 const api = axios.create({
   baseURL: ADMIN_API_BASE_URL,
   withCredentials: true,

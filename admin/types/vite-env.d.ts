@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string;
   readonly VITE_BACKEND_URL?: string;
   readonly VITE_ADMIN_API_BASE_URL?: string;
+  readonly VITE_FRONTEND_APP_ORIGIN?: string;
   readonly DEV: boolean;
 }
 

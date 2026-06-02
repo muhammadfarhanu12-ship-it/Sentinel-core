@@ -1,4 +1,4 @@
-import api, { API_URL } from './api';
+import api, { buildAdminApiUrl, buildApiUrl } from './api';
 import type {
   AdminApiKey,
   AdminApiKeysQuery,
@@ -29,7 +29,9 @@ type AdminLoginResponse = {
 };
 
 export const ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE =
-  'Admin authentication service is currently unavailable.';
+  'Server unavailable. Please check your backend connection and try again.';
+const isDevelopment = Boolean(import.meta.env.DEV);
+const SENSITIVE_RESPONSE_FIELDS = new Set(['password', 'new_password', 'token', 'refresh_token', 'access_token']);
 
 type AdminDashboardResponse = {
   user?: {
@@ -63,6 +65,31 @@ function resolveRole(payload: { role?: string; user?: { role?: string } } | null
   return String(payload?.role || payload?.user?.role || '').trim().toLowerCase();
 }
 
+function redactSensitivePayload(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSensitivePayload(item));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => {
+        const normalizedKey = key.toLowerCase();
+        if (SENSITIVE_RESPONSE_FIELDS.has(normalizedKey) || normalizedKey.endsWith('_token')) {
+          return [key, '[redacted]'];
+        }
+        return [key, redactSensitivePayload(item)];
+      }),
+    );
+  }
+
+  return value;
+}
+
+function logAdminApiFailure(kind: 'network' | 'api', details: Record<string, unknown>): void {
+  if (!isDevelopment) return;
+  console.warn('[Sentinel Admin API]', kind, details);
+}
+
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 15000): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -77,18 +104,31 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 1500
 }
 
 async function assertAdminBackendHealthy(): Promise<void> {
+  const healthUrl = buildApiUrl('/health');
   let response: Response;
   try {
-    response = await fetchWithTimeout(`${API_URL}/health`, {
+    response = await fetchWithTimeout(healthUrl, {
       method: 'GET',
       headers: { Accept: 'application/json' },
       cache: 'no-store',
     });
-  } catch {
+  } catch (error) {
+    logAdminApiFailure('network', {
+      url: healthUrl,
+      method: 'GET',
+      error: error instanceof Error ? error.message : String(error),
+    });
     throw new Error(ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE);
   }
 
   if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    logAdminApiFailure('api', {
+      url: healthUrl,
+      status: response.status,
+      method: 'GET',
+      responseBody: redactSensitivePayload(payload),
+    });
     throw new Error(ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE);
   }
 }
@@ -99,9 +139,10 @@ export async function verifyAdminSession(accessToken: string): Promise<void> {
     throw new Error('Admin authentication failed.');
   }
 
+  const dashboardUrl = buildAdminApiUrl('/dashboard');
   let response: Response;
   try {
-    response = await fetchWithTimeout(`${API_URL}/admin/dashboard`, {
+    response = await fetchWithTimeout(dashboardUrl, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -109,12 +150,23 @@ export async function verifyAdminSession(accessToken: string): Promise<void> {
       },
       cache: 'no-store',
     });
-  } catch {
+  } catch (error) {
+    logAdminApiFailure('network', {
+      url: dashboardUrl,
+      method: 'GET',
+      error: error instanceof Error ? error.message : String(error),
+    });
     throw new Error(ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE);
   }
 
   const payload = (await response.json().catch(() => null)) as ApiEnvelope<AdminDashboardResponse> | null;
   if (!response.ok || !payload) {
+    logAdminApiFailure('api', {
+      url: dashboardUrl,
+      status: response.status,
+      method: 'GET',
+      responseBody: redactSensitivePayload(payload),
+    });
     if (response.status === 401 || response.status === 403) {
       throw new Error('Admin session expired. Please sign in again.');
     }
@@ -133,7 +185,7 @@ export async function verifyAdminSession(accessToken: string): Promise<void> {
 
 export async function loginAdmin(payload: AdminLoginPayload) {
   await assertAdminBackendHealthy();
-  const loginUrl = `${API_URL}/auth/login`;
+  const loginUrl = buildAdminApiUrl('/auth/login');
   let response: Response;
 
   try {
@@ -148,12 +200,23 @@ export async function loginAdmin(payload: AdminLoginPayload) {
         password: payload.password,
       }),
     });
-  } catch {
+  } catch (error) {
+    logAdminApiFailure('network', {
+      url: loginUrl,
+      method: 'POST',
+      error: error instanceof Error ? error.message : String(error),
+    });
     throw new Error(ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE);
   }
 
   const responsePayload = (await response.json().catch(() => null)) as ApiEnvelope<AdminLoginResponse> | null;
   if (!response.ok || !responsePayload) {
+    logAdminApiFailure('api', {
+      url: loginUrl,
+      status: response.status,
+      method: 'POST',
+      responseBody: redactSensitivePayload(responsePayload),
+    });
     if (response.status === 404 || response.status >= 500) {
       throw new Error(ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE);
     }

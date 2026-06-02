@@ -50,7 +50,7 @@ export default function SignIn() {
     } else if (reason === 'backend-connection-lost') {
       setInfo('Backend connection lost. Sign in again after the server is available.');
     } else if (reason === 'server-unavailable') {
-      setInfo('Server unavailable. Please try again in a moment.');
+      setInfo(AUTH_SERVICE_UNAVAILABLE_MESSAGE);
     } else if (reason === 'authentication-failed') {
       setInfo('Authentication failed. Please sign in again.');
     }
