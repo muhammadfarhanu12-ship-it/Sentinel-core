@@ -114,6 +114,15 @@ function logApiFailure(kind: 'network' | 'api', details: Record<string, unknown>
   console.warn('[Sentinel API]', kind, details);
 }
 
+function logLoginDebug(url: string, status?: number): void {
+  if (!isDevelopment || !/\/auth\/login(?:\?|$)/i.test(url)) return;
+  console.info('[Sentinel Login]', {
+    apiBaseUrl: API_BASE_URL,
+    loginUrl: url,
+    status,
+  });
+}
+
 function redactSensitivePayload(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => redactSensitivePayload(item));
@@ -208,12 +217,15 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}): Pro
 
   try {
     const response = await fetch(url, requestInit);
+    logLoginDebug(url, response.status);
     if (!shouldRetryRequest(requestInit.method, response.status)) {
       return response;
     }
 
     await wait(800);
-    return await fetch(url, requestInit);
+    const retryResponse = await fetch(url, requestInit);
+    logLoginDebug(url, retryResponse.status);
+    return retryResponse;
   } catch (error) {
     if (!shouldRetryRequest(requestInit.method, undefined, error)) {
       logApiFailure('network', {
@@ -226,7 +238,9 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}): Pro
 
     await wait(800);
     try {
-      return await fetch(url, requestInit);
+      const retryResponse = await fetch(url, requestInit);
+      logLoginDebug(url, retryResponse.status);
+      return retryResponse;
     } catch (retryError) {
       logApiFailure('network', {
         url,
@@ -248,6 +262,7 @@ export async function apiRequest<T = unknown>(endpoint: string, options: Request
       status: response.status,
       method: options.method || 'GET',
       code: typeof payload?.error?.code === 'string' ? payload.error.code : undefined,
+      wrongEndpointHint: response.status === 404 ? 'Check that the frontend path matches the backend route.' : undefined,
       responseBody: redactSensitivePayload(payload),
     });
     throw new ApiRequestError(

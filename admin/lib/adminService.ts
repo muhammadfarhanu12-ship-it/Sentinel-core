@@ -1,4 +1,4 @@
-import api, { buildAdminApiUrl, buildApiUrl } from './api';
+import api, { API_URL, buildAdminApiUrl, buildApiUrl } from './api';
 import type {
   AdminApiKey,
   AdminApiKeysQuery,
@@ -30,6 +30,8 @@ type AdminLoginResponse = {
 
 export const ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE =
   'Server unavailable. Please check your backend connection and try again.';
+export const ADMIN_INVALID_CREDENTIALS_MESSAGE = 'Invalid email or password.';
+export const ADMIN_ACCESS_DENIED_MESSAGE = 'Admin access denied.';
 const isDevelopment = Boolean(import.meta.env.DEV);
 const SENSITIVE_RESPONSE_FIELDS = new Set(['password', 'new_password', 'token', 'refresh_token', 'access_token']);
 
@@ -88,6 +90,11 @@ function redactSensitivePayload(value: unknown): unknown {
 function logAdminApiFailure(kind: 'network' | 'api', details: Record<string, unknown>): void {
   if (!isDevelopment) return;
   console.warn('[Sentinel Admin API]', kind, details);
+}
+
+function logAdminLoginDebug(details: Record<string, unknown>): void {
+  if (!isDevelopment) return;
+  console.info('[Sentinel Admin Login]', details);
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 15000): Promise<Response> {
@@ -186,6 +193,7 @@ export async function verifyAdminSession(accessToken: string): Promise<void> {
 export async function loginAdmin(payload: AdminLoginPayload) {
   await assertAdminBackendHealthy();
   const loginUrl = buildAdminApiUrl('/auth/login');
+  logAdminLoginDebug({ apiBaseUrl: API_URL, loginUrl });
   let response: Response;
 
   try {
@@ -210,15 +218,23 @@ export async function loginAdmin(payload: AdminLoginPayload) {
   }
 
   const responsePayload = (await response.json().catch(() => null)) as ApiEnvelope<AdminLoginResponse> | null;
+  logAdminLoginDebug({ loginUrl, status: response.status });
   if (!response.ok || !responsePayload) {
     logAdminApiFailure('api', {
       url: loginUrl,
       status: response.status,
       method: 'POST',
+      wrongEndpointHint: response.status === 404 ? 'Check that the admin login path matches the backend route.' : undefined,
       responseBody: redactSensitivePayload(responsePayload),
     });
     if (response.status === 404 || response.status >= 500) {
       throw new Error(ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE);
+    }
+    if (response.status === 401) {
+      throw new Error(ADMIN_INVALID_CREDENTIALS_MESSAGE);
+    }
+    if (response.status === 403) {
+      throw new Error(ADMIN_ACCESS_DENIED_MESSAGE);
     }
     throw new Error(responsePayload?.error?.message || 'Unable to authenticate with the admin backend.');
   }

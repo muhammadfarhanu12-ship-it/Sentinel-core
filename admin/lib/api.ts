@@ -62,6 +62,14 @@ function normalizeAdminApiBaseUrl(value: string): string {
   return `${normalizedValue}${ADMIN_API_PREFIX}`;
 }
 
+function stripApiSuffix(value: string): string {
+  return stripTrailingSlash(value).replace(/\/api(?:\/v\d+)?$/i, '');
+}
+
+function isAbsoluteBackendPath(path: string): boolean {
+  return /^\/(?:api|health)(?:\/|$)/i.test(path);
+}
+
 function resolveApiUrl(): string {
   const configuredApiUrl = sanitizeConfiguredBackendUrl(
     import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '',
@@ -83,11 +91,15 @@ export const ADMIN_API_BASE_URL = resolveAdminApiBaseUrl();
 
 export function buildApiUrl(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_URL}${normalizedPath}`;
+  const baseUrl = isAbsoluteBackendPath(normalizedPath) ? stripApiSuffix(API_URL) : API_URL;
+  return `${baseUrl}${normalizedPath}`;
 }
 
 export function buildAdminApiUrl(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  if (/^\/api(?:\/v\d+)?\/admin(?:\/|$)/i.test(normalizedPath)) {
+    return `${stripApiSuffix(API_URL)}${normalizedPath}`;
+  }
   return `${ADMIN_API_BASE_URL}${normalizedPath}`;
 }
 
