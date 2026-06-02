@@ -91,7 +91,11 @@ function toAuthApiError(error: unknown): AuthApiError {
     }
 
     if (error.status === 403) {
-      return new AuthApiError(String(error.message || AUTH_FAILED_MESSAGE), 'forbidden', error.status);
+      const message = String(error.message || '');
+      if (isEmailVerificationRequired(message)) {
+        return new AuthApiError(message, 'forbidden', error.status);
+      }
+      return new AuthApiError(AUTH_INVALID_CREDENTIALS_MESSAGE, 'invalid-credentials', error.status);
     }
 
     if (error.status >= 500 || error.status === 502 || error.status === 503 || error.status === 504) {

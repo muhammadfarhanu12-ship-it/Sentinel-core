@@ -29,9 +29,8 @@ type AdminLoginResponse = {
 };
 
 export const ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE =
-  'Server unavailable. Please check your backend connection and try again.';
-export const ADMIN_INVALID_CREDENTIALS_MESSAGE = 'Invalid email or password.';
-export const ADMIN_ACCESS_DENIED_MESSAGE = 'Admin access denied.';
+  'Unable to connect to the admin backend.';
+export const ADMIN_INVALID_CREDENTIALS_MESSAGE = 'Invalid admin credentials or admin access denied.';
 const isDevelopment = Boolean(import.meta.env.DEV);
 const SENSITIVE_RESPONSE_FIELDS = new Set(['password', 'new_password', 'token', 'refresh_token', 'access_token']);
 
@@ -230,11 +229,8 @@ export async function loginAdmin(payload: AdminLoginPayload) {
     if (response.status === 404 || response.status >= 500) {
       throw new Error(ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE);
     }
-    if (response.status === 401) {
+    if (response.status === 401 || response.status === 403) {
       throw new Error(ADMIN_INVALID_CREDENTIALS_MESSAGE);
-    }
-    if (response.status === 403) {
-      throw new Error(ADMIN_ACCESS_DENIED_MESSAGE);
     }
     throw new Error(responsePayload?.error?.message || 'Unable to authenticate with the admin backend.');
   }
