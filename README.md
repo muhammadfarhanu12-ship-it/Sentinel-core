@@ -265,6 +265,11 @@ Frontend deployment:
 - Set `VITE_API_URL` to the deployed backend origin.
 - Set `VITE_API_WS_URL` to the deployed backend WebSocket origin.
 - Set `VITE_ADMIN_APP_ORIGIN` to the deployed admin portal origin.
+- For this deployment, set:
+- `VITE_API_BASE_URL=https://sentinel-core-xcrz.onrender.com`
+- `VITE_API_URL=https://sentinel-core-xcrz.onrender.com`
+- `VITE_API_WS_URL=wss://sentinel-core-xcrz.onrender.com`
+- `VITE_ADMIN_APP_ORIGIN=https://sentinel-admin-beta.vercel.app`
 - After changing Vercel environment variables, redeploy with build cache cleared.
 
 Admin deployment:

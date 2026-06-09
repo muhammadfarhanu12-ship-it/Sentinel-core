@@ -2,13 +2,13 @@ export const ADMIN_APP_ORIGIN = import.meta.env.VITE_ADMIN_APP_ORIGIN || '';
 const API_PREFIX = '/api/v1';
 const DEFAULT_BACKEND_ORIGIN = 'http://localhost:8000';
 const isDevelopment = Boolean(import.meta.env.DEV);
+const isProduction = Boolean(import.meta.env.PROD);
 const isBrowser = typeof window !== 'undefined';
-const rawConfiguredApiUrl =
-  import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '';
-const sanitizedConfiguredApiUrl = sanitizeConfiguredBackendUrl(rawConfiguredApiUrl);
-const fallbackApiOrigin = isDevelopment ? DEFAULT_BACKEND_ORIGIN : '';
-const rawApiBaseUrl = sanitizedConfiguredApiUrl || fallbackApiOrigin;
-export const API_BASE_URL = normalizeApiBaseUrl(rawApiBaseUrl);
+const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '';
+const sanitizedConfiguredApiUrl = sanitizeConfiguredBackendUrl(rawApiBaseUrl);
+const fallbackApiOrigin = isProduction ? '' : DEFAULT_BACKEND_ORIGIN;
+const resolvedApiOrigin = sanitizedConfiguredApiUrl || fallbackApiOrigin;
+export const API_BASE_URL = normalizeApiBaseUrl(resolvedApiOrigin);
 const SENSITIVE_RESPONSE_FIELDS = new Set(['password', 'new_password', 'token', 'refresh_token', 'access_token']);
 
 export class ApiRequestError extends Error {
@@ -101,16 +101,24 @@ function isAbsoluteBackendPath(path: string): boolean {
 }
 
 function getApiConfigurationIssue(): string | null {
+  if (isProduction && !rawApiBaseUrl) {
+    return 'VITE_API_BASE_URL or VITE_API_URL must be set to the backend origin in production.';
+  }
+
+  if (rawApiBaseUrl && !sanitizedConfiguredApiUrl) {
+    return 'VITE_API_BASE_URL or VITE_API_URL must be a valid absolute http(s) backend URL.';
+  }
+
   if (!API_BASE_URL) {
     return 'VITE_API_BASE_URL or VITE_API_URL must be set to the backend origin in production.';
   }
 
   const backendOrigin = stripApiSuffix(API_BASE_URL);
-  if (!isDevelopment && isLocalhostOrigin(backendOrigin)) {
+  if (isProduction && isLocalhostOrigin(backendOrigin)) {
     return 'Production frontend is misconfigured: API base URL points to localhost.';
   }
 
-  if (!isDevelopment && isBrowser && backendOrigin === window.location.origin) {
+  if (isProduction && isBrowser && backendOrigin === window.location.origin) {
     return 'Production frontend is misconfigured: API base URL points to the frontend origin instead of the backend.';
   }
 
@@ -120,6 +128,8 @@ function getApiConfigurationIssue(): string | null {
 function logApiConfigurationIssue(issue: string): void {
   console.error('[Sentinel API] configuration error', {
     apiBaseUrl: API_BASE_URL || '(missing)',
+    hasViteApiBaseUrl: Boolean(import.meta.env.VITE_API_BASE_URL),
+    hasViteApiUrl: Boolean(import.meta.env.VITE_API_URL),
     configuredApiUrl: sanitizedConfiguredApiUrl || '(missing)',
     issue,
   });
@@ -308,6 +318,8 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}): Pro
 export function logDevelopmentApiDiagnostic(details: Record<string, unknown>): void {
   logLoginDiagnostic({
     apiBaseUrl: API_BASE_URL,
+    hasViteApiBaseUrl: Boolean(import.meta.env.VITE_API_BASE_URL),
+    hasViteApiUrl: Boolean(import.meta.env.VITE_API_URL),
     ...details,
   });
 }
