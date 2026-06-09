@@ -9,7 +9,7 @@ import type {
   UsageTrendPoint,
 } from '../types';
 
-const USAGE_ALERT_KEY = 'sentinel_usage_alert_80';
+let usageAlertPreferenceMemory = true;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
@@ -167,9 +167,9 @@ export async function removeTeamMember(id: string): Promise<void> {
 }
 
 export function getUsageAlertPreference(): boolean {
-  return localStorage.getItem(USAGE_ALERT_KEY) !== 'false';
+  return usageAlertPreferenceMemory;
 }
 
 export function setUsageAlertPreference(enabled: boolean) {
-  localStorage.setItem(USAGE_ALERT_KEY, String(enabled));
+  usageAlertPreferenceMemory = enabled;
 }
