@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Shield, Lock, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
+import { PasswordInput } from '../../components/ui/PasswordInput';
 import {
   AUTH_SERVICE_UNAVAILABLE_MESSAGE,
   getPasswordPolicyError,
@@ -95,22 +96,17 @@ export default function ResetPassword() {
                 <label htmlFor="password" className="block text-sm font-medium text-slate-300">
                   New password
                 </label>
-                <div className="mt-1 relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock className="h-5 w-5 text-slate-500" />
-                  </div>
-                  <input
-                    id="password"
-                    name="password"
-                    type="password"
-                    autoComplete="new-password"
-                    required
-                    value={password}
-                    onChange={(e: any) => setPassword(e.target.value)}
-                    className="block w-full pl-10 bg-slate-950/50 border border-white/10 rounded-lg py-2.5 text-slate-200 placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent sm:text-sm transition-all"
-                    placeholder="At least 12 characters"
-                  />
-                </div>
+                <PasswordInput
+                  className="mt-1"
+                  id="password"
+                  name="password"
+                  autoComplete="new-password"
+                  required
+                  value={password}
+                  onChange={(e: any) => setPassword(e.target.value)}
+                  leftIcon={<Lock className="h-5 w-5 text-slate-500" />}
+                  placeholder="At least 12 characters"
+                />
                 <p className="mt-2 text-xs text-slate-500">{PASSWORD_POLICY_HINT}</p>
               </div>
 
@@ -118,22 +114,17 @@ export default function ResetPassword() {
                 <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-300">
                   Confirm password
                 </label>
-                <div className="mt-1 relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock className="h-5 w-5 text-slate-500" />
-                  </div>
-                  <input
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    type="password"
-                    autoComplete="new-password"
-                    required
-                    value={confirmPassword}
-                    onChange={(e: any) => setConfirmPassword(e.target.value)}
-                    className="block w-full pl-10 bg-slate-950/50 border border-white/10 rounded-lg py-2.5 text-slate-200 placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent sm:text-sm transition-all"
-                    placeholder="Repeat your password"
-                  />
-                </div>
+                <PasswordInput
+                  className="mt-1"
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  autoComplete="new-password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e: any) => setConfirmPassword(e.target.value)}
+                  leftIcon={<Lock className="h-5 w-5 text-slate-500" />}
+                  placeholder="Repeat your password"
+                />
               </div>
 
               <div>

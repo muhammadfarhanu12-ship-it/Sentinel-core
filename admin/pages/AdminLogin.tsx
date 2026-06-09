@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, LockKeyhole, Mail } from 'lucide-react';
 
+import { PasswordInput } from '../components/ui/PasswordInput';
 import { useToast } from '../hooks/useToast';
 import { clearAdminToken, getAdminToken, setAdminToken } from '../lib/auth';
 import { ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE, loginAdmin, verifyAdminSession } from '../lib/adminService';
@@ -131,16 +132,13 @@ export default function AdminLogin() {
 
           <label className="admin-field">
             <span>Password</span>
-            <div className="admin-input-wrap">
-              <LockKeyhole size={16} />
-              <input
-                autoComplete="current-password"
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Enter secure admin password"
-                type="password"
-                value={password}
-              />
-            </div>
+            <PasswordInput
+              autoComplete="current-password"
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Enter secure admin password"
+              value={password}
+              icon={<LockKeyhole size={16} />}
+            />
           </label>
 
           <button className="admin-button admin-button--primary" disabled={loading} type="submit">

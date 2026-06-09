@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, LockKeyhole, Mail, ShieldPlus } from 'lucide-react';
 
+import { PasswordInput } from '../components/ui/PasswordInput';
 import { useToast } from '../hooks/useToast';
 
 function validateEmail(email: string) {
@@ -80,18 +81,24 @@ export default function AdminSignup() {
 
           <label className="admin-field">
             <span>Password</span>
-            <div className="admin-input-wrap">
-              <LockKeyhole size={16} />
-              <input onChange={(event) => setPassword(event.target.value)} placeholder="Create a long passphrase" type="password" value={password} />
-            </div>
+            <PasswordInput
+              autoComplete="new-password"
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Create a long passphrase"
+              value={password}
+              icon={<LockKeyhole size={16} />}
+            />
           </label>
 
           <label className="admin-field">
             <span>Confirm password</span>
-            <div className="admin-input-wrap">
-              <LockKeyhole size={16} />
-              <input onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Re-enter the password" type="password" value={confirmPassword} />
-            </div>
+            <PasswordInput
+              autoComplete="new-password"
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              placeholder="Re-enter the password"
+              value={confirmPassword}
+              icon={<LockKeyhole size={16} />}
+            />
           </label>
 
           <button className="admin-button admin-button--primary" type="submit">
