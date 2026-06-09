@@ -4,7 +4,7 @@ import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, '.', '');
+  const env = loadEnv(mode, __dirname, '');
   const frontendNodeModules = path.resolve(__dirname, 'node_modules');
   const rawApiProxyTarget =
     env.VITE_API_BASE_URL || env.VITE_API_URL || env.VITE_BACKEND_URL || env.BACKEND_AI_URL || 'http://localhost:8000';
@@ -12,6 +12,7 @@ export default defineConfig(({ mode }) => {
   const devServerPort = Number(env.PORT || env.VITE_DEV_PORT || 5173);
 
   return {
+    envDir: __dirname,
     plugins: [react(), tailwindcss()],
     resolve: {
       dedupe: ['react', 'react-dom', 'react-router', 'react-router-dom', 'lucide-react'],

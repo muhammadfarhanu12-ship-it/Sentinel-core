@@ -7,8 +7,10 @@ FastAPI backend for Sentinel, the "Cloudflare for AI".
 1. Create virtual environment: `python -m venv venv`
 2. Activate: `source venv/bin/activate`
 3. Install dependencies: `pip install -r requirements.txt`
-4. Copy `.env.example` to `.env` and configure.
+4. Copy `.env.example` to `.env` if you want a starting template, then configure real local values in `backend-ai/.env`.
 5. Run server from `backend-ai/`: `uvicorn main:app --host 0.0.0.0 --port 8000 --reload`
+
+The running backend never uses `.env.example` as runtime config. Local development reads `backend-ai/.env`, while production should use Render environment variables.
 
 ## Auth notes
 

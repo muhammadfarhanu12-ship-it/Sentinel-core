@@ -1,8 +1,9 @@
-import { ApiRequestError, apiRequest, resolveBackendOrigin } from './api';
+import { ApiRequestError, apiRequest, buildApiUrl, logDevelopmentApiDiagnostic, resolveBackendOrigin } from './api';
 
 export const AUTH_SERVICE_UNAVAILABLE_MESSAGE =
   'Server unavailable. Please check your backend connection and try again.';
-export const AUTH_INVALID_CREDENTIALS_MESSAGE = 'Invalid credentials. Please check your email and password.';
+export const AUTH_INVALID_CREDENTIALS_MESSAGE = 'Invalid email or password.';
+export const AUTH_LOGIN_ENDPOINT_NOT_FOUND_MESSAGE = 'Login endpoint not found. Please contact support.';
 export const AUTH_FAILED_MESSAGE = 'Authentication failed. Please try again.';
 
 export const PASSWORD_POLICY_HINT =
@@ -31,6 +32,8 @@ export type LoginResponse = {
 export type AuthErrorCode =
   | 'server-unavailable'
   | 'invalid-credentials'
+  | 'endpoint-not-found'
+  | 'validation-error'
   | 'forbidden'
   | 'authentication-failed';
 
@@ -87,7 +90,7 @@ function toAuthApiError(error: unknown): AuthApiError {
     }
 
     if (error.status === 404) {
-      return new AuthApiError(AUTH_SERVICE_UNAVAILABLE_MESSAGE, 'server-unavailable', error.status);
+      return new AuthApiError(AUTH_LOGIN_ENDPOINT_NOT_FOUND_MESSAGE, 'endpoint-not-found', error.status);
     }
 
     if (error.status === 403) {
@@ -96,6 +99,10 @@ function toAuthApiError(error: unknown): AuthApiError {
         return new AuthApiError(message, 'forbidden', error.status);
       }
       return new AuthApiError(AUTH_INVALID_CREDENTIALS_MESSAGE, 'invalid-credentials', error.status);
+    }
+
+    if (error.status === 422) {
+      return new AuthApiError(String(error.message || 'Validation error.'), 'validation-error', error.status);
     }
 
     if (error.status >= 500 || error.status === 502 || error.status === 503 || error.status === 504) {
@@ -182,11 +189,16 @@ export async function signupWithEmail(payload: {
 }
 
 export async function signInWithEmail(email: string, password: string): Promise<LoginResponse> {
+  const loginUrl = buildApiUrl('/api/v1/auth/login');
+  logDevelopmentApiDiagnostic({
+    category: 'login-request-config',
+    loginUrl,
+  });
+
   await assertBackendHealthyForAuthentication();
 
-  let data: LoginResponse;
   try {
-    data = await authRequest<LoginResponse>('/api/v1/auth/login', {
+    const data = await authRequest<LoginResponse>('/api/v1/auth/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -196,19 +208,27 @@ export async function signInWithEmail(email: string, password: string): Promise<
         password,
       }),
     });
-  } catch (error) {
-    if (error instanceof AuthApiError && error.status === 404) {
-      throw new AuthApiError(AUTH_INVALID_CREDENTIALS_MESSAGE, 'invalid-credentials', 404);
+
+    if (!data?.access_token) {
+      throw new AuthApiError(AUTH_FAILED_MESSAGE, 'authentication-failed');
     }
-    throw error;
-  }
 
-  if (!data?.access_token) {
-    throw new AuthApiError(AUTH_FAILED_MESSAGE, 'authentication-failed');
+    await verifyBackendSession(String(data.access_token));
+    return data;
+  } catch (error) {
+    const mappedError = toAuthApiError(error);
+    logDevelopmentApiDiagnostic({
+      category: mappedError.code,
+      loginUrl,
+      status: mappedError.status,
+    });
+    if (mappedError.code === 'endpoint-not-found') {
+      console.warn('[Sentinel Login] login endpoint returned 404', {
+        loginUrl,
+      });
+    }
+    throw mappedError;
   }
-
-  await verifyBackendSession(String(data.access_token));
-  return data;
 }
 
 export async function resendVerificationEmail(email: string): Promise<AuthMessageResponse> {

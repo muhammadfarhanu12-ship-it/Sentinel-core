@@ -1,11 +1,14 @@
 export const ADMIN_APP_ORIGIN = import.meta.env.VITE_ADMIN_APP_ORIGIN || '';
 const API_PREFIX = '/api/v1';
-const configuredApiUrl = sanitizeConfiguredBackendUrl(
-  import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '',
-);
 const DEFAULT_BACKEND_ORIGIN = 'http://localhost:8000';
 const isDevelopment = Boolean(import.meta.env.DEV);
-export const API_BASE_URL = normalizeApiBaseUrl(configuredApiUrl || defaultApiBaseUrl());
+const isBrowser = typeof window !== 'undefined';
+const rawConfiguredApiUrl =
+  import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '';
+const sanitizedConfiguredApiUrl = sanitizeConfiguredBackendUrl(rawConfiguredApiUrl);
+const fallbackApiOrigin = isDevelopment ? DEFAULT_BACKEND_ORIGIN : '';
+const rawApiBaseUrl = sanitizedConfiguredApiUrl || fallbackApiOrigin;
+export const API_BASE_URL = normalizeApiBaseUrl(rawApiBaseUrl);
 const SENSITIVE_RESPONSE_FIELDS = new Set(['password', 'new_password', 'token', 'refresh_token', 'access_token']);
 
 export class ApiRequestError extends Error {
@@ -24,10 +27,6 @@ export class ApiRequestError extends Error {
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
-}
-
-function defaultApiBaseUrl(): string {
-  return isDevelopment ? `${DEFAULT_BACKEND_ORIGIN}${API_PREFIX}` : '';
 }
 
 function sanitizeConfiguredBackendUrl(value: string): string {
@@ -68,10 +67,26 @@ function stripApiSuffix(value: string): string {
   return stripTrailingSlash(value).replace(/\/api(?:\/v\d+)?$/i, '');
 }
 
+function isLocalhostOrigin(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return ['localhost', '127.0.0.1', '0.0.0.0'].includes(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function normalizePath(path: string): string {
+  const trimmed = String(path || '').trim();
+  if (!trimmed) return '/';
+  const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return withLeadingSlash.replace(/\/{2,}/g, '/');
+}
+
 function normalizeApiBaseUrl(value: string): string {
   const normalizedValue = stripTrailingSlash(value);
   if (!normalizedValue) {
-    return defaultApiBaseUrl();
+    return isDevelopment ? `${DEFAULT_BACKEND_ORIGIN}${API_PREFIX}` : '';
   }
 
   if (/\/api(?:\/v\d+)?$/i.test(normalizedValue)) {
@@ -83,6 +98,31 @@ function normalizeApiBaseUrl(value: string): string {
 
 function isAbsoluteBackendPath(path: string): boolean {
   return /^\/(?:api|health)(?:\/|$)/i.test(path);
+}
+
+function getApiConfigurationIssue(): string | null {
+  if (!API_BASE_URL) {
+    return 'VITE_API_BASE_URL or VITE_API_URL must be set to the backend origin in production.';
+  }
+
+  const backendOrigin = stripApiSuffix(API_BASE_URL);
+  if (!isDevelopment && isLocalhostOrigin(backendOrigin)) {
+    return 'Production frontend is misconfigured: API base URL points to localhost.';
+  }
+
+  if (!isDevelopment && isBrowser && backendOrigin === window.location.origin) {
+    return 'Production frontend is misconfigured: API base URL points to the frontend origin instead of the backend.';
+  }
+
+  return null;
+}
+
+function logApiConfigurationIssue(issue: string): void {
+  console.error('[Sentinel API] configuration error', {
+    apiBaseUrl: API_BASE_URL || '(missing)',
+    configuredApiUrl: sanitizedConfiguredApiUrl || '(missing)',
+    issue,
+  });
 }
 
 function createNetworkError(url: string, error: unknown): Error {
@@ -121,6 +161,11 @@ function logLoginDebug(url: string, status?: number): void {
     loginUrl: url,
     status,
   });
+}
+
+function logLoginDiagnostic(details: Record<string, unknown>): void {
+  if (!isDevelopment) return;
+  console.info('[Sentinel Login]', details);
 }
 
 function redactSensitivePayload(value: unknown): unknown {
@@ -193,22 +238,30 @@ function shouldRetryRequest(method: string | undefined, status?: number, error?:
 }
 
 export function resolveBackendOrigin(): string {
-  if (!API_BASE_URL) {
-    throw new Error('VITE_API_BASE_URL must be set to the backend origin in production.');
+  const issue = getApiConfigurationIssue();
+  if (issue) {
+    logApiConfigurationIssue(issue);
+    throw new Error(issue);
   }
   return stripApiSuffix(API_BASE_URL);
 }
 
-export function buildBackendUrl(path: string): string {
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+export function buildApiUrl(path: string): string {
+  const normalizedPath = normalizePath(path);
   const baseUrl = isAbsoluteBackendPath(normalizedPath) ? resolveBackendOrigin() : API_BASE_URL;
-  return `${baseUrl}${normalizedPath}`;
+  const normalizedBaseUrl = stripTrailingSlash(baseUrl);
+  if (!normalizedBaseUrl) {
+    const issue = getApiConfigurationIssue() || 'Unable to resolve backend API base URL.';
+    logApiConfigurationIssue(issue);
+    throw new Error(issue);
+  }
+  return `${normalizedBaseUrl}${normalizedPath}`;
 }
 
-export const buildApiUrl = buildBackendUrl;
+export const buildBackendUrl = buildApiUrl;
 
 export async function apiFetch(endpoint: string, options: RequestInit = {}): Promise<Response> {
-  const url = /^https?:\/\//i.test(endpoint) ? endpoint : buildBackendUrl(endpoint);
+  const url = /^https?:\/\//i.test(endpoint) ? endpoint : buildApiUrl(endpoint);
   const requestInit: RequestInit = {
     ...options,
     headers: buildRequestHeaders(options.headers, options.body),
@@ -250,6 +303,18 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}): Pro
       throw createNetworkError(url, retryError);
     }
   }
+}
+
+export function logDevelopmentApiDiagnostic(details: Record<string, unknown>): void {
+  logLoginDiagnostic({
+    apiBaseUrl: API_BASE_URL,
+    ...details,
+  });
+}
+
+const initialApiConfigurationIssue = getApiConfigurationIssue();
+if (initialApiConfigurationIssue && isBrowser) {
+  logApiConfigurationIssue(initialApiConfigurationIssue);
 }
 
 export async function apiRequest<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<T> {

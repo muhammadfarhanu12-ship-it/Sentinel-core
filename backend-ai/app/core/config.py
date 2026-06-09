@@ -7,7 +7,9 @@ from typing import Any
 from dotenv import load_dotenv
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
-load_dotenv(BACKEND_ROOT / ".env")
+# Load only the backend's real local .env file for development.
+# Existing platform environment variables still win because override=False.
+load_dotenv(BACKEND_ROOT / ".env", override=False)
 
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}

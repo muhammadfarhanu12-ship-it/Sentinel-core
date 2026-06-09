@@ -8,6 +8,14 @@ Sentinel-Core is an AI security gateway and analyst dashboard for protecting LLM
 
 ## Local Setup
 
+`.env.example` files in this repo are optional templates only. Runtime uses the real local `.env` files:
+
+- `backend-ai/.env`
+- `frontend/.env`
+- `admin/.env`
+
+Never commit real `.env` files. Vercel and Render do not automatically read your local `.env` files; production variables must be configured in their dashboards.
+
 ### Backend
 
 ```powershell
@@ -19,7 +27,7 @@ copy .env.example .env
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Set real values for `MONGODB_URI`, `JWT_SECRET`, and `API_KEY_SECRET` before starting the backend.
+The backend runtime reads `backend-ai/.env` locally and Render environment variables in production. `.env.example` is only a safe starter template.
 
 ### Frontend
 
@@ -32,6 +40,8 @@ npm run dev
 
 Default local frontend URL: `http://127.0.0.1:5173`.
 
+The frontend runtime reads `frontend/.env` locally and Vercel environment variables in production.
+
 ### Admin Portal
 
 ```powershell
@@ -42,6 +52,8 @@ npm run dev
 ```
 
 Default local admin URL: `http://127.0.0.1:5174`.
+
+The admin runtime reads `admin/.env` locally and Vercel environment variables in production.
 
 ## Required Environment Variables
 
@@ -60,12 +72,15 @@ Backend:
 Frontend:
 
 - `VITE_API_BASE_URL`
+- `VITE_API_URL`
 - `VITE_API_WS_URL`
 - `VITE_ADMIN_APP_ORIGIN`
 
 Admin:
 
-- `VITE_API_BASE_URL` or the admin app's equivalent API base setting from `admin/.env.example`.
+- `VITE_API_BASE_URL`
+- `VITE_API_URL`
+- `VITE_FRONTEND_APP_ORIGIN`
 
 Optional production integrations include `GEMINI_API_KEY`, `OPENAI_API_KEY`, SMTP variables, Stripe variables, Sentry, OAuth client credentials, and remediation webhook URLs.
 
@@ -211,16 +226,17 @@ Runtime fallback stores in dashboard services are development/degraded-mode help
 ## Verification Commands
 
 ```powershell
-cd frontend
+cd backend-ai
+python -c "import app.main; print('backend import ok')"
+python -m pytest -p no:cacheprovider
+
+cd ..\frontend
 npm run build
 npm run lint
 
 cd ..\admin
 npm run build
 npm run lint
-
-cd ..\backend-ai
-python -m pytest -p no:cacheprovider
 ```
 
 The backend suite includes current Mongo/FastAPI tests plus legacy SQL-style compatibility tests. Compatibility shims for billing, remediation, notifications, scan jobs, admin maintenance, and in-memory pytest fixtures live in `backend-ai/app/models`, `backend-ai/app/services/user_admin_maintenance_service.py`, and `backend-ai/tests/conftest.py`.
@@ -233,21 +249,29 @@ Backend deployment:
 
 - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
 - Configure health check path: `/api/v1/health`.
+- Render does not use your local `backend-ai/.env`; add production variables in the Render dashboard.
 - Set production `CORS_ORIGINS` to exact frontend and admin URLs.
 - Set `APP_ENV=production`.
 - Use strong unique values for `JWT_SECRET` and `API_KEY_SECRET`.
 - Do not enable `AUTH_DEBUG_TOKEN_LOGGING` or demo bypass settings in production.
+- After changing Render environment variables, redeploy the backend service.
 
 Frontend deployment:
 
 - Build command: `npm run build`.
 - Output directory: `dist`.
+- Vercel does not use your local `frontend/.env`; add production variables in the Vercel dashboard.
 - Set `VITE_API_BASE_URL` to the deployed backend `/api/v1` URL or backend origin.
+- Set `VITE_API_URL` to the deployed backend origin.
 - Set `VITE_API_WS_URL` to the deployed backend WebSocket origin.
 - Set `VITE_ADMIN_APP_ORIGIN` to the deployed admin portal origin.
+- After changing Vercel environment variables, redeploy with build cache cleared.
 
 Admin deployment:
 
 - Build command: `npm run build`.
 - Output directory: `dist`.
+- Vercel does not use your local `admin/.env`; add production variables in the Vercel dashboard.
 - Point the admin API configuration at `/api/v1/admin` on the deployed backend.
+- Set `VITE_API_BASE_URL`, `VITE_API_URL`, and `VITE_FRONTEND_APP_ORIGIN`.
+- After changing Vercel environment variables, redeploy with build cache cleared.

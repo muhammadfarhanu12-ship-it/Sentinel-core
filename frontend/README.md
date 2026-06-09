@@ -15,9 +15,11 @@ View your app in AI Studio: https://ai.studio/apps/bdf6d9c8-96b0-4798-bfe7-cb93f
 
 1. Install dependencies:
    `npm install`
-2. Copy `.env.example` to `.env` and configure the backend URLs:
-   `VITE_API_URL=https://sentinel-core-xcrz.onrender.com`
-   `VITE_API_WS_URL=wss://sentinel-core-xcrz.onrender.com`
-   `VITE_ADMIN_API_BASE_URL=https://sentinel-core-xcrz.onrender.com/api/v1/admin`
+2. Copy `.env.example` to `.env` if you want a starting template, then configure real local values in `frontend/.env`:
+   `VITE_API_URL=https://your-backend.example.com`
+   `VITE_API_WS_URL=wss://your-backend.example.com`
+   `VITE_ADMIN_API_BASE_URL=https://your-backend.example.com/api/v1/admin`
 4. Run the app:
    `npm run dev`
+
+The running frontend never uses `.env.example` as runtime config. Local development reads `frontend/.env`, while production should use Vercel environment variables.

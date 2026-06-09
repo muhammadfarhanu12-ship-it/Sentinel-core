@@ -1,4 +1,4 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import http from "http";
@@ -6,6 +6,13 @@ import { Server } from "socket.io";
 import WebSocket from "ws";
 import { request as httpRequest } from "http";
 import { request as httpsRequest } from "https";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.resolve(__dirname, ".env"), override: false });
 
 function readEnv(name: string, fallback = ""): string {
   return String(process.env[name] || fallback || "").trim();
