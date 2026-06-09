@@ -32,6 +32,7 @@ from app.services.auth_service import (
     reset_password_for_user,
     verify_email_token_for_user,
 )
+from app.services.dashboard_service import record_audit_event
 from app.services.session_service import (
     create_refresh_session,
     revoke_refresh_session,
@@ -119,6 +120,43 @@ async def _build_token_response(*, user: UserResponse, extra_claims: dict | None
     )
 
 
+async def _record_auth_audit_event(
+    request: Request,
+    *,
+    action: str,
+    email: str,
+    success: bool,
+    user_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    pseudo_user = {
+        "id": user_id or email,
+        "_id": user_id or email,
+        "email": email,
+        "organization_name": email.split("@", 1)[1] if "@" in email else email,
+        "tier": "FREE",
+        "role": "user",
+        "is_active": True,
+        "is_verified": success,
+        "monthly_limit": 0,
+    }
+    try:
+        await record_audit_event(
+            request,
+            current_user=pseudo_user,
+            action=action,
+            resource="auth",
+            severity="INFO" if success else "WARNING",
+            metadata={
+                "request_id": _request_id(request),
+                "ip_address": _client_identifier(request),
+                **(metadata or {}),
+            },
+        )
+    except Exception:
+        logger.exception("Failed to persist auth audit action=%s request_id=%s", action, _request_id(request))
+
+
 async def _extract_login_payload(request: Request) -> LoginRequest:
     content_type = request.headers.get("content-type", "").lower()
     try:
@@ -183,9 +221,22 @@ async def login(request: Request):
     try:
         user = await authenticate_user(normalized_email, login_payload.password)
         serialized_user = UserResponse.model_validate(user_model(user))
+        await _record_auth_audit_event(
+            request,
+            action="login_success",
+            email=normalized_email,
+            success=True,
+            user_id=str(serialized_user.id),
+        )
         logger.info("Login succeeded request_id=%s email=%s", _request_id(request), normalized_email)
         return ok(await _build_token_response(user=serialized_user))
     except Exception:
+        await _record_auth_audit_event(
+            request,
+            action="login_failure",
+            email=normalized_email,
+            success=False,
+        )
         logger.exception("Login failed request_id=%s email=%s", _request_id(request), normalized_email)
         raise
 

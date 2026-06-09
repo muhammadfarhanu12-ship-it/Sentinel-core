@@ -38,14 +38,14 @@ async def analyze_with_brain(payload: BrainAnalyzeRequest, current_user: dict = 
         active_tier=tier_for(current_user),
         requested_tier="PRO",
         provider="openai",
-        model="gpt-5.4",
+        model="gpt-4o",
         prompt=payload.prompt,
     )
     check_rate_limit(user_id or str(current_user.get("email") or "anonymous"), "brain", limits.requests_per_minute, 60)
     scan_result, runtime = await scan_prompt_with_resilience(
         payload.prompt,
         provider="openai",
-        model="gpt-5.4",
+        model="gpt-4o",
         security_tier="PRO",
         session_id=user_id or None,
         conversation_id=user_id or None,

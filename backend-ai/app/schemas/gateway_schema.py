@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 GatewayRole = Literal["system", "user", "assistant"]
 GatewayProvider = Literal["gemini", "openai"]
+JsonPrimitive = str | int | float | bool | None
 
 
 class GatewayMessage(BaseModel):
@@ -24,7 +25,7 @@ class GatewayMessage(BaseModel):
 
 class GatewayChatRequest(BaseModel):
     provider: GatewayProvider = "gemini"
-    model: str = Field(default="gemini-3.1-pro", max_length=128)
+    model: str = Field(default="gemini-1.5-flash", max_length=128)
     prompt: str | None = Field(default=None, min_length=1, max_length=25000)
     messages: list[GatewayMessage] | None = Field(default=None, max_length=50)
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
@@ -47,9 +48,22 @@ class GatewayChatRequest(BaseModel):
     def validate_metadata(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
         if value is None:
             return None
+
+        def safe_metadata_value(item: Any) -> JsonPrimitive | list[Any] | dict[str, Any]:
+            if isinstance(item, (str, int, float, bool)) or item is None:
+                return item
+            if isinstance(item, list):
+                return [safe_metadata_value(child) for child in item[:50]]
+            if isinstance(item, dict):
+                return {
+                    str(child_key)[:80]: safe_metadata_value(child_value)
+                    for child_key, child_value in list(item.items())[:50]
+                }
+            return str(item)
+
         safe: dict[str, Any] = {}
         for key, item in value.items():
-            safe[str(key)[:80]] = item if isinstance(item, (str, int, float, bool, type(None))) else str(item)
+            safe[str(key)[:80]] = safe_metadata_value(item)
         return safe
 
 
@@ -67,6 +81,8 @@ class GatewaySecurity(BaseModel):
     threat_type: str | None = None
     matched_policies: list[str] = Field(default_factory=list)
     status: str
+    requires_2fa: bool = False
+    review_required: bool = False
 
 
 class GatewayChatResponse(BaseModel):

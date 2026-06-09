@@ -54,6 +54,21 @@ _fallback_store: dict[str, Any] = {
     "audit_logs": [],
     "billing": {},
 }
+AUDIT_SECRET_KEY_FRAGMENTS = {
+    "password",
+    "token",
+    "secret",
+    "authorization",
+    "api_key",
+    "apikey",
+    "jwt",
+    "cookie",
+}
+AUDIT_STRING_REDACTION_PATTERNS = [
+    re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9._-]{8,}\.[A-Za-z0-9._-]{8,}\b"),
+    re.compile(r"\bsk_[A-Za-z0-9]{12,}\b", re.I),
+    re.compile(r"\bAIza[0-9A-Za-z\-_]{20,}\b"),
+]
 
 
 def utcnow() -> datetime:
@@ -329,6 +344,50 @@ def public_document(document: dict[str, Any], *, exclude: set[str] | None = None
     for field_name in exclude or set():
         serialized.pop(field_name, None)
     return serialized
+
+
+def _contains_secret_key_fragment(key: str) -> bool:
+    normalized = key.strip().lower()
+    return any(fragment in normalized for fragment in AUDIT_SECRET_KEY_FRAGMENTS)
+
+
+def _redact_audit_string(value: str) -> str:
+    redacted = value
+    for pattern in AUDIT_STRING_REDACTION_PATTERNS:
+        redacted = pattern.sub("[redacted]", redacted)
+    return redact_sensitive_data(redacted)
+
+
+def _audit_safe_value(value: Any, *, key_hint: str = "") -> Any:
+    if _contains_secret_key_fragment(key_hint):
+        return "[redacted]"
+    if isinstance(value, dict):
+        return {
+            str(key): _audit_safe_value(item, key_hint=str(key))
+            for key, item in list(value.items())[:100]
+        }
+    if isinstance(value, list):
+        return [_audit_safe_value(item, key_hint=key_hint) for item in value[:100]]
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return normalized
+        return _redact_audit_string(normalized[:2_000])
+    return serialize_value(value)
+
+
+def _extract_policy_names(*sources: Any) -> list[str]:
+    names: list[str] = []
+    for source in sources:
+        if isinstance(source, list):
+            for item in source:
+                if isinstance(item, dict):
+                    candidate = str(item.get("policy_name") or item.get("name") or "").strip()
+                else:
+                    candidate = str(item or "").strip()
+                if candidate:
+                    names.append(candidate)
+    return sorted(dict.fromkeys(names))
 
 
 async def next_numeric_id(
@@ -1109,6 +1168,39 @@ async def record_audit_event(
     workspace_id = workspace_id_for(current_user)
     user_id = user_id_for(current_user)
     now = utcnow()
+    safe_metadata = _audit_safe_value(metadata or {}, key_hint="metadata") if metadata else {}
+    safe_old_value = _audit_safe_value(old_value, key_hint="old_value")
+    safe_new_value = _audit_safe_value(new_value, key_hint="new_value")
+    request_id = str(
+        (metadata or {}).get("request_id")
+        or getattr(request.state, "request_id", "")
+        or ((metadata or {}).get("details") or {}).get("request_id")
+        or ""
+    ).strip() or None
+    matched_policies = _extract_policy_names(
+        (metadata or {}).get("matched_policies"),
+        (metadata or {}).get("policy_matches"),
+        ((metadata or {}).get("security") or {}).get("matched_policies"),
+        ((metadata or {}).get("security_enforcement") or {}).get("policy_matches"),
+        (new_value or {}).get("matched_policies") if isinstance(new_value, dict) else None,
+    )
+    security_metadata = (metadata or {}).get("security") if isinstance((metadata or {}).get("security"), dict) else {}
+    risk_score = normalize_score_100(
+        (metadata or {}).get("risk_score"),
+        (metadata or {}).get("threat_score"),
+        security_metadata.get("risk_score"),
+        (new_value or {}).get("risk_score") if isinstance(new_value, dict) else None,
+    )
+    decision = str(
+        (metadata or {}).get("decision")
+        or security_metadata.get("decision")
+        or ((new_value or {}).get("decision") if isinstance(new_value, dict) else "")
+        or ((new_value or {}).get("status") if isinstance(new_value, dict) else "")
+        or ""
+    ).strip() or None
+    prompt_preview = str((metadata or {}).get("prompt_preview") or security_metadata.get("prompt_preview") or "").strip()
+    provider = str((metadata or {}).get("provider") or "").strip() or None
+    model = str((metadata or {}).get("model") or "").strip() or None
     document = {
         "id": await next_numeric_id(
             request,
@@ -1117,18 +1209,27 @@ async def record_audit_event(
             fallback_items=_fallback_store["audit_logs"],
         ),
         "workspace_id": workspace_id,
+        "org_id": workspace_id,
         "user_id": user_id,
         "timestamp": now,
         "created_at": now,
         "actor": email_for(current_user),
-        "actor_type": "USER",
+        "actor_type": "ADMIN" if bool(current_user.get("is_admin")) else "USER",
         "action": action,
+        "event_type": action,
         "resource": resource,
         "ip_address": client_ip_for(request),
         "severity": normalize_audit_severity(severity),
-        "old_value": old_value,
-        "new_value": new_value,
-        "metadata": metadata or {},
+        "old_value": safe_old_value,
+        "new_value": safe_new_value,
+        "metadata": safe_metadata,
+        "request_id": request_id,
+        "decision": decision,
+        "risk_score": risk_score,
+        "matched_policies": matched_policies,
+        "provider": provider,
+        "model": model,
+        "prompt_preview": _redact_audit_string(prompt_preview[:500]) if prompt_preview else None,
     }
 
     collection = collection_from_request(request, "audit_logs")
@@ -1508,6 +1609,78 @@ def render_remediations_csv(rows: list[dict[str, Any]]) -> str:
     return buffer.getvalue()
 
 
+async def record_security_findings_audit_events(
+    request: Request,
+    current_user: dict[str, Any],
+    *,
+    scan_result: dict[str, Any],
+    resource: str,
+    provider: str,
+    model: str,
+    prompt_preview: str,
+    request_id: str,
+) -> None:
+    security_enforcement = scan_result.get("security_enforcement") if isinstance(scan_result.get("security_enforcement"), dict) else {}
+    policy_matches = security_enforcement.get("policy_matches") if isinstance(security_enforcement.get("policy_matches"), list) else []
+    policy_names = _extract_policy_names(policy_matches, scan_result.get("matched_policies"))
+    threat_types = {
+        normalize_upper_token(scan_result.get("threat_type")),
+        *(normalize_upper_token(item) for item in (scan_result.get("threat_types") or [])),
+    }
+    threat_types.discard("")
+    threat_types.discard("NONE")
+    detected_categories = {
+        str(item or "").strip().lower()
+        for item in (scan_result.get("detected_categories") or [])
+        if str(item or "").strip()
+    }
+    tool_interception = security_enforcement.get("tool_interception") if isinstance(security_enforcement.get("tool_interception"), dict) else {}
+    status_value = normalize_log_status(scan_result.get("status"))
+    decision_value = str(scan_result.get("decision") or "").strip().lower()
+    risk_score = normalize_score_100(scan_result.get("risk_score"), scan_result.get("threat_score"))
+    base_metadata = {
+        "request_id": request_id,
+        "provider": provider,
+        "model": model,
+        "prompt_preview": prompt_preview,
+        "decision": decision_value,
+        "risk_score": risk_score,
+        "matched_policies": policy_names,
+        "detected_categories": sorted(detected_categories),
+    }
+
+    async def _emit(action: str, severity: str = "WARNING", extra: dict[str, Any] | None = None) -> None:
+        await record_audit_event(
+            request,
+            current_user=current_user,
+            action=action,
+            resource=resource,
+            severity=severity,
+            metadata={**base_metadata, **(extra or {})},
+        )
+
+    if status_value == "BLOCKED" or decision_value == "block":
+        await _emit("policy_intercepted", severity="CRITICAL")
+    if "PROMPT_INJECTION" in threat_types:
+        await _emit("prompt_injection_detected", severity="CRITICAL" if status_value == "BLOCKED" else "WARNING")
+    if "DATA_LEAK" in threat_types or "PII_EXPOSURE" in threat_types or any("pii" in name.lower() for name in policy_names):
+        await _emit("pii_detected", severity="CRITICAL" if status_value == "BLOCKED" else "WARNING")
+    if "financial_action" in detected_categories or any("financial" in name.lower() or "aml" in name.lower() or "trade" in name.lower() for name in policy_names):
+        await _emit("financial_risk_detected", severity="CRITICAL" if status_value == "BLOCKED" else "WARNING")
+    if "tool_call" in detected_categories or bool(tool_interception.get("tool_present")) or bool(tool_interception.get("intercepted")):
+        await _emit(
+            "tool_call_flagged",
+            severity="CRITICAL" if bool(tool_interception.get("intercepted")) else "WARNING",
+            extra={"tool_interception": tool_interception},
+        )
+    if "external_content" in detected_categories or "webpage" in detected_categories or "tool_output" in detected_categories or any("indirect" in name.lower() for name in policy_names):
+        await _emit("indirect_injection_detected", severity="CRITICAL" if status_value == "BLOCKED" else "WARNING")
+    if bool(scan_result.get("requires_2fa")) or bool(tool_interception.get("requires_2fa")):
+        await _emit("mfa_required", severity="CRITICAL")
+    if bool(scan_result.get("review_required")) or bool(security_enforcement.get("review_required")):
+        await _emit("human_review_required", severity="CRITICAL")
+
+
 async def get_usage_summary(request: Request, current_user: dict[str, Any]) -> dict[str, Any]:
     logs = await load_workspace_logs(request, current_user)
     now = utcnow()
@@ -1871,7 +2044,7 @@ async def persist_scan_result(
     await record_audit_event(
         request,
         current_user=current_user,
-        action="SCAN_EXECUTED",
+        action="scan_executed",
         resource="scan",
         severity="CRITICAL" if status in {"BLOCKED", "REDACTED"} else "INFO",
         new_value={
@@ -1884,7 +2057,21 @@ async def persist_scan_result(
             "model": model,
             "security_tier": security_tier,
             "api_key_id": api_key_id,
+            "prompt_preview": prompt,
+            "decision": scan_result.get("decision"),
+            "risk_score": risk_score,
+            "matched_policies": _extract_policy_names(policy_matches),
         },
+    )
+    await record_security_findings_audit_events(
+        request,
+        current_user,
+        scan_result=scan_result,
+        resource="scan",
+        provider=provider,
+        model=model,
+        prompt_preview=prompt,
+        request_id=request_id,
     )
 
     return public_log

@@ -80,9 +80,13 @@ async function refreshAccessTokenOnce(): Promise<string | null> {
   return refreshInFlight;
 }
 
-function buildHeaders(initHeaders: HeadersInit | undefined, accessToken: string | null): Headers {
+function buildHeaders(initHeaders: HeadersInit | undefined, accessToken: string | null, body?: BodyInit | null): Headers {
   const headers = new Headers(initHeaders || {});
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+  if (body && !(body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  if (!headers.has('Accept')) headers.set('Accept', 'application/json');
   return headers;
 }
 
@@ -103,6 +107,23 @@ function createSyntheticErrorResponse(status: number, message: string): Response
   );
 }
 
+function createSyntheticTimeoutResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      error: {
+        code: 'request_timeout',
+        message: 'Request timed out before the backend responded.',
+      },
+      detail: 'Request timed out before the backend responded.',
+    }),
+    {
+      status: 504,
+      statusText: 'Request Timeout',
+      headers: { 'Content-Type': 'application/json' },
+    },
+  );
+}
+
 export async function authedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   let accessToken = getAccessToken();
   const refreshToken = getRefreshToken();
@@ -118,20 +139,19 @@ export async function authedFetch(input: RequestInfo | URL, init?: RequestInit):
 
   const firstInit: RequestInit = {
     ...(init || {}),
-    headers: buildHeaders(init?.headers, accessToken),
+    headers: buildHeaders(init?.headers, accessToken, init?.body),
     credentials: init?.credentials ?? 'include',
   };
 
   let res: Response;
   try {
     res = await fetch(resolveRequestTarget(input), firstInit);
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return createSyntheticTimeoutResponse();
+    }
     clearSessionAndRedirect('backend-connection-lost');
     return createSyntheticErrorResponse(503, 'Backend connection lost.');
-  }
-  if (res.status === 403) {
-    clearSessionAndRedirect('authentication-failed');
-    return res;
   }
   if (res.status !== 401) return res;
 
@@ -144,16 +164,19 @@ export async function authedFetch(input: RequestInfo | URL, init?: RequestInit):
 
   const retryInit: RequestInit = {
     ...(init || {}),
-    headers: buildHeaders(init?.headers, refreshed),
+    headers: buildHeaders(init?.headers, refreshed, init?.body),
     credentials: init?.credentials ?? 'include',
   };
   try {
     res = await fetch(resolveRequestTarget(input), retryInit);
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return createSyntheticTimeoutResponse();
+    }
     clearSessionAndRedirect('backend-connection-lost');
     return createSyntheticErrorResponse(503, 'Backend connection lost.');
   }
-  if (res.status === 401 || res.status === 403) {
+  if (res.status === 401) {
     clearSessionAndRedirect('session-expired');
   }
   return res;

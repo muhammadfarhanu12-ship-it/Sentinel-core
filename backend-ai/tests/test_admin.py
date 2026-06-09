@@ -124,9 +124,13 @@ def test_admin_routes_reject_missing_and_user_tokens(client, db_session):
 
     missing = client.get("/api/v1/admin/metrics")
     wrong_token = client.get("/api/v1/admin/metrics", headers=auth_headers(user_token))
+    missing_audit = client.get("/api/v1/admin/audit-logs")
+    wrong_audit = client.get("/api/v1/admin/audit-logs", headers=auth_headers(user_token))
 
     assert missing.status_code == 401
     assert wrong_token.status_code == 401
+    assert missing_audit.status_code == 401
+    assert wrong_audit.status_code == 401
 
 
 def test_admin_can_manage_users_logs_metrics_and_api_keys(client, db_session):
@@ -156,6 +160,7 @@ def test_admin_can_manage_users_logs_metrics_and_api_keys(client, db_session):
     assert any(item["email"] == user.email for item in users_response.json()["data"])
     assert logs_response.json()["data"][0]["user_email"] == user.email
     assert keys_response.json()["data"][0]["user_email"] == user.email
+    assert keys_response.json()["data"][0].get("key") in {None, ""}
 
     filtered_logs_response = client.get("/api/v1/admin/logs?risk_level=high", headers=headers)
     filtered_keys_response = client.get("/api/v1/admin/api-keys?status=ACTIVE", headers=headers)

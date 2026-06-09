@@ -1,10 +1,14 @@
-import { KeyRound, LayoutDashboard, LockKeyhole, ScrollText, Settings, Users } from 'lucide-react';
+import { Activity, AlertTriangle, FileWarning, KeyRound, LayoutDashboard, LockKeyhole, ScrollText, Settings, ShieldAlert, Users } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 const items = [
   { to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/admin/metrics', label: 'Usage Analytics', icon: Activity },
   { to: '/admin/users', label: 'Users', icon: Users },
-  { to: '/admin/logs', label: 'Logs', icon: ScrollText },
+  { to: '/admin/logs', label: 'Live Logs', icon: ScrollText },
+  { to: '/admin/threats', label: 'Threats', icon: ShieldAlert },
+  { to: '/admin/audit-logs', label: 'Audit Logs', icon: AlertTriangle },
+  { to: '/admin/reports', label: 'Reports & Alerts', icon: FileWarning },
   { to: '/admin/api-keys', label: 'API Keys', icon: KeyRound },
   { to: '/admin/settings', label: 'Settings', icon: Settings },
 ];

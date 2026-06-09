@@ -33,7 +33,7 @@ TIER_LIMITS: dict[str, TierLimits] = {
         allowed_security_tiers=frozenset({"FREE"}),
         allowed_models={
             "local": frozenset({"local"}),
-            "gemini": frozenset({"gemini-3.1-pro"}),
+            "gemini": frozenset({"gemini-1.5-flash"}),
         },
         features=frozenset({"basic_scanning", "pii_scan", "basic_audit"}),
     ),
@@ -47,8 +47,8 @@ TIER_LIMITS: dict[str, TierLimits] = {
         allowed_security_tiers=frozenset({"FREE", "PRO"}),
         allowed_models={
             "local": frozenset({"local"}),
-            "openai": frozenset({"gpt-5.4"}),
-            "gemini": frozenset({"gemini-3.1-pro"}),
+            "openai": frozenset({"gpt-4o-mini", "gpt-4o"}),
+            "gemini": frozenset({"gemini-1.5-flash", "gemini-1.5-pro"}),
         },
         features=frozenset({"advanced_scanning", "indirect_injection", "team_dashboard", "email_alerts"}),
     ),
@@ -62,9 +62,9 @@ TIER_LIMITS: dict[str, TierLimits] = {
         allowed_security_tiers=frozenset({"FREE", "PRO", "BUSINESS"}),
         allowed_models={
             "local": frozenset({"local"}),
-            "openai": frozenset({"gpt-5.4"}),
-            "gemini": frozenset({"gemini-3.1-pro"}),
-            "anthropic": frozenset({"claude-4.6"}),
+            "openai": frozenset({"gpt-4o-mini", "gpt-4o", "gpt-4.1"}),
+            "gemini": frozenset({"gemini-1.5-flash", "gemini-1.5-pro"}),
+            "anthropic": frozenset(),
         },
         features=frozenset({"enterprise_policy", "tool_interception", "mfa_2fa", "human_review", "long_retention"}),
     ),

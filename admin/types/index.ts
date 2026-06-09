@@ -19,10 +19,17 @@ export type AdminMetrics = {
   quarantined_api_keys: number;
   avg_latency_ms: number;
   requests_last_7_days?: AdminMetricsPoint[];
+  threat_activity_feed?: Array<Record<string, unknown>>;
+  policy_trigger_counts?: Record<string, number>;
+  attack_severity_chart?: Array<Record<string, unknown>>;
+  tool_interception_metrics?: Record<string, unknown>;
+  leak_prevention_metrics?: Record<string, unknown>;
+  top_attack_signatures?: Array<Record<string, unknown>>;
+  user_risk_heatmap?: Array<Record<string, unknown>>;
 };
 
 export type AdminUser = {
-  id: number;
+  id: string | number;
   email: string;
   tier: string;
   organization_name: string | null;
@@ -34,7 +41,7 @@ export type AdminUser = {
 };
 
 export type AdminLog = {
-  id: number;
+  id: string | number;
   timestamp: string;
   created_at?: string | null;
   api_key_id?: number | null;
@@ -55,11 +62,18 @@ export type AdminLog = {
   ip_address?: string | null;
   is_quarantined?: boolean;
   raw_payload?: unknown;
+  severity?: string | null;
+  attack_signature?: string | null;
+  requires_2fa?: boolean;
+  review_required?: boolean;
+  policy_matches?: Array<Record<string, unknown>> | null;
+  output_findings?: Array<Record<string, unknown>> | null;
+  tool_interception?: Record<string, unknown> | null;
 };
 
 export type AdminApiKey = {
-  id: number;
-  user_id: number;
+  id: string | number;
+  user_id: string | number;
   user_email: string;
   name: string;
   prefix?: string | null;
@@ -84,6 +98,48 @@ export type AdminSettings = {
   updated_at: string;
 };
 
+export type AdminAuditLog = {
+  id: string | number;
+  timestamp: string;
+  actor?: string | null;
+  actor_type?: string | null;
+  action: string;
+  event_type?: string | null;
+  resource?: string | null;
+  severity?: string | null;
+  ip_address?: string | null;
+  request_id?: string | null;
+  decision?: string | null;
+  risk_score?: number | null;
+  matched_policies?: string[];
+  provider?: string | null;
+  model?: string | null;
+  prompt_preview?: string | null;
+  metadata?: Record<string, unknown> | null;
+  old_value?: unknown;
+  new_value?: unknown;
+};
+
+export type AdminReportSummary = {
+  summary: {
+    blocked_attacks: number;
+    prompt_injection_attempts: number;
+    high_risk_financial_operations: number;
+    suspicious_tool_calls: number;
+    pii_exposure_attempts: number;
+    usage_spikes: number;
+    policy_violations: number;
+    provider_failures: number;
+    model_denied_events: number;
+    quota_exceeded_events: number;
+  };
+  recent_alerts: Array<Record<string, unknown>>;
+  realtime_limitations: {
+    streaming_alert_bus: boolean;
+    note: string;
+  };
+};
+
 export type AdminUsersQuery = {
   page?: number;
   pageSize?: number;
@@ -94,6 +150,15 @@ export type AdminLogsQuery = {
   page?: number;
   pageSize?: number;
   q?: string;
+};
+
+export type AdminAuditLogsQuery = {
+  page?: number;
+  pageSize?: number;
+  q?: string;
+  severity?: string;
+  startDate?: string;
+  endDate?: string;
 };
 
 export type AdminApiKeysQuery = {

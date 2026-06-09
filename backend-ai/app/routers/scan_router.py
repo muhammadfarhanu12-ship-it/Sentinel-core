@@ -97,7 +97,7 @@ class ScanRequest(BaseModel):
     prompt: str | None = Field(default=None, min_length=1)
     text: str | None = Field(default=None, min_length=1)
     provider: str = Field(default="gemini", max_length=64)
-    model: str = Field(default="gemini-3.1-pro", max_length=128)
+    model: str = Field(default="gemini-1.5-flash", max_length=128)
     securityTier: str | None = Field(default=None, max_length=32)
     security_tier: str | None = Field(default=None, max_length=32)
     session_id: str | None = Field(default=None, max_length=128)

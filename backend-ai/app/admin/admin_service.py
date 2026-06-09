@@ -32,6 +32,7 @@ from app.admin.admin_schema import (
 from app.middleware.rate_limiter import check_rate_limit
 from app.security.roles import ADMIN_ROLE, is_admin_role
 from app.services import admin_login_notification_service
+from app.services.dashboard_service import record_audit_event
 from app.utils.api_key_generator import generate_api_key
 from app.utils.hashing import get_password_hash, verify_password
 from app.utils.token_generator import create_access_token
@@ -84,6 +85,35 @@ class AdminService:
             return ObjectId(value)
         except (InvalidId, TypeError) as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found") from exc
+
+    @staticmethod
+    def _numeric_identifier(value: str | int | None) -> int | None:
+        try:
+            if value is None:
+                return None
+            return int(str(value).strip())
+        except (TypeError, ValueError):
+            return None
+
+    async def _find_user_by_identifier(self, user_id: str | int) -> dict[str, Any] | None:
+        raw_value = str(user_id).strip()
+        if ObjectId.is_valid(raw_value):
+            user = await self.db["users"].find_one({"_id": ObjectId(raw_value)})
+            if user is not None:
+                return user
+        return await self.db["users"].find_one({"id": raw_value})
+
+    async def _find_key_by_identifier(self, key_id: str | int) -> dict[str, Any] | None:
+        raw_value = str(key_id).strip()
+        numeric_value = self._numeric_identifier(key_id)
+        clauses: list[dict[str, Any]] = []
+        if numeric_value is not None:
+            clauses.extend([{"id": numeric_value}, {"id": str(numeric_value)}])
+        if ObjectId.is_valid(raw_value):
+            clauses.append({"_id": ObjectId(raw_value)})
+        if not clauses:
+            return None
+        return await self.db["keys"].find_one({"$or": clauses})
 
     async def _record_failed_login_attempt(
         self,
@@ -200,10 +230,58 @@ class AdminService:
             )
 
     async def _get_user_or_404(self, user_id: str) -> dict[str, Any]:
-        user = await self.db["users"].find_one({"_id": self._parse_object_id(user_id)})
+        user = await self._find_user_by_identifier(user_id)
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
         return user
+
+    @staticmethod
+    def _audit_actor_from_admin(admin: dict[str, Any] | None, *, fallback_email: str | None = None) -> dict[str, Any]:
+        email = str((admin or {}).get("email") or fallback_email or "admin@sentinel.local").strip().lower()
+        organization_name = str((admin or {}).get("organization_name") or "").strip()
+        if not organization_name:
+            organization_name = email.split("@", 1)[1] if "@" in email else "sentinel.local"
+        return {
+            "id": str((admin or {}).get("_id") or (admin or {}).get("id") or email),
+            "_id": str((admin or {}).get("_id") or (admin or {}).get("id") or email),
+            "email": email,
+            "organization_name": organization_name,
+            "tier": str((admin or {}).get("tier") or "BUSINESS"),
+            "role": ADMIN_ROLE,
+            "is_admin": True,
+            "is_active": True,
+            "is_verified": True,
+            "monthly_limit": 0,
+        }
+
+    async def _record_admin_audit(
+        self,
+        request: Request,
+        *,
+        action: str,
+        admin: dict[str, Any] | None = None,
+        fallback_email: str | None = None,
+        severity: str = "INFO",
+        resource: str = "admin",
+        metadata: dict[str, Any] | None = None,
+        new_value: Any = None,
+    ) -> None:
+        try:
+            await record_audit_event(
+                request,
+                current_user=self._audit_actor_from_admin(admin, fallback_email=fallback_email),
+                action=action,
+                resource=resource,
+                severity=severity,
+                metadata={
+                    "request_id": getattr(request.state, "request_id", None),
+                    "ip_address": self._get_client_ip(request),
+                    **(metadata or {}),
+                },
+                new_value=new_value,
+            )
+        except Exception:
+            logger.exception("Failed to persist admin audit action=%s", action)
 
     async def login(self, email: str, password: str, request: Request) -> AdminTokenResponse:
         normalized_email = self._normalize_email(email)
@@ -223,6 +301,13 @@ class AdminService:
                 ip_address=ip_address,
                 user_agent=user_agent,
             )
+            await self._record_admin_audit(
+                request,
+                action="admin_login_failure",
+                fallback_email=normalized_email,
+                severity="WARNING",
+                metadata={"reason": "invalid_credentials"},
+            )
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin credentials")
         if not bool(user.get("is_active", True)):
             await self._capture_failed_login_attempt(
@@ -230,12 +315,26 @@ class AdminService:
                 ip_address=ip_address,
                 user_agent=user_agent,
             )
+            await self._record_admin_audit(
+                request,
+                action="admin_login_failure",
+                admin=user,
+                severity="WARNING",
+                metadata={"reason": "inactive_admin"},
+            )
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin account is inactive")
         if not is_admin_role(user.get("role")):
             await self._capture_failed_login_attempt(
                 normalized_email=normalized_email,
                 ip_address=ip_address,
                 user_agent=user_agent,
+            )
+            await self._record_admin_audit(
+                request,
+                action="admin_login_failure",
+                admin=user,
+                severity="WARNING",
+                metadata={"reason": "admin_access_required"},
             )
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
@@ -264,6 +363,13 @@ class AdminService:
                 "user_id": str(user["_id"]),
                 "role": ADMIN_ROLE,
             }
+        )
+        await self._record_admin_audit(
+            request,
+            action="admin_login_success",
+            admin=user,
+            severity="INFO",
+            metadata={"user_agent": user_agent},
         )
         return AdminTokenResponse(access_token=access_token, role=ADMIN_ROLE)
 
@@ -387,8 +493,8 @@ class AdminService:
         total_users = await self.db["users"].count_documents({})
         active_users = await self.db["users"].count_documents({"is_active": True})
         suspended_users = max(0, total_users - active_users)
-        total_requests = await self.db["security_logs"].count_documents({})
-        threats_blocked = await self.db["security_logs"].count_documents(
+        total_requests = await self.db["logs"].count_documents({})
+        threats_blocked = await self.db["logs"].count_documents(
             {
                 "$or": [
                     {"status": {"$in": ["BLOCKED", "REDACTED"]}},
@@ -396,16 +502,16 @@ class AdminService:
                 ]
             }
         )
-        active_api_keys = await self.db["api_keys"].count_documents({"status": "active"})
-        quarantined_api_keys = await self.db["api_keys"].count_documents({"status": "quarantined"})
+        active_api_keys = await self.db["keys"].count_documents({"status": {"$in": ["ACTIVE", "active"]}})
+        quarantined_api_keys = await self.db["keys"].count_documents({"status": {"$in": ["QUARANTINED", "quarantined"]}})
 
-        avg_latency_result = await self.db["security_logs"].aggregate(
+        avg_latency_result = await self.db["logs"].aggregate(
             [{"$group": {"_id": None, "avg": {"$avg": "$latency_ms"}}}]
         ).to_list(length=1)
         avg_latency_ms = float(avg_latency_result[0]["avg"]) if avg_latency_result else 0.0
 
         start = self._utcnow() - timedelta(days=7)
-        series_rows = await self.db["security_logs"].aggregate(
+        series_rows = await self.db["logs"].aggregate(
             [
                 {"$match": {"timestamp": {"$gte": start}}},
                 {
@@ -436,7 +542,7 @@ class AdminService:
             for row in series_rows
         ]
 
-        recent_logs = await self.db["security_logs"].find(
+        recent_logs = await self.db["logs"].find(
             {},
             projection={
                 "timestamp": 1,
@@ -572,7 +678,7 @@ class AdminService:
         except Exception:
             database_status = "error"
 
-        latest_event = await self.db["security_logs"].find_one(sort=[("timestamp", -1)], projection={"timestamp": 1})
+        latest_event = await self.db["logs"].find_one(sort=[("timestamp", -1)], projection={"timestamp": 1})
         admin_count = await self.db["users"].count_documents({"role": ADMIN_ROLE})
 
         return AdminSystemStatusResponse(
@@ -582,6 +688,188 @@ class AdminService:
             admin_count=int(admin_count),
             last_security_event_at=latest_event.get("timestamp") if latest_event else None,
         )
+
+    async def list_audit_events(
+        self,
+        admin: dict[str, Any],
+        limit: int,
+        offset: int,
+        q: str | None,
+        severity: str | None,
+        start_date: datetime | None,
+        end_date: datetime | None,
+    ) -> list[dict[str, Any]]:
+        _ = admin
+        query: dict[str, Any] = {}
+        if q:
+            safe_pattern = q.strip()
+            query["$or"] = [
+                {"actor": {"$regex": safe_pattern, "$options": "i"}},
+                {"action": {"$regex": safe_pattern, "$options": "i"}},
+                {"resource": {"$regex": safe_pattern, "$options": "i"}},
+                {"event_type": {"$regex": safe_pattern, "$options": "i"}},
+            ]
+        if severity:
+            query["severity"] = str(severity).upper()
+        if start_date or end_date:
+            query["timestamp"] = {}
+            if start_date:
+                query["timestamp"]["$gte"] = start_date
+            if end_date:
+                query["timestamp"]["$lte"] = end_date
+
+        cursor = self.db["audit_logs"].find(query).sort("timestamp", -1).skip(offset).limit(limit)
+        documents = await cursor.to_list(length=limit)
+        return [
+            {
+                "id": str(item.get("id") or item.get("_id")),
+                "timestamp": item.get("timestamp"),
+                "actor": item.get("actor"),
+                "actor_type": item.get("actor_type"),
+                "action": item.get("action"),
+                "event_type": item.get("event_type") or item.get("action"),
+                "resource": item.get("resource"),
+                "severity": item.get("severity"),
+                "ip_address": item.get("ip_address"),
+                "request_id": item.get("request_id"),
+                "decision": item.get("decision"),
+                "risk_score": item.get("risk_score"),
+                "matched_policies": item.get("matched_policies") or [],
+                "provider": item.get("provider"),
+                "model": item.get("model"),
+                "prompt_preview": item.get("prompt_preview"),
+                "metadata": item.get("metadata"),
+                "old_value": item.get("old_value"),
+                "new_value": item.get("new_value"),
+            }
+            for item in documents
+        ]
+
+    async def get_report_summary(self, admin: dict[str, Any]) -> dict[str, Any]:
+        _ = admin
+        logs = await self.db["logs"].find({}, projection={
+            "timestamp": 1,
+            "status": 1,
+            "threat_type": 1,
+            "threat_types": 1,
+            "risk_score": 1,
+            "policy_matches": 1,
+            "tool_interception": 1,
+            "provider": 1,
+            "model": 1,
+            "request_id": 1,
+        }).sort("timestamp", -1).limit(2000).to_list(length=2000)
+        audit_events = await self.db["audit_logs"].find({}, projection={
+            "timestamp": 1,
+            "event_type": 1,
+            "action": 1,
+            "severity": 1,
+            "request_id": 1,
+            "provider": 1,
+            "model": 1,
+            "risk_score": 1,
+            "decision": 1,
+            "matched_policies": 1,
+        }).sort("timestamp", -1).limit(2000).to_list(length=2000)
+
+        blocked_attacks = 0
+        prompt_injection_attempts = 0
+        high_risk_financial_operations = 0
+        suspicious_tool_calls = 0
+        pii_exposure_attempts = 0
+        provider_failures = 0
+        model_denied_events = 0
+        quota_exceeded_events = 0
+        usage_spikes = 0
+        policy_violations = 0
+        timeline: list[dict[str, Any]] = []
+        request_buckets: dict[str, int] = {}
+
+        for log in logs:
+            timestamp = log.get("timestamp")
+            day_key = timestamp.date().isoformat() if isinstance(timestamp, datetime) else "unknown"
+            request_buckets[day_key] = int(request_buckets.get(day_key, 0)) + 1
+            status_value = str(log.get("status") or "").upper()
+            threat_types = {str(item or "").upper() for item in (log.get("threat_types") or [])}
+            threat_type = str(log.get("threat_type") or "").upper()
+            policy_names = [
+                str(item.get("policy_name") or "")
+                for item in (log.get("policy_matches") or [])
+                if isinstance(item, dict)
+            ]
+            tool_interception = log.get("tool_interception") if isinstance(log.get("tool_interception"), dict) else {}
+
+            if status_value == "BLOCKED":
+                blocked_attacks += 1
+            if "PROMPT_INJECTION" in threat_types or threat_type == "PROMPT_INJECTION":
+                prompt_injection_attempts += 1
+            if any("financial" in name.lower() or "aml" in name.lower() or "trade" in name.lower() for name in policy_names):
+                high_risk_financial_operations += 1
+            if tool_interception.get("tool_present") or tool_interception.get("intercepted"):
+                suspicious_tool_calls += 1
+            if "DATA_LEAK" in threat_types or "PII_EXPOSURE" in threat_types or threat_type in {"DATA_LEAK", "PII_EXPOSURE"}:
+                pii_exposure_attempts += 1
+            if status_value in {"BLOCKED", "REDACTED"} and policy_names:
+                policy_violations += 1
+
+        if request_buckets:
+            average_daily_requests = sum(request_buckets.values()) / max(len(request_buckets), 1)
+            usage_spikes = sum(1 for value in request_buckets.values() if value > max(average_daily_requests * 2, 25))
+
+        for event in audit_events:
+            event_name = str(event.get("event_type") or event.get("action") or "").lower()
+            if event_name in {"provider_error", "provider_not_configured", "provider_auth_error", "provider_model_unavailable"}:
+                provider_failures += 1
+            if event_name == "model_denied":
+                model_denied_events += 1
+            if event_name == "quota_exceeded":
+                quota_exceeded_events += 1
+            if event_name in {
+                "gateway_request_blocked",
+                "provider_error",
+                "provider_not_configured",
+                "provider_auth_error",
+                "provider_model_unavailable",
+                "model_denied",
+                "quota_exceeded",
+                "policy_intercepted",
+                "pii_detected",
+                "financial_risk_detected",
+                "tool_call_flagged",
+            }:
+                timeline.append(
+                    {
+                        "timestamp": event.get("timestamp"),
+                        "event_type": event_name,
+                        "severity": event.get("severity"),
+                        "request_id": event.get("request_id"),
+                        "provider": event.get("provider"),
+                        "model": event.get("model"),
+                        "decision": event.get("decision"),
+                        "risk_score": event.get("risk_score"),
+                        "matched_policies": event.get("matched_policies") or [],
+                    }
+                )
+
+        return {
+            "summary": {
+                "blocked_attacks": blocked_attacks,
+                "prompt_injection_attempts": prompt_injection_attempts,
+                "high_risk_financial_operations": high_risk_financial_operations,
+                "suspicious_tool_calls": suspicious_tool_calls,
+                "pii_exposure_attempts": pii_exposure_attempts,
+                "usage_spikes": usage_spikes,
+                "policy_violations": policy_violations,
+                "provider_failures": provider_failures,
+                "model_denied_events": model_denied_events,
+                "quota_exceeded_events": quota_exceeded_events,
+            },
+            "recent_alerts": timeline[:50],
+            "realtime_limitations": {
+                "streaming_alert_bus": False,
+                "note": "Alerts are derived from persisted audit and gateway events. Dedicated real-time alert fanout is not fully implemented yet.",
+            },
+        }
 
     async def list_users(
         self,
@@ -612,8 +900,8 @@ class AdminService:
         payload: list[AdminUserSummary] = []
         for document in documents:
             user_id = str(document.get("_id"))
-            api_key_count = await self.db["api_keys"].count_documents({"user_id": user_id})
-            usage_count = await self.db["security_logs"].count_documents({"user_id": user_id})
+            api_key_count = await self.db["keys"].count_documents({"user_id": user_id})
+            usage_count = await self.db["logs"].count_documents({"user_id": user_id})
             payload.append(
                 AdminUserSummary(
                     id=user_id,
@@ -629,8 +917,7 @@ class AdminService:
             )
         return payload
 
-    async def delete_user(self, admin: dict[str, Any], user_id: str) -> dict[str, Any]:
-        _ = admin
+    async def delete_user(self, admin: dict[str, Any], user_id: str, request: Request | None = None) -> dict[str, Any]:
         oid = self._parse_object_id(user_id)
         target = await self.db["users"].find_one({"_id": oid})
         if target is None:
@@ -638,14 +925,21 @@ class AdminService:
 
         user_key = str(target.get("_id"))
         await self.db["users"].delete_one({"_id": oid})
-        await self.db["api_keys"].delete_many({"user_id": user_key})
-        await self.db["security_logs"].delete_many({"user_id": user_key})
+        await self.db["keys"].delete_many({"user_id": user_key})
+        await self.db["logs"].delete_many({"user_id": user_key})
         await self.db["notifications"].delete_many({"user_id": user_key})
-
+        if request is not None:
+            await self._record_admin_audit(
+                request,
+                action="admin_user_deleted",
+                admin=admin,
+                severity="WARNING",
+                resource="admin_user",
+                metadata={"target_user_id": user_key, "target_user_email": target.get("email")},
+            )
         return {"deleted": True, "user_id": user_key}
 
-    async def update_user_status(self, admin: dict[str, Any], user_id: str, payload: AdminUserStatusUpdate) -> AdminUserSummary:
-        _ = admin
+    async def update_user_status(self, admin: dict[str, Any], user_id: str, payload: AdminUserStatusUpdate, request: Request | None = None) -> AdminUserSummary:
         oid = self._parse_object_id(user_id)
         now = self._utcnow()
 
@@ -656,6 +950,16 @@ class AdminService:
         user = await self.db["users"].find_one({"_id": oid})
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        if request is not None:
+            await self._record_admin_audit(
+                request,
+                action="admin_user_status_updated",
+                admin=admin,
+                severity="WARNING" if not bool(payload.is_active) else "INFO",
+                resource="admin_user",
+                metadata={"target_user_id": str(user.get("_id")), "target_user_email": user.get("email")},
+                new_value={"is_active": bool(user.get("is_active", True))},
+            )
 
         return AdminUserSummary(
             id=str(user.get("_id")),
@@ -760,7 +1064,7 @@ class AdminService:
             only_quarantined=only_quarantined,
             only_threats=False,
         )
-        cursor = self.db["security_logs"].find(query).sort("timestamp", -1).skip(offset).limit(limit)
+        cursor = self.db["logs"].find(query).sort("timestamp", -1).skip(offset).limit(limit)
         documents = await cursor.to_list(length=limit)
         return [self._serialize_log(document) for document in documents]
 
@@ -784,7 +1088,7 @@ class AdminService:
             only_quarantined=only_quarantined,
             only_threats=True,
         )
-        cursor = self.db["security_logs"].find(query).sort("timestamp", -1).skip(offset).limit(limit)
+        cursor = self.db["logs"].find(query).sort("timestamp", -1).skip(offset).limit(limit)
         documents = await cursor.to_list(length=limit)
         return [self._serialize_log(document) for document in documents]
 
@@ -799,26 +1103,26 @@ class AdminService:
         _ = admin
         query: dict[str, Any] = {}
         if status:
-            query["status"] = status.lower()
+            query["status"] = {"$in": [status.upper(), status.lower()]}
         if q:
             safe_pattern = q.strip()
             query["$or"] = [{"name": {"$regex": safe_pattern, "$options": "i"}}, {"prefix": {"$regex": safe_pattern, "$options": "i"}}]
 
-        cursor = self.db["api_keys"].find(query).sort("created_at", -1).skip(offset).limit(limit)
+        cursor = self.db["keys"].find(query).sort("created_at", -1).skip(offset).limit(limit)
         docs = await cursor.to_list(length=limit)
 
         payload: list[AdminApiKeyResponse] = []
         for doc in docs:
             user_id = str(doc.get("user_id") or "")
-            user = await self.db["users"].find_one({"_id": self._parse_object_id(user_id)}) if ObjectId.is_valid(user_id) else None
+            user = await self._find_user_by_identifier(user_id)
             payload.append(
                 AdminApiKeyResponse(
-                    id=str(doc.get("_id")),
+                    id=str(doc.get("id") or doc.get("_id")),
                     user_id=user_id,
                     user_email=str((user or {}).get("email") or "unknown@example.com"),
                     name=str(doc.get("name") or "API Key"),
                     prefix=doc.get("prefix"),
-                    status=str(doc.get("status") or "active"),
+                    status=str(doc.get("status") or "ACTIVE").upper(),
                     usage_count=int(doc.get("usage_count") or 0),
                     last_used=doc.get("last_used"),
                     last_ip=doc.get("last_ip"),
@@ -828,28 +1132,29 @@ class AdminService:
             )
         return payload
 
-    async def create_gateway_api_key(self, admin: dict[str, Any], payload: AdminApiKeyCreateRequest) -> AdminApiKeyResponse:
-        _ = admin
+    async def create_gateway_api_key(self, admin: dict[str, Any], payload: AdminApiKeyCreateRequest, request: Request | None = None) -> AdminApiKeyResponse:
         user = await self._get_user_or_404(payload.user_id)
 
         raw_key = generate_api_key()
         now = self._utcnow()
+        public_id = int(now.timestamp() * 1000)
         document = {
+            "id": public_id,
             "user_id": str(user.get("_id")),
             "name": payload.name,
             "prefix": raw_key[:16],
             "key_hash": self._hash_token(raw_key),
-            "status": "active",
+            "status": "ACTIVE",
             "usage_count": 0,
             "last_used": None,
             "last_ip": None,
             "created_at": now,
             "updated_at": now,
         }
-        result = await self.db["api_keys"].insert_one(document)
+        await self.db["keys"].insert_one(document)
 
-        return AdminApiKeyResponse(
-            id=str(result.inserted_id),
+        response = AdminApiKeyResponse(
+            id=str(public_id),
             user_id=str(user.get("_id")),
             user_email=str(user.get("email") or ""),
             name=payload.name,
@@ -861,39 +1166,54 @@ class AdminService:
             created_at=now,
             key=raw_key,
         )
+        if request is not None:
+            await self._record_admin_audit(
+                request,
+                action="admin_api_key_created",
+                admin=admin,
+                severity="INFO",
+                resource="api_key",
+                metadata={"api_key_id": public_id, "target_user_id": str(user.get("_id")), "target_user_email": user.get("email")},
+            )
+        return response
 
-    async def revoke_gateway_api_key(self, admin: dict[str, Any], key_id: str) -> AdminApiKeyResponse:
-        _ = admin
-        oid = self._parse_object_id(key_id)
-
-        api_key = await self.db["api_keys"].find_one({"_id": oid})
+    async def revoke_gateway_api_key(self, admin: dict[str, Any], key_id: str, request: Request | None = None) -> AdminApiKeyResponse:
+        api_key = await self._find_key_by_identifier(key_id)
         if api_key is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
 
         now = self._utcnow()
-        await self.db["api_keys"].update_one(
-            {"_id": oid},
-            {"$set": {"status": "revoked", "updated_at": now}},
+        await self.db["keys"].update_one(
+            {"_id": api_key["_id"]},
+            {"$set": {"status": "REVOKED", "updated_at": now}},
         )
 
-        user = None
         user_id = str(api_key.get("user_id") or "")
-        if ObjectId.is_valid(user_id):
-            user = await self.db["users"].find_one({"_id": ObjectId(user_id)})
+        user = await self._find_user_by_identifier(user_id)
 
-        return AdminApiKeyResponse(
-            id=str(api_key.get("_id")),
+        response = AdminApiKeyResponse(
+            id=str(api_key.get("id") or api_key.get("_id")),
             user_id=user_id,
             user_email=str((user or {}).get("email") or "unknown@example.com"),
             name=str(api_key.get("name") or "API Key"),
             prefix=api_key.get("prefix"),
-            status="revoked",
+            status="REVOKED",
             usage_count=int(api_key.get("usage_count") or 0),
             last_used=api_key.get("last_used"),
             last_ip=api_key.get("last_ip"),
             created_at=api_key.get("created_at") or now,
             key=None,
         )
+        if request is not None:
+            await self._record_admin_audit(
+                request,
+                action="admin_api_key_revoked",
+                admin=admin,
+                severity="WARNING",
+                resource="api_key",
+                metadata={"api_key_id": response.id, "target_user_id": user_id, "target_user_email": response.user_email},
+            )
+        return response
 
     @staticmethod
     def _default_settings(now: datetime) -> dict[str, Any]:
@@ -933,7 +1253,7 @@ class AdminService:
             updated_at=doc.get("updated_at") or now,
         )
 
-    async def update_settings(self, admin: dict[str, Any], payload: AdminSettingsUpdateRequest) -> AdminSettingsResponse:
+    async def update_settings(self, admin: dict[str, Any], payload: AdminSettingsUpdateRequest, request: Request | None = None) -> AdminSettingsResponse:
         now = self._utcnow()
         update_doc = {
             "enable_gemini_module": payload.enable_gemini_module,
@@ -952,4 +1272,13 @@ class AdminService:
             {"$set": update_doc, "$setOnInsert": {"_singleton": True}},
             upsert=True,
         )
+        if request is not None:
+            await self._record_admin_audit(
+                request,
+                action="admin_settings_updated",
+                admin=admin,
+                severity="WARNING" if payload.ai_kill_switch_enabled else "INFO",
+                resource="admin_settings",
+                new_value=update_doc,
+            )
         return await self.get_settings(admin)

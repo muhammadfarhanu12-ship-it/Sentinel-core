@@ -142,7 +142,26 @@ async def _resolve_user_from_api_key(request: Request, raw_key: str) -> CurrentU
         "prefix": key_document.get("prefix"),
         "user_id": user_id,
     }
-    return _build_current_user_context(user)
+    current_user = _build_current_user_context(user)
+    try:
+        from app.services.dashboard_service import record_audit_event
+
+        await record_audit_event(
+            request,
+            current_user=current_user,
+            action="api_key_used",
+            resource="api_key",
+            severity="INFO",
+            metadata={
+                "request_id": getattr(request.state, "request_id", None),
+                "api_key_id": key_document.get("id"),
+                "api_key_prefix": key_document.get("prefix"),
+            },
+        )
+    except Exception:
+        # Auth should not fail because audit persistence is unavailable.
+        pass
+    return current_user
 
 
 async def get_current_user(request: Request, token: str = Depends(oauth2_scheme)):

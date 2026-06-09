@@ -65,13 +65,22 @@ class GeminiProvider(AIProvider):
             raise ProviderFailure("provider_unavailable", "Gemini is unavailable.", retryable=True) from exc
 
         if response.status_code in {401, 403}:
-            raise ProviderFailure("provider_auth_failed", "Gemini rejected the configured credentials.")
+            raise ProviderFailure("provider_auth_error", "Gemini rejected the configured credentials.")
         if response.status_code == 429:
             raise ProviderFailure("provider_rate_limited", "Gemini rate limit exceeded.", retryable=True)
+        if response.status_code == 404:
+            raise ProviderFailure("provider_model_unavailable", "Gemini model is unavailable for the configured account.")
         if response.status_code >= 500:
             raise ProviderFailure("provider_unavailable", "Gemini is temporarily unavailable.", retryable=True)
         if response.status_code >= 400:
             logger.warning("Gemini provider returned status=%s", response.status_code)
+            try:
+                error_payload = response.json()
+            except ValueError:
+                error_payload = {}
+            error_text = str(error_payload).lower()
+            if "model" in error_text and any(token in error_text for token in {"not found", "unsupported", "unavailable"}):
+                raise ProviderFailure("provider_model_unavailable", "Gemini model is unavailable for the configured account.")
             raise ProviderFailure("provider_error", "Gemini rejected the request.")
 
         body = response.json()

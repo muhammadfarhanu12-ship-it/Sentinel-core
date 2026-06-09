@@ -2,9 +2,12 @@ import api, { API_URL, buildAdminApiUrl, buildApiUrl } from './api';
 import type {
   AdminApiKey,
   AdminApiKeysQuery,
+  AdminAuditLog,
+  AdminAuditLogsQuery,
   AdminLog,
   AdminLoginPayload,
   AdminMetrics,
+  AdminReportSummary,
   AdminSettings,
   AdminUser,
   AdminUsersQuery,
@@ -268,12 +271,12 @@ export async function fetchAdminUsers(query: AdminUsersQuery = {}) {
   return unwrapEnvelope(response.data);
 }
 
-export async function updateAdminUserStatus(userId: number, isActive: boolean) {
+export async function updateAdminUserStatus(userId: string | number, isActive: boolean) {
   const response = await api.patch<ApiEnvelope<AdminUser>>(`/users/${userId}/status`, { is_active: isActive });
   return unwrapEnvelope(response.data);
 }
 
-export async function deleteAdminUser(userId: number) {
+export async function deleteAdminUser(userId: string | number) {
   const response = await api.delete<ApiEnvelope<{ deleted: boolean; user_id: number }>>(`/users/${userId}`);
   return unwrapEnvelope(response.data);
 }
@@ -287,6 +290,32 @@ export async function fetchAdminLogs(query: AdminLogsQuery = {}) {
   return unwrapEnvelope(response.data);
 }
 
+export async function fetchAdminThreats(query: AdminLogsQuery = {}) {
+  const qs = buildQuery({
+    ...pageToParams(query.page, query.pageSize),
+    q: query.q,
+  });
+  const response = await api.get<ApiEnvelope<AdminLog[]>>(`/threats${qs}`);
+  return unwrapEnvelope(response.data);
+}
+
+export async function fetchAdminAuditLogs(query: AdminAuditLogsQuery = {}) {
+  const qs = buildQuery({
+    ...pageToParams(query.page, query.pageSize),
+    q: query.q,
+    severity: query.severity,
+    start_date: query.startDate,
+    end_date: query.endDate,
+  });
+  const response = await api.get<ApiEnvelope<AdminAuditLog[]>>(`/audit-logs${qs}`);
+  return unwrapEnvelope(response.data);
+}
+
+export async function fetchAdminReports() {
+  const response = await api.get<ApiEnvelope<AdminReportSummary>>('/reports');
+  return unwrapEnvelope(response.data);
+}
+
 export async function fetchAdminApiKeys(query: AdminApiKeysQuery = {}) {
   const qs = buildQuery({
     ...pageToParams(query.page, query.pageSize),
@@ -296,12 +325,12 @@ export async function fetchAdminApiKeys(query: AdminApiKeysQuery = {}) {
   return unwrapEnvelope(response.data);
 }
 
-export async function createAdminApiKey(userId: number, name: string) {
+export async function createAdminApiKey(userId: string | number, name: string) {
   const response = await api.post<ApiEnvelope<AdminApiKey>>('/api-keys', { user_id: userId, name });
   return unwrapEnvelope(response.data);
 }
 
-export async function revokeAdminApiKey(keyId: number) {
+export async function revokeAdminApiKey(keyId: string | number) {
   const response = await api.delete<ApiEnvelope<AdminApiKey>>(`/api-keys/${keyId}`);
   return unwrapEnvelope(response.data);
 }

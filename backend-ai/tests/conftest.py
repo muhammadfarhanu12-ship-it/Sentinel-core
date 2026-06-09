@@ -266,7 +266,7 @@ class LegacyAdminService:
             for key in self.db.query(APIKey).all()[offset: offset + limit]
         ]
 
-    async def create_gateway_api_key(self, admin: dict[str, Any], payload: Any):
+    async def create_gateway_api_key(self, admin: dict[str, Any], payload: Any, request: Any | None = None):
         _ = admin
         user = self.db.query(User).filter(User.id == payload.user_id).first()
         raw_key = generate_api_key()
@@ -285,7 +285,7 @@ class LegacyAdminService:
             key=raw_key,
         )
 
-    async def revoke_gateway_api_key(self, admin: dict[str, Any], key_id: str):
+    async def revoke_gateway_api_key(self, admin: dict[str, Any], key_id: str, request: Any | None = None):
         _ = admin
         key = self.db.query(APIKey).filter(APIKey.id == int(key_id)).first()
         if key:
@@ -303,7 +303,7 @@ class LegacyAdminService:
             key=None,
         )
 
-    async def delete_user(self, admin: dict[str, Any], user_id: str):
+    async def delete_user(self, admin: dict[str, Any], user_id: str, request: Any | None = None):
         _ = admin
         user = self.db.query(User).filter(User.id == int(user_id)).first()
         if user:
@@ -312,7 +312,7 @@ class LegacyAdminService:
         self.db.commit()
         return {"deleted": True, "user_id": user_id}
 
-    async def update_user_status(self, admin: dict[str, Any], user_id: str, payload: Any):
+    async def update_user_status(self, admin: dict[str, Any], user_id: str, payload: Any, request: Any | None = None):
         _ = admin
         user = self.db.query(User).filter(User.id == int(user_id)).first()
         if user:
@@ -333,9 +333,58 @@ class LegacyAdminService:
             updated_at=datetime.now(timezone.utc),
         )
 
-    async def update_settings(self, admin: dict[str, Any], payload: Any) -> AdminSettingsResponse:
+    async def update_settings(self, admin: dict[str, Any], payload: Any, request: Any | None = None) -> AdminSettingsResponse:
         _ = admin
         return AdminSettingsResponse(**payload.model_dump(), updated_at=datetime.now(timezone.utc))
+
+    async def list_audit_events(self, admin: dict[str, Any], limit: int, offset: int, q: str | None, severity: str | None, start_date: Any, end_date: Any):
+        _ = admin, q, severity, start_date, end_date
+        rows = [
+            {
+                "id": f"audit-{log.id}",
+                "timestamp": log.timestamp.isoformat(),
+                "actor": "admin@example.com",
+                "actor_type": "ADMIN",
+                "action": "security_event",
+                "event_type": "security_event",
+                "resource": log.threat_type or "security_log",
+                "severity": "CRITICAL" if log.status == LogStatusEnum.BLOCKED else "INFO",
+                "request_id": None,
+                "decision": str(log.status.value if hasattr(log.status, "value") else log.status).upper(),
+                "risk_score": float(log.risk_score or 0.0),
+                "matched_policies": [],
+                "provider": None,
+                "model": log.model,
+                "prompt_preview": None,
+                "metadata": {},
+                "old_value": None,
+                "new_value": None,
+            }
+            for log in self.db.query(SecurityLog).all()[offset: offset + limit]
+        ]
+        return rows
+
+    async def get_report_summary(self, admin: dict[str, Any]) -> dict[str, Any]:
+        _ = admin
+        return {
+            "summary": {
+                "blocked_attacks": 1,
+                "prompt_injection_attempts": 1,
+                "high_risk_financial_operations": 0,
+                "suspicious_tool_calls": 0,
+                "pii_exposure_attempts": 0,
+                "usage_spikes": 0,
+                "policy_violations": 1,
+                "provider_failures": 0,
+                "model_denied_events": 0,
+                "quota_exceeded_events": 0,
+            },
+            "recent_alerts": [],
+            "realtime_limitations": {
+                "streaming_alert_bus": False,
+                "note": "Test summary",
+            },
+        }
 
 
 def _install_field_refs() -> None:

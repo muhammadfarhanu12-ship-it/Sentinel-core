@@ -354,7 +354,7 @@ async def analyze(payload: SecurityRequest) -> dict[str, object]:
     scan_result = scan_prompt(
         payload.prompt,
         provider="gemini",
-        model="gemini-3.1-pro",
+        model="gemini-1.5-flash",
         security_tier="PRO",
         enforcement_input=SecurityEnforcementInput(
             prompt=payload.prompt,
@@ -377,14 +377,14 @@ async def analyze(payload: SecurityRequest) -> dict[str, object]:
             assessment = ThreatDetectionService().analyze(
                 payload.prompt,
                 provider="gemini",
-                model="gemini-3.1-pro",
+                model="gemini-1.5-flash",
                 security_tier="PRO",
             )
             verdict = build_sentinel_verdict(
                 assessment,
                 execution_output=str(protected_result.get("response") or ""),
                 provider="gemini",
-                model="gemini-3.1-pro",
+                model="gemini-1.5-flash",
                 security_tier="PRO",
             )
         verdict["protected_flow"] = {

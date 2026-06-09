@@ -53,7 +53,7 @@ def test_administrative_stress_test_prompt_returns_blocked_hitl_category():
     result = scan_prompt(
         prompt,
         provider="openai",
-        model="gpt-5.4",
+        model="gpt-4o",
         security_tier="PRO",
         enforcement_input=SecurityEnforcementInput(
             prompt=prompt,

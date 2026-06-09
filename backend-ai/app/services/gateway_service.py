@@ -22,8 +22,11 @@ from app.services.dashboard_service import (
 _fallback_gateway_usage: list[dict[str, Any]] = []
 
 PRICING_PER_1K_TOKENS: dict[tuple[str, str], tuple[float, float]] = {
-    ("openai", "gpt-5.4"): (0.0, 0.0),
-    ("gemini", "gemini-3.1-pro"): (0.0, 0.0),
+    ("openai", "gpt-4o-mini"): (0.0, 0.0),
+    ("openai", "gpt-4o"): (0.0, 0.0),
+    ("openai", "gpt-4.1"): (0.0, 0.0),
+    ("gemini", "gemini-1.5-flash"): (0.0, 0.0),
+    ("gemini", "gemini-1.5-pro"): (0.0, 0.0),
 }
 
 

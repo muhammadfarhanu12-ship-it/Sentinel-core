@@ -28,6 +28,7 @@ from app.middleware.auth_middleware import get_current_admin
 from app.models.user_model import user_model
 from app.schemas.api_schema import ApiResponse, ok
 from app.schemas.user_schema import UserResponse
+from app.services.dashboard_service import parse_optional_datetime
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -118,21 +119,23 @@ async def get_users(
 
 @router.delete("/users/{user_id}", response_model=ApiResponse[dict])
 async def delete_user(
+    request: Request,
     user_id: str,
     current_admin: dict = Depends(get_current_admin),
     service: AdminService = Depends(get_admin_service),
 ):
-    return ok(await service.delete_user(current_admin, user_id))
+    return ok(await service.delete_user(current_admin, user_id, request))
 
 
 @router.patch("/users/{user_id}/status", response_model=ApiResponse[AdminUserSummary])
 async def update_user_status(
+    request: Request,
     user_id: str,
     payload: AdminUserStatusUpdate,
     current_admin: dict = Depends(get_current_admin),
     service: AdminService = Depends(get_admin_service),
 ):
-    return ok(await service.update_user_status(current_admin, user_id, payload))
+    return ok(await service.update_user_status(current_admin, user_id, payload, request))
 
 
 @router.get("/logs", response_model=ApiResponse[list[AdminSecurityLogResponse]])
@@ -165,6 +168,38 @@ async def get_threats(
     return ok(await service.list_threats(current_admin, limit, offset, q, status, risk_level, threat_type, only_quarantined))
 
 
+@router.get("/audit-logs", response_model=ApiResponse[list[dict]])
+async def get_audit_logs(
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    q: str | None = Query(default=None, max_length=200),
+    severity: str | None = Query(default=None, max_length=32),
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
+    current_admin: dict = Depends(get_current_admin),
+    service: AdminService = Depends(get_admin_service),
+):
+    return ok(
+        await service.list_audit_events(
+            current_admin,
+            limit,
+            offset,
+            q,
+            severity,
+            parse_optional_datetime(start_date),
+            parse_optional_datetime(end_date),
+        )
+    )
+
+
+@router.get("/reports", response_model=ApiResponse[dict])
+async def get_reports(
+    current_admin: dict = Depends(get_current_admin),
+    service: AdminService = Depends(get_admin_service),
+):
+    return ok(await service.get_report_summary(current_admin))
+
+
 @router.get("/api-keys", response_model=ApiResponse[list[AdminApiKeyResponse]])
 async def get_api_keys(
     limit: int = Query(default=50, ge=1, le=200),
@@ -179,20 +214,22 @@ async def get_api_keys(
 
 @router.post("/api-keys", response_model=ApiResponse[AdminApiKeyResponse])
 async def create_api_key(
+    request: Request,
     payload: AdminApiKeyCreateRequest,
     current_admin: dict = Depends(get_current_admin),
     service: AdminService = Depends(get_admin_service),
 ):
-    return ok(await service.create_gateway_api_key(current_admin, payload))
+    return ok(await service.create_gateway_api_key(current_admin, payload, request))
 
 
 @router.delete("/api-keys/{key_id}", response_model=ApiResponse[AdminApiKeyResponse])
 async def delete_api_key(
+    request: Request,
     key_id: str,
     current_admin: dict = Depends(get_current_admin),
     service: AdminService = Depends(get_admin_service),
 ):
-    return ok(await service.revoke_gateway_api_key(current_admin, key_id))
+    return ok(await service.revoke_gateway_api_key(current_admin, key_id, request))
 
 
 @router.get("/settings", response_model=ApiResponse[AdminSettingsResponse])
@@ -205,8 +242,9 @@ async def get_settings(
 
 @router.put("/settings", response_model=ApiResponse[AdminSettingsResponse])
 async def update_settings(
+    request: Request,
     payload: AdminSettingsUpdateRequest,
     current_admin: dict = Depends(get_current_admin),
     service: AdminService = Depends(get_admin_service),
 ):
-    return ok(await service.update_settings(current_admin, payload))
+    return ok(await service.update_settings(current_admin, payload, request))

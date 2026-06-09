@@ -60,13 +60,24 @@ class OpenAIProvider(AIProvider):
             raise ProviderFailure("provider_unavailable", "OpenAI is unavailable.", retryable=True) from exc
 
         if response.status_code in {401, 403}:
-            raise ProviderFailure("provider_auth_failed", "OpenAI rejected the configured credentials.")
+            raise ProviderFailure("provider_auth_error", "OpenAI rejected the configured credentials.")
         if response.status_code == 429:
             raise ProviderFailure("provider_rate_limited", "OpenAI rate limit exceeded.", retryable=True)
+        if response.status_code == 404:
+            raise ProviderFailure("provider_model_unavailable", "OpenAI model is unavailable for the configured account.")
         if response.status_code >= 500:
             raise ProviderFailure("provider_unavailable", "OpenAI is temporarily unavailable.", retryable=True)
         if response.status_code >= 400:
             logger.warning("OpenAI provider returned status=%s", response.status_code)
+            message = ""
+            try:
+                error_payload = response.json()
+            except ValueError:
+                error_payload = {}
+            if isinstance(error_payload, dict):
+                message = str((error_payload.get("error") or {}).get("message") or "")
+            if "model" in message.lower() and any(token in message.lower() for token in {"not found", "does not exist", "unavailable"}):
+                raise ProviderFailure("provider_model_unavailable", "OpenAI model is unavailable for the configured account.")
             raise ProviderFailure("provider_error", "OpenAI rejected the request.")
 
         body = response.json()
