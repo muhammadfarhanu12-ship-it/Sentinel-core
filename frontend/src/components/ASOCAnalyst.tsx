@@ -9,6 +9,10 @@ import { authedFetchJson } from '../services/authenticatedFetch';
 
 type AnalystMessage = { role: 'user' | 'model' | 'system'; text: string; type?: 'action' | 'text' };
 
+type ASOCAnalystProps = {
+  initialSummary?: string;
+};
+
 async function brainAnalyze(payload: { prompt: string; image_data?: string | null }) {
   const data = await authedFetchJson<any>('/api/v1/brain/analyze', {
     method: 'POST',
@@ -18,9 +22,14 @@ async function brainAnalyze(payload: { prompt: string; image_data?: string | nul
   return data?.analysis ?? data;
 }
 
-export function ASOCAnalyst() {
+export function ASOCAnalyst({ initialSummary }: ASOCAnalystProps) {
   const [messages, setMessages] = useState<AnalystMessage[]>([
-    { role: 'model', text: 'Sentinel ASOC Analyst online. Awaiting anomalies or manual review requests.' },
+    {
+      role: 'model',
+      text:
+        initialSummary ||
+        "I've analyzed your latest gateway activity. No immediate action is required, but keep reviewing repeated high-risk signatures.",
+    },
   ]);
   const [input, setInput] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -39,6 +48,16 @@ export function ASOCAnalyst() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    if (!initialSummary) return;
+    setMessages((current) => {
+      if (current.length !== 1 || current[0]?.role !== 'model') {
+        return current;
+      }
+      return [{ role: 'model', text: initialSummary }];
+    });
+  }, [initialSummary]);
 
   useEffect(() => {
     let interval: any;
@@ -114,29 +133,51 @@ export function ASOCAnalyst() {
   };
 
   return (
-    <Card className="flex h-[500px] flex-col overflow-hidden bg-slate-900/40 border-white/5" id="asoc-chat-container">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+    <Card
+      className="flex h-[520px] flex-col overflow-hidden border bg-[#111827] text-[#D1D9EE]"
+      id="asoc-chat-container"
+      style={{ borderColor: 'rgba(255,255,255,0.07)', borderRadius: 10, boxShadow: 'none' }}
+    >
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b px-5 py-4" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
         <div className="flex items-center space-x-2">
-          <Terminal className="w-5 h-5 text-indigo-400" />
-          <CardTitle className="text-lg">ASOC Analyst</CardTitle>
+          <Terminal className="h-4 w-4 text-[#6366F1]" />
+          <div>
+            <CardTitle className="text-base text-white">ASOC Analyst</CardTitle>
+            <p className="mt-1 text-xs text-[#6B7A99]">AI-powered security operations analyst</p>
+          </div>
           {isAutoMonitoring && (
-            <span className="text-xs text-clean flex items-center">
-              <Activity className="w-3 h-3 mr-1 animate-pulse" /> Auto-monitoring
+            <span className="flex items-center text-xs text-[#10B981]">
+              <Activity className="mr-1 h-3 w-3 animate-pulse" /> Auto-monitoring
             </span>
           )}
         </div>
         <Button
-          variant="outline"
           size="sm"
           onClick={() => setIsAutoMonitoring((v) => !v)}
-          className="text-slate-300"
+          className="border px-3 text-[11px] font-semibold text-[#A5B4FC]"
+          style={{
+            background: 'rgba(99,102,241,0.12)',
+            borderColor: 'rgba(99,102,241,0.28)',
+          }}
         >
-          {isAutoMonitoring ? 'Stop' : 'Start'} Auto
+          {isAutoMonitoring ? 'Stop Auto' : 'Start Auto'}
         </Button>
       </CardHeader>
 
-      <CardContent className="flex-1 flex flex-col min-h-0">
-        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto space-y-4 pr-2">
+      <CardContent className="flex min-h-0 flex-1 flex-col px-5 pb-5 pt-4">
+        <div
+          className="mb-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+          style={{
+            background: 'rgba(16,185,129,0.12)',
+            borderColor: 'rgba(16,185,129,0.28)',
+            color: '#A7F3D0',
+          }}
+        >
+          <CheckCircle2 className="h-4 w-4 text-[#10B981]" />
+          <span>Sentinel ASOC Analyst online. Awaiting anomalies or manual review requests.</span>
+        </div>
+
+        <div ref={messagesContainerRef} className="flex-1 space-y-4 overflow-y-auto pr-1">
           <AnimatePresence initial={false}>
             {messages.map((msg, idx) => (
               <motion.div
@@ -149,13 +190,29 @@ export function ASOCAnalyst() {
                 <div
                   className={`max-w-[85%] rounded-lg px-4 py-3 text-sm ${
                     msg.role === 'user'
-                      ? 'bg-indigo-500/20 border border-indigo-500/30 text-slate-100'
+                      ? 'border text-slate-100'
                       : msg.role === 'system'
-                      ? 'bg-slate-950/60 border border-white/10 text-slate-300'
-                      : 'bg-slate-950/40 border border-white/10 text-slate-200'
+                      ? 'border text-slate-300'
+                      : 'border text-slate-200'
                   }`}
+                  style={
+                    msg.role === 'user'
+                      ? {
+                          background: 'rgba(99,102,241,0.12)',
+                          borderColor: 'rgba(99,102,241,0.28)',
+                        }
+                      : msg.role === 'system'
+                        ? {
+                            background: '#161D2E',
+                            borderColor: 'rgba(255,255,255,0.07)',
+                          }
+                        : {
+                            background: '#1C253A',
+                            borderColor: 'rgba(255,255,255,0.07)',
+                          }
+                  }
                 >
-                  {msg.role === 'model' && <ShieldAlert className="w-4 h-4 text-indigo-400 inline mr-2" />}
+                  {msg.role === 'model' && <ShieldAlert className="mr-2 inline h-4 w-4 text-[#6366F1]" />}
                   <span className="whitespace-pre-wrap">{msg.text}</span>
                 </div>
               </motion.div>
@@ -168,7 +225,11 @@ export function ASOCAnalyst() {
             value={input}
             onChange={(e: any) => setInput(e.target.value)}
             placeholder="Ask the analyst to review logs / suggest actions..."
-            className="flex-1 bg-slate-950/50 border border-white/10 rounded-md px-4 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="flex-1 rounded-md border px-4 py-2 text-sm text-slate-200 focus:outline-none"
+            style={{
+              background: '#161D2E',
+              borderColor: 'rgba(255,255,255,0.13)',
+            }}
             onKeyDown={(e: any) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -176,14 +237,14 @@ export function ASOCAnalyst() {
               }
             }}
           />
-          <Button onClick={handleSend} disabled={isAnalyzing} className="shrink-0">
+          <Button onClick={handleSend} disabled={isAnalyzing} className="shrink-0 bg-[#6366F1] text-white hover:bg-[#5558E6]">
             {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </Button>
         </div>
 
-        <div className="mt-3 text-xs text-slate-500 flex items-center">
-          <CheckCircle2 className="w-3.5 h-3.5 mr-2 text-clean" />
-          Uses backend `/api/v1/brain/analyze` (no client-side API keys).
+        <div className="mt-3 flex items-center text-[10px] font-mono text-[#6B7A99]">
+          <CheckCircle2 className="mr-2 h-3.5 w-3.5 text-[#10B981]" />
+          Uses backend `/api/v1/brain/analyze` - no client-side API keys.
         </div>
       </CardContent>
     </Card>
