@@ -1023,7 +1023,7 @@ export default function AdminReports() {
             </div>
 
             <button className="reports-text-button" onClick={() => downloadFile(`${framework.name.toLowerCase().replaceAll(' ', '-')}-evidence.json`, JSON.stringify(framework, null, 2), 'application/json')} type="button">
-              Download {framework.name} Evidence ->
+              Download {framework.name} Evidence {'->'}
             </button>
           </article>
         ))}
