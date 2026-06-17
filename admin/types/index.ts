@@ -3,6 +3,18 @@ export type AdminLoginPayload = {
   password: string;
 };
 
+export type AdminSessionUser = {
+  email: string;
+  role: string;
+  isPlatformAdmin: boolean;
+  adminRole?: string | null;
+  adminPermissions?: string[];
+  adminStatus?: string;
+  adminCreatedAt?: string | null;
+  adminLastLoginAt?: string | null;
+  forcePasswordChange?: boolean;
+};
+
 export type AdminMetricsPoint = {
   label: string;
   requests: number;

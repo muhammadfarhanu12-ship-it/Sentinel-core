@@ -78,6 +78,7 @@ class Settings:
         self.MONGO_DB_NAME: str = _env_str("MONGO_DB_NAME", "sentinel_dashboard") or "sentinel_dashboard"
 
         self.JWT_SECRET: str = _env_str("JWT_SECRET", "") or ""
+        self.ADMIN_JWT_SECRET: str = _env_str("ADMIN_JWT_SECRET", aliases=("ADMIN_TOKEN_SECRET",)) or self.JWT_SECRET
         self.JWT_ALGORITHM: str = _env_str("JWT_ALGORITHM", "HS256") or "HS256"
         self.JWT_ISSUER: str = _env_str("JWT_ISSUER", "sentinelcore") or "sentinelcore"
         self.JWT_AUDIENCE: str = _env_str("JWT_AUDIENCE", "sentinelcore-api") or "sentinelcore-api"
@@ -112,7 +113,11 @@ class Settings:
         self.FALLBACK_AI_PROVIDER: str | None = _env_str("FALLBACK_AI_PROVIDER", "openai")
         self.AI_PROVIDER_TIMEOUT_SECONDS: float = _env_float("AI_PROVIDER_TIMEOUT_SECONDS", 30.0)
         self.FRONTEND_URL: str = _env_str("FRONTEND_URL", "https://sentinel-core-arei.vercel.app") or "https://sentinel-core-arei.vercel.app"
-        self.ADMIN_FRONTEND_URL: str | None = _env_str("ADMIN_FRONTEND_URL", "https://sentinel-admin-beta.vercel.app")
+        self.ADMIN_FRONTEND_URL: str | None = _env_str(
+            "ADMIN_FRONTEND_URL",
+            "https://sentinel-admin-beta.vercel.app",
+            aliases=("ADMIN_PANEL_URL",),
+        )
         self.BACKEND_PUBLIC_URL: str = _env_str("BACKEND_PUBLIC_URL", "https://sentinel-core-xcrz.onrender.com") or "https://sentinel-core-xcrz.onrender.com"
         self.AUTH_VERIFY_EMAIL_PATH: str = _env_str("AUTH_VERIFY_EMAIL_PATH", "/verify-email") or "/verify-email"
         self.AUTH_RESET_PASSWORD_PATH: str = _env_str("AUTH_RESET_PASSWORD_PATH", "/reset-password") or "/reset-password"

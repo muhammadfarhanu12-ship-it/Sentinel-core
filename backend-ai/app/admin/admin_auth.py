@@ -30,7 +30,7 @@ def create_admin_access_token(admin: dict[str, Any], expires_delta: timedelta | 
         "exp": expire,
         "jti": secrets.token_urlsafe(16),
     }
-    return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+    return jwt.encode(payload, settings.ADMIN_JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
 def decode_admin_token(token: str) -> dict[str, str]:
@@ -38,7 +38,7 @@ def decode_admin_token(token: str) -> dict[str, str]:
     try:
         payload = jwt.decode(
             token,
-            settings.JWT_SECRET,
+            settings.ADMIN_JWT_SECRET,
             algorithms=[settings.JWT_ALGORITHM],
             audience=ADMIN_JWT_AUDIENCE,
             issuer=ADMIN_JWT_ISSUER,

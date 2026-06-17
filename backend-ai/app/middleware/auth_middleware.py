@@ -12,6 +12,10 @@ from jose import JWTError, jwt
 from app.core.config import settings
 from app.db.mongo import get_database_from_request
 from app.schemas.auth_schema import TokenData
+from app.security.admin_access import (
+    build_admin_session_payload,
+    has_platform_admin_access,
+)
 from app.security.roles import is_admin_role, normalize_user_role
 from app.services.auth_service import get_user_by_id
 from app.utils.hashing import get_password_hash
@@ -71,6 +75,7 @@ def _build_current_user_context(mongo_user: dict[str, Any]) -> CurrentUserContex
     updated_at = mongo_user.get("updated_at") or created_at
     normalized_role = normalize_user_role(mongo_user.get("role"))
 
+    admin_payload = build_admin_session_payload(mongo_user)
     return CurrentUserContext(
         {
             **mongo_user,
@@ -88,7 +93,14 @@ def _build_current_user_context(mongo_user: dict[str, Any]) -> CurrentUserContex
             "created_at": created_at,
             "updated_at": updated_at,
             "monthly_limit": int(mongo_user.get("monthly_limit") or 1000),
-            "is_admin": is_admin_role(normalized_role),
+            "is_admin": is_admin_role(normalized_role) or admin_payload["isPlatformAdmin"],
+            "is_platform_admin": admin_payload["isPlatformAdmin"],
+            "admin_role": admin_payload["adminRole"],
+            "admin_permissions": admin_payload["adminPermissions"],
+            "admin_status": admin_payload["adminStatus"],
+            "admin_created_at": admin_payload["adminCreatedAt"],
+            "admin_last_login_at": admin_payload["adminLastLoginAt"],
+            "force_password_change": admin_payload["forcePasswordChange"],
         }
     )
 
@@ -192,8 +204,8 @@ async def get_current_admin(token: str = Depends(oauth2_scheme)):
     current_user = await _resolve_user_from_token(token)
     if not bool(current_user.get("is_verified", False)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified")
-    if not is_admin_role(current_user.get("role")):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    if not has_platform_admin_access(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This account does not have admin panel access.")
     return current_user
 
 

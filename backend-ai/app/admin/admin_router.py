@@ -13,6 +13,7 @@ from app.admin.admin_schema import (
     AdminLoginRequest,
     AdminMessageResponse,
     AdminMetricsResponse,
+    AdminSessionResponse,
     AdminResetPasswordRequest,
     AdminSecurityLogResponse,
     AdminSettingsResponse,
@@ -24,7 +25,7 @@ from app.admin.admin_schema import (
 )
 from app.admin.admin_service import AdminService
 from app.core.database import get_db
-from app.middleware.auth_middleware import get_current_admin
+from app.dependencies.admin_access import require_admin_permission
 from app.models.user_model import user_model
 from app.schemas.api_schema import ApiResponse, ok
 from app.schemas.user_schema import UserResponse
@@ -39,12 +40,20 @@ def get_admin_service(db: AsyncIOMotorDatabase = Depends(get_db)) -> AdminServic
 
 @router.get("/dashboard", response_model=ApiResponse[dict])
 async def get_dashboard(
-    current_admin: dict = Depends(get_current_admin),
+    current_admin: dict = Depends(require_admin_permission("admin:access")),
     service: AdminService = Depends(get_admin_service),
 ):
     payload = await service.get_dashboard(current_admin)
     payload.setdefault("user", UserResponse.model_validate(user_model(current_admin)).model_dump(mode="json"))
     return ok(payload)
+
+
+@router.get("/auth/me", response_model=ApiResponse[AdminSessionResponse])
+async def admin_me(
+    current_admin: dict = Depends(require_admin_permission("admin:access")),
+    service: AdminService = Depends(get_admin_service),
+):
+    return ok(await service.get_admin_session(current_admin))
 
 
 @router.post("/login", response_model=ApiResponse[AdminTokenResponse])
@@ -90,7 +99,7 @@ async def request_access(
 
 @router.get("/metrics", response_model=ApiResponse[AdminMetricsResponse])
 async def get_metrics(
-    current_admin: dict = Depends(get_current_admin),
+    current_admin: dict = Depends(require_admin_permission("admin:audit:view")),
     service: AdminService = Depends(get_admin_service),
 ):
     return ok(await service.get_metrics(current_admin))
@@ -98,7 +107,7 @@ async def get_metrics(
 
 @router.get("/system-status", response_model=ApiResponse[AdminSystemStatusResponse])
 async def get_system_status(
-    current_admin: dict = Depends(get_current_admin),
+    current_admin: dict = Depends(require_admin_permission("admin:settings:manage")),
     service: AdminService = Depends(get_admin_service),
 ):
     return ok(await service.get_system_status(current_admin))
@@ -111,7 +120,7 @@ async def get_users(
     q: str | None = Query(default=None, max_length=200),
     is_active: bool | None = Query(default=None),
     tier: str | None = Query(default=None, max_length=32),
-    current_admin: dict = Depends(get_current_admin),
+    current_admin: dict = Depends(require_admin_permission("admin:users:view")),
     service: AdminService = Depends(get_admin_service),
 ):
     return ok(await service.list_users(current_admin, limit, offset, q, is_active, tier))
@@ -121,7 +130,7 @@ async def get_users(
 async def delete_user(
     request: Request,
     user_id: str,
-    current_admin: dict = Depends(get_current_admin),
+    current_admin: dict = Depends(require_admin_permission("admin:users:manage")),
     service: AdminService = Depends(get_admin_service),
 ):
     return ok(await service.delete_user(current_admin, user_id, request))
@@ -132,7 +141,7 @@ async def update_user_status(
     request: Request,
     user_id: str,
     payload: AdminUserStatusUpdate,
-    current_admin: dict = Depends(get_current_admin),
+    current_admin: dict = Depends(require_admin_permission("admin:users:manage")),
     service: AdminService = Depends(get_admin_service),
 ):
     return ok(await service.update_user_status(current_admin, user_id, payload, request))
@@ -147,7 +156,7 @@ async def get_logs(
     risk_level: str | None = Query(default=None, max_length=32),
     threat_type: str | None = Query(default=None, max_length=120),
     only_quarantined: bool | None = Query(default=None),
-    current_admin: dict = Depends(get_current_admin),
+    current_admin: dict = Depends(require_admin_permission("admin:audit:view")),
     service: AdminService = Depends(get_admin_service),
 ):
     return ok(await service.list_logs(current_admin, limit, offset, q, status, risk_level, threat_type, only_quarantined))
@@ -162,7 +171,7 @@ async def get_threats(
     risk_level: str | None = Query(default=None, max_length=32),
     threat_type: str | None = Query(default=None, max_length=120),
     only_quarantined: bool | None = Query(default=None),
-    current_admin: dict = Depends(get_current_admin),
+    current_admin: dict = Depends(require_admin_permission("admin:audit:view")),
     service: AdminService = Depends(get_admin_service),
 ):
     return ok(await service.list_threats(current_admin, limit, offset, q, status, risk_level, threat_type, only_quarantined))
@@ -176,7 +185,7 @@ async def get_audit_logs(
     severity: str | None = Query(default=None, max_length=32),
     start_date: str | None = Query(default=None),
     end_date: str | None = Query(default=None),
-    current_admin: dict = Depends(get_current_admin),
+    current_admin: dict = Depends(require_admin_permission("admin:audit:view")),
     service: AdminService = Depends(get_admin_service),
 ):
     return ok(
@@ -194,7 +203,7 @@ async def get_audit_logs(
 
 @router.get("/reports", response_model=ApiResponse[dict])
 async def get_reports(
-    current_admin: dict = Depends(get_current_admin),
+    current_admin: dict = Depends(require_admin_permission("admin:audit:view")),
     service: AdminService = Depends(get_admin_service),
 ):
     return ok(await service.get_report_summary(current_admin))
@@ -206,7 +215,7 @@ async def get_api_keys(
     offset: int = Query(default=0, ge=0),
     q: str | None = Query(default=None, max_length=200),
     status: str | None = Query(default=None, max_length=32),
-    current_admin: dict = Depends(get_current_admin),
+    current_admin: dict = Depends(require_admin_permission("admin:users:view")),
     service: AdminService = Depends(get_admin_service),
 ):
     return ok(await service.list_api_keys(current_admin, limit, offset, q, status))
@@ -216,7 +225,7 @@ async def get_api_keys(
 async def create_api_key(
     request: Request,
     payload: AdminApiKeyCreateRequest,
-    current_admin: dict = Depends(get_current_admin),
+    current_admin: dict = Depends(require_admin_permission("admin:users:manage")),
     service: AdminService = Depends(get_admin_service),
 ):
     return ok(await service.create_gateway_api_key(current_admin, payload, request))
@@ -226,7 +235,7 @@ async def create_api_key(
 async def delete_api_key(
     request: Request,
     key_id: str,
-    current_admin: dict = Depends(get_current_admin),
+    current_admin: dict = Depends(require_admin_permission("admin:users:manage")),
     service: AdminService = Depends(get_admin_service),
 ):
     return ok(await service.revoke_gateway_api_key(current_admin, key_id, request))
@@ -234,7 +243,7 @@ async def delete_api_key(
 
 @router.get("/settings", response_model=ApiResponse[AdminSettingsResponse])
 async def get_settings(
-    current_admin: dict = Depends(get_current_admin),
+    current_admin: dict = Depends(require_admin_permission("admin:settings:manage")),
     service: AdminService = Depends(get_admin_service),
 ):
     return ok(await service.get_settings(current_admin))
@@ -244,7 +253,7 @@ async def get_settings(
 async def update_settings(
     request: Request,
     payload: AdminSettingsUpdateRequest,
-    current_admin: dict = Depends(get_current_admin),
+    current_admin: dict = Depends(require_admin_permission("admin:settings:manage")),
     service: AdminService = Depends(get_admin_service),
 ):
     return ok(await service.update_settings(current_admin, payload, request))

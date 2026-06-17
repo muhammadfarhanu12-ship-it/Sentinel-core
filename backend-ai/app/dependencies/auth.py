@@ -8,7 +8,7 @@ from app.middleware.auth_middleware import (
     get_current_user,
     oauth2_scheme,
 )
-from app.security.roles import is_admin_role
+from app.security.admin_access import has_platform_admin_access
 from app.services.auth_service import get_user_by_id
 
 
@@ -33,8 +33,8 @@ async def _resolve_admin_from_admin_token(token: str):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive")
     if not bool(admin_user.get("is_verified", False)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified")
-    if not is_admin_role(admin_user.get("role")):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    if not has_platform_admin_access(admin_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This account does not have admin panel access.")
 
     return _build_current_user_context(admin_user)
 
@@ -55,8 +55,8 @@ async def get_admin_user(request: Request, token: str = Depends(oauth2_scheme)):
             raise
 
     if current_user is not None:
-        if not is_admin_role(getattr(current_user, "role", None)):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+        if not has_platform_admin_access(current_user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This account does not have admin panel access.")
         return current_user
 
     return await _resolve_admin_from_admin_token(token)

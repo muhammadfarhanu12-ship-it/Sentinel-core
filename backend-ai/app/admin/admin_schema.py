@@ -18,6 +18,25 @@ class AdminTokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     role: str = "admin"
+    admin_role: str | None = None
+    admin_permissions: list[str] = Field(default_factory=list)
+    admin_status: str = "active"
+
+
+class AdminSessionUserResponse(BaseModel):
+    email: str
+    role: str = "admin"
+    isPlatformAdmin: bool
+    adminRole: str | None = None
+    adminPermissions: list[str] = Field(default_factory=list)
+    adminStatus: str = "active"
+    adminCreatedAt: datetime | None = None
+    adminLastLoginAt: datetime | None = None
+    forcePasswordChange: bool = False
+
+
+class AdminSessionResponse(BaseModel):
+    user: AdminSessionUserResponse
 
 
 class AdminMessageResponse(BaseModel):

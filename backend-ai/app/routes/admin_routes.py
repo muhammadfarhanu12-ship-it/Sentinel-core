@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
-from app.middleware.auth_middleware import get_current_admin
+from app.dependencies.admin_access import require_admin_permission
 from app.models.user_model import user_model
 from app.schemas.api_schema import ApiResponse, ok
 from app.schemas.user_schema import UserResponse
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 @router.get("/dashboard", response_model=ApiResponse[dict])
-async def admin_dashboard(current_user: dict = Depends(get_current_admin)):
+async def admin_dashboard(current_user: dict = Depends(require_admin_permission("admin:access"))):
     return ok(
         {
             "message": "Welcome Admin",
@@ -25,7 +25,7 @@ async def admin_dashboard(current_user: dict = Depends(get_current_admin)):
 async def admin_list_users(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    current_user: dict = Depends(get_current_admin),
+    current_user: dict = Depends(require_admin_permission("admin:users:view")),
 ):
     _ = current_user
     return ok(await list_users(limit=limit, skip=offset))

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+from app.security.admin_access import build_admin_session_payload
 from app.security.roles import normalize_user_role
 
 
@@ -13,6 +14,7 @@ def _as_datetime(value: Any) -> datetime:
 
 
 def user_model(user: Mapping[str, Any]) -> dict[str, Any]:
+    admin_payload = build_admin_session_payload(dict(user))
     return {
         "id": str(user["_id"]),
         "email": user["email"],
@@ -26,4 +28,10 @@ def user_model(user: Mapping[str, Any]) -> dict[str, Any]:
         "last_login_at": _as_datetime(user["last_login_at"]) if user.get("last_login_at") else None,
         "created_at": _as_datetime(user.get("created_at")),
         "updated_at": _as_datetime(user.get("updated_at")),
+        "is_platform_admin": admin_payload["isPlatformAdmin"],
+        "admin_role": admin_payload["adminRole"],
+        "admin_permissions": admin_payload["adminPermissions"],
+        "admin_status": admin_payload["adminStatus"],
+        "admin_created_at": user.get("adminCreatedAt") or user.get("admin_created_at"),
+        "admin_last_login_at": user.get("adminLastLoginAt") or user.get("admin_last_login_at"),
     }

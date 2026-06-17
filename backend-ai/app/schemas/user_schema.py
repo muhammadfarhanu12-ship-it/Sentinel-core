@@ -82,6 +82,12 @@ class UserResponse(UserBase):
     is_verified: bool = False
     email_verified_at: datetime | None = None
     last_login_at: datetime | None = None
+    is_platform_admin: bool = False
+    admin_role: str | None = None
+    admin_permissions: list[str] = Field(default_factory=list)
+    admin_status: str | None = None
+    admin_created_at: datetime | None = None
+    admin_last_login_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

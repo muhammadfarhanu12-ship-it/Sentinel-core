@@ -21,6 +21,8 @@ from app.admin.admin_schema import (
     AdminMetricsResponse,
     AdminMetricsSeriesPoint,
     AdminResetPasswordRequest,
+    AdminSessionResponse,
+    AdminSessionUserResponse,
     AdminSecurityLogResponse,
     AdminSettingsResponse,
     AdminSettingsUpdateRequest,
@@ -29,8 +31,19 @@ from app.admin.admin_schema import (
     AdminUserStatusUpdate,
     AdminUserSummary,
 )
+from app.security.admin_access import (
+    ADMIN_PERMISSION_ACCESS,
+    ADMIN_STATUS_ACTIVE,
+    SUPER_ADMIN_ROLE,
+    admin_permissions_for_role,
+    build_admin_session_payload,
+    get_effective_admin_permissions,
+    get_effective_admin_role,
+    get_effective_admin_status,
+    has_platform_admin_access,
+)
 from app.middleware.rate_limiter import check_rate_limit
-from app.security.roles import ADMIN_ROLE, is_admin_role
+from app.security.roles import ADMIN_ROLE
 from app.services import admin_login_notification_service
 from app.services.dashboard_service import record_audit_event
 from app.utils.api_key_generator import generate_api_key
@@ -241,6 +254,7 @@ class AdminService:
         organization_name = str((admin or {}).get("organization_name") or "").strip()
         if not organization_name:
             organization_name = email.split("@", 1)[1] if "@" in email else "sentinel.local"
+        admin_session = build_admin_session_payload(admin or {"email": email})
         return {
             "id": str((admin or {}).get("_id") or (admin or {}).get("id") or email),
             "_id": str((admin or {}).get("_id") or (admin or {}).get("id") or email),
@@ -249,10 +263,35 @@ class AdminService:
             "tier": str((admin or {}).get("tier") or "BUSINESS"),
             "role": ADMIN_ROLE,
             "is_admin": True,
+            "is_platform_admin": admin_session["isPlatformAdmin"],
+            "admin_role": admin_session["adminRole"],
+            "admin_permissions": admin_session["adminPermissions"],
+            "admin_status": admin_session["adminStatus"],
             "is_active": True,
             "is_verified": True,
             "monthly_limit": 0,
         }
+
+    @staticmethod
+    def _admin_login_denied_message() -> str:
+        return "This account does not have admin panel access."
+
+    @staticmethod
+    def _build_session_response(user: dict[str, Any]) -> AdminSessionResponse:
+        payload = build_admin_session_payload(user)
+        return AdminSessionResponse(
+            user=AdminSessionUserResponse(
+                email=str(user.get("email") or "").lower(),
+                role="admin",
+                isPlatformAdmin=bool(payload["isPlatformAdmin"]),
+                adminRole=payload["adminRole"],
+                adminPermissions=list(payload["adminPermissions"]),
+                adminStatus=str(payload["adminStatus"]),
+                adminCreatedAt=payload["adminCreatedAt"],
+                adminLastLoginAt=payload["adminLastLoginAt"],
+                forcePasswordChange=bool(payload["forcePasswordChange"]),
+            )
+        )
 
     async def _record_admin_audit(
         self,
@@ -323,7 +362,8 @@ class AdminService:
                 metadata={"reason": "inactive_admin"},
             )
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin account is inactive")
-        if not is_admin_role(user.get("role")):
+        admin_status = get_effective_admin_status(user)
+        if get_effective_admin_role(user) is None:
             await self._capture_failed_login_attempt(
                 normalized_email=normalized_email,
                 ip_address=ip_address,
@@ -336,12 +376,59 @@ class AdminService:
                 severity="WARNING",
                 metadata={"reason": "admin_access_required"},
             )
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=self._admin_login_denied_message())
+        if admin_status != ADMIN_STATUS_ACTIVE:
+            await self._capture_failed_login_attempt(
+                normalized_email=normalized_email,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            await self._record_admin_audit(
+                request,
+                action="admin_login_failure",
+                admin=user,
+                severity="WARNING",
+                metadata={"reason": "disabled_platform_admin"},
+            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin account is disabled")
 
         now = self._utcnow()
+        admin_role = get_effective_admin_role(user) or SUPER_ADMIN_ROLE
+        admin_permissions = get_effective_admin_permissions(user) or admin_permissions_for_role(admin_role)
         await self.db["users"].update_one(
             {"_id": user["_id"]},
-            {"$set": {"last_login_at": now, "updated_at": now, "role": ADMIN_ROLE}},
+            {
+                "$set": {
+                    "last_login_at": now,
+                    "updated_at": now,
+                    "adminLastLoginAt": now,
+                    "admin_last_login_at": now,
+                    "isPlatformAdmin": True,
+                    "is_platform_admin": True,
+                    "adminRole": admin_role,
+                    "admin_role": admin_role,
+                    "adminPermissions": admin_permissions,
+                    "admin_permissions": admin_permissions,
+                    "adminStatus": ADMIN_STATUS_ACTIVE,
+                    "admin_status": ADMIN_STATUS_ACTIVE,
+                }
+            },
+        )
+        user.update(
+            {
+                "last_login_at": now,
+                "updated_at": now,
+                "adminLastLoginAt": now,
+                "admin_last_login_at": now,
+                "isPlatformAdmin": True,
+                "is_platform_admin": True,
+                "adminRole": admin_role,
+                "admin_role": admin_role,
+                "adminPermissions": admin_permissions,
+                "admin_permissions": admin_permissions,
+                "adminStatus": ADMIN_STATUS_ACTIVE,
+                "admin_status": ADMIN_STATUS_ACTIVE,
+            }
         )
         try:
             await self._reset_failed_login_attempts(normalized_email=normalized_email, ip_address=ip_address)
@@ -361,7 +448,10 @@ class AdminService:
             data={
                 "sub": normalized_email,
                 "user_id": str(user["_id"]),
-                "role": ADMIN_ROLE,
+                "role": str(user.get("role") or "user"),
+                "is_platform_admin": True,
+                "admin_role": admin_role,
+                "admin_permissions": admin_permissions,
             }
         )
         await self._record_admin_audit(
@@ -371,7 +461,13 @@ class AdminService:
             severity="INFO",
             metadata={"user_agent": user_agent},
         )
-        return AdminTokenResponse(access_token=access_token, role=ADMIN_ROLE)
+        return AdminTokenResponse(
+            access_token=access_token,
+            role=ADMIN_ROLE,
+            admin_role=admin_role,
+            admin_permissions=admin_permissions,
+            admin_status=ADMIN_STATUS_ACTIVE,
+        )
 
     async def get_dashboard(self, admin: dict[str, Any]) -> dict[str, object]:
         return {
@@ -385,6 +481,9 @@ class AdminService:
             },
         }
 
+    async def get_admin_session(self, admin: dict[str, Any]) -> AdminSessionResponse:
+        return self._build_session_response(admin)
+
     async def request_password_reset(self, email: str, request: Request) -> AdminForgotPasswordResponse:
         normalized_email = self._normalize_email(email)
         check_rate_limit(
@@ -395,7 +494,7 @@ class AdminService:
         )
 
         user = await self.db["users"].find_one({"email": normalized_email})
-        if user is None or not is_admin_role(user.get("role")) or not bool(user.get("is_active", True)):
+        if user is None or not has_platform_admin_access(user):
             return AdminForgotPasswordResponse(
                 message="If an admin account exists, password reset instructions have been generated."
             )
@@ -462,7 +561,18 @@ class AdminService:
             window_seconds=3600,
         )
 
-        existing_admin = await self.db["users"].find_one({"email": normalized_email, "role": ADMIN_ROLE})
+        existing_admin = await self.db["users"].find_one(
+            {
+                "email": normalized_email,
+                "$or": [
+                    {"isPlatformAdmin": True},
+                    {"is_platform_admin": True},
+                    {"adminRole": {"$exists": True}},
+                    {"admin_role": {"$exists": True}},
+                    {"role": ADMIN_ROLE},
+                ],
+            }
+        )
         if existing_admin:
             return AdminAccessRequestResponse(
                 message="An admin account already exists for this email. Use admin login or password recovery.",
@@ -679,7 +789,17 @@ class AdminService:
             database_status = "error"
 
         latest_event = await self.db["logs"].find_one(sort=[("timestamp", -1)], projection={"timestamp": 1})
-        admin_count = await self.db["users"].count_documents({"role": ADMIN_ROLE})
+        admin_count = await self.db["users"].count_documents(
+            {
+                "$or": [
+                    {"isPlatformAdmin": True},
+                    {"is_platform_admin": True},
+                    {"adminRole": {"$exists": True}},
+                    {"admin_role": {"$exists": True}},
+                    {"role": ADMIN_ROLE},
+                ]
+            }
+        )
 
         return AdminSystemStatusResponse(
             status="ok" if database_status == "ok" else "degraded",

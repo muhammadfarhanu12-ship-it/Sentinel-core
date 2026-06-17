@@ -8,6 +8,7 @@ import type {
   AdminLoginPayload,
   AdminMetrics,
   AdminReportSummary,
+  AdminSessionUser,
   AdminSettings,
   AdminUser,
   AdminUsersQuery,
@@ -26,9 +27,10 @@ type AdminLoginResponse = {
   access_token: string;
   token_type: string;
   role?: string;
-  user?: {
-    role?: string;
-  };
+  admin_role?: string;
+  admin_permissions?: string[];
+  admin_status?: string;
+  user?: AdminSessionUser;
 };
 
 export const ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE =
@@ -38,9 +40,7 @@ const isDevelopment = Boolean(import.meta.env.DEV);
 const SENSITIVE_RESPONSE_FIELDS = new Set(['password', 'new_password', 'token', 'refresh_token', 'access_token']);
 
 type AdminDashboardResponse = {
-  user?: {
-    role?: string;
-  };
+  user?: AdminSessionUser;
 };
 
 function unwrapEnvelope<T>(payload: ApiEnvelope<T> | T): T {
@@ -67,6 +67,10 @@ function pageToParams(page = 1, pageSize = 10) {
 
 function resolveRole(payload: { role?: string; user?: { role?: string } } | null | undefined): string {
   return String(payload?.role || payload?.user?.role || '').trim().toLowerCase();
+}
+
+function hasAdminPanelAccess(user: AdminSessionUser | null | undefined): boolean {
+  return Boolean(user?.isPlatformAdmin && user?.adminRole && String(user?.adminStatus || 'active').toLowerCase() === 'active');
 }
 
 function redactSensitivePayload(value: unknown): unknown {
@@ -142,13 +146,13 @@ async function assertAdminBackendHealthy(): Promise<void> {
   }
 }
 
-export async function verifyAdminSession(accessToken: string): Promise<void> {
+export async function verifyAdminSession(accessToken: string): Promise<AdminSessionUser> {
   const normalizedToken = String(accessToken || '').trim();
   if (!normalizedToken) {
     throw new Error('Admin authentication failed.');
   }
 
-  const dashboardUrl = buildAdminApiUrl('/dashboard');
+  const dashboardUrl = buildAdminApiUrl('/auth/me');
   let response: Response;
   try {
     response = await fetchWithTimeout(dashboardUrl, {
@@ -186,10 +190,10 @@ export async function verifyAdminSession(accessToken: string): Promise<void> {
   }
 
   const dashboard = unwrapEnvelope(payload);
-  const role = resolveRole(dashboard?.user || null);
-  if (role !== 'admin') {
-    throw new Error('Admin access required.');
+  if (!hasAdminPanelAccess(dashboard?.user)) {
+    throw new Error('This account does not have admin panel access.');
   }
+  return dashboard.user as AdminSessionUser;
 }
 
 export async function loginAdmin(payload: AdminLoginPayload) {
@@ -232,8 +236,11 @@ export async function loginAdmin(payload: AdminLoginPayload) {
     if (response.status === 404 || response.status >= 500) {
       throw new Error(ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE);
     }
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
       throw new Error(ADMIN_INVALID_CREDENTIALS_MESSAGE);
+    }
+    if (response.status === 403) {
+      throw new Error(responsePayload?.error?.message || 'This account does not have admin panel access.');
     }
     throw new Error(responsePayload?.error?.message || 'Unable to authenticate with the admin backend.');
   }
@@ -244,16 +251,19 @@ export async function loginAdmin(payload: AdminLoginPayload) {
   }
 
   const resolvedRole = resolveRole(authPayload);
-  if (resolvedRole !== 'admin') {
-    throw new Error('Admin access required.');
+  const sessionUser = authPayload.user;
+  if (!hasAdminPanelAccess(sessionUser)) {
+    throw new Error('This account does not have admin panel access.');
   }
 
-  await verifyAdminSession(authPayload.access_token);
+  const verifiedUser = await verifyAdminSession(authPayload.access_token);
 
   return {
     access_token: authPayload.access_token,
     token_type: authPayload.token_type || 'bearer',
     role: resolvedRole,
+    admin_role: verifiedUser.adminRole || authPayload.admin_role || 'SUPER_ADMIN',
+    admin_permissions: verifiedUser.adminPermissions || authPayload.admin_permissions || [],
   };
 }
 

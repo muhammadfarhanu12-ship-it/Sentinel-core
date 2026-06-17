@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "make-admin-owner": "node scripts/make-admin-owner.js"
+  },
   "dependencies": {
     "nodemailer": "^8.0.4"
   }
