@@ -2,15 +2,15 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { useAdminStore } from '../../stores/adminStore';
 import { DataTable } from '../../components/tables/DataTable';
-import { ColumnDef } from '@tanstack/react-table';
-import { AdminUser } from '../../types';
+import type { ColumnDef } from '@tanstack/react-table';
+import type { AdminPanelUser } from '../../types';
 import { MoreHorizontal, Shield, Ban, Eye, CheckCircle, Trash2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils';
 
 export default function AdminUsers() {
   const { users, toggleUserStatus, deleteUser } = useAdminStore();
 
-  const columns: ColumnDef<AdminUser>[] = [
+  const columns: ColumnDef<AdminPanelUser>[] = [
     {
       accessorKey: 'id',
       header: 'User ID',

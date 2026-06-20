@@ -27,7 +27,7 @@ import {
 import Loader from '../components/ui/Loader';
 import { fetchAdminThreats } from '../lib/adminService';
 import { getErrorMessage } from '../lib/errors';
-import type { AdminLog } from '../types';
+import type { AdminLog, BrowserChartConstructor, BrowserChartInstance, BrowserChartWindow } from '../types';
 
 type ThreatSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 type ThreatStatus = 'NEW' | 'INVESTIGATING' | 'RESOLVED' | 'FALSE POSITIVE';
@@ -349,14 +349,22 @@ const SPARKLINES = {
   resolved: [0, 2, 1, 1, 1, 0, 1],
 };
 
-function loadChartJs() {
-  return new Promise<any>((resolve, reject) => {
+function loadChartJs(): Promise<BrowserChartConstructor> {
+  return new Promise<BrowserChartConstructor>((resolve, reject) => {
     if (typeof window === 'undefined') {
       reject(new Error('Chart.js requires a browser environment.'));
       return;
     }
 
-    const scopedWindow = window as Window & { Chart?: any };
+    const scopedWindow = window as BrowserChartWindow;
+    const resolveChart = () => {
+      if (scopedWindow.Chart) {
+        resolve(scopedWindow.Chart);
+        return;
+      }
+      reject(new Error('Unable to load Chart.js.'));
+    };
+
     if (scopedWindow.Chart) {
       resolve(scopedWindow.Chart);
       return;
@@ -364,7 +372,7 @@ function loadChartJs() {
 
     const existing = document.querySelector<HTMLScriptElement>('script[data-chartjs="threats"]');
     if (existing) {
-      existing.addEventListener('load', () => resolve(scopedWindow.Chart), { once: true });
+      existing.addEventListener('load', resolveChart, { once: true });
       existing.addEventListener('error', () => reject(new Error('Unable to load Chart.js.')), { once: true });
       return;
     }
@@ -373,7 +381,7 @@ function loadChartJs() {
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js';
     script.async = true;
     script.dataset.chartjs = 'threats';
-    script.onload = () => resolve(scopedWindow.Chart);
+    script.onload = resolveChart;
     script.onerror = () => reject(new Error('Unable to load Chart.js.'));
     document.head.appendChild(script);
   });
@@ -540,8 +548,8 @@ export default function AdminThreats() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const chartRef = useRef<HTMLCanvasElement | null>(null);
-  const chartInstanceRef = useRef<any>(null);
-  const sparklineInstancesRef = useRef<any[]>([]);
+  const chartInstanceRef = useRef<BrowserChartInstance | null>(null);
+  const sparklineInstancesRef = useRef<BrowserChartInstance[]>([]);
 
   const loadThreats = async () => {
     setLoading(true);
@@ -625,7 +633,7 @@ export default function AdminThreats() {
     };
   }, [loading, trendRange]);
 
-  const currentPeriodThreats = useMemo(() => threats, [threats, timeRange]);
+  const currentPeriodThreats = useMemo(() => threats, [threats]);
 
   const statCards = useMemo<StatCard[]>(
     () => [
@@ -682,7 +690,7 @@ export default function AdminThreats() {
               },
             });
           })
-          .filter(Boolean);
+          .filter((instance): instance is BrowserChartInstance => instance !== null);
       })
       .catch(() => {
         setError((current) => current || 'Threat sparklines could not be initialized.');

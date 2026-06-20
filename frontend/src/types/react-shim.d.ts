@@ -5,6 +5,7 @@ declare namespace React {
   type Key = string | number;
   type ReactText = string | number;
   type ReactNode = ReactText | boolean | null | undefined | ReactElement | ReactNode[];
+  type CSSProperties = Record<string, string | number | undefined>;
 
   interface ReactElement<P = any, T extends string | JSXElementConstructor<any> = string | JSXElementConstructor<any>> {
     type: T;
@@ -51,6 +52,11 @@ declare namespace React {
 
   interface FormEvent<T = any> {
     preventDefault(): void;
+    target: T;
+  }
+
+  interface MouseEvent<T = Element> {
+    currentTarget: T;
     target: T;
   }
 

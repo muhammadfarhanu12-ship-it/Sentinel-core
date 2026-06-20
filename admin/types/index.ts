@@ -52,6 +52,16 @@ export type AdminUser = {
   api_key_count: number;
 };
 
+export type AdminPanelUser = {
+  id: string;
+  email: string;
+  plan: 'FREE' | 'PRO' | 'BUSINESS';
+  apiUsage: number;
+  apiKeys: number;
+  status: 'ACTIVE' | 'SUSPENDED';
+  createdAt: string;
+};
+
 export type AdminLog = {
   id: string | number;
   timestamp: string;
@@ -95,6 +105,26 @@ export type AdminApiKey = {
   last_ip?: string | null;
   created_at: string;
   key?: string | null;
+};
+
+export type GlobalApiKey = {
+  id: string;
+  userId: string;
+  userEmail: string;
+  prefix: string;
+  usage: number;
+  lastUsed: string;
+  status: 'ACTIVE' | 'REVOKED' | 'QUARANTINED';
+};
+
+export type SecurityLog = {
+  id: string;
+  timestamp: string;
+  userId: string;
+  userEmail: string;
+  threatType: string;
+  status: 'BLOCKED' | 'REDACTED' | 'CLEAN';
+  rawJson: string;
 };
 
 export type AdminSettings = {
@@ -177,4 +207,19 @@ export type AdminApiKeysQuery = {
   page?: number;
   pageSize?: number;
   q?: string;
+};
+
+export type BrowserChartInstance = {
+  destroy(): void;
+  resize?(): void;
+  update?(): void;
+};
+
+export type BrowserChartConstructor = new (
+  item: HTMLCanvasElement | CanvasRenderingContext2D,
+  config: unknown,
+) => BrowserChartInstance;
+
+export type BrowserChartWindow = Window & {
+  Chart?: BrowserChartConstructor;
 };

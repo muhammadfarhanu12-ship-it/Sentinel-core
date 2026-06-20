@@ -46,6 +46,7 @@ from app.routers.scan_router import router as scan_router
 from app.routers.security_tools_router import router as security_tools_router
 from app.routers.settings_router import router as settings_router
 from app.routers.team_router import router as team_router
+from app.routers.threats_router import router as threats_router
 from app.routers.usage_router import router as usage_router
 from app.schemas.api_schema import fail
 from app.security.security_enforcement_layer import SecurityEnforcementInput
@@ -313,6 +314,7 @@ app.include_router(api_v1)
 app.include_router(api_legacy)
 app.include_router(analytics_router, prefix="/api/v1/analytics")
 app.include_router(reports_router, prefix="/api/v1/reports")
+app.include_router(threats_router, prefix="/api/v1/threats")
 app.include_router(keys_router, prefix="/api/v1/keys")
 app.include_router(logs_router, prefix="/api/v1/logs")
 app.include_router(team_router, prefix="/api/v1/team")

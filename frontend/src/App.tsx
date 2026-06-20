@@ -12,6 +12,7 @@ import Settings from './pages/Settings';
 import Documentation from './pages/Documentation';
 import Playground from './pages/Playground';
 import Reports from './pages/Reports';
+import Threats from './pages/Threats';
 import LandingPage from './pages/LandingPage';
 import SignIn from './pages/auth/SignIn';
 import SignUp from './pages/auth/SignUp';
@@ -60,7 +61,7 @@ export default function App() {
           <Route path="/app" element={<AppLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="playground" element={<Playground />} />
-            <Route path="threats" element={<Reports />} />
+            <Route path="threats" element={<Threats />} />
             <Route path="logs" element={<Logs />} />
             <Route path="reports" element={<Reports />} />
             <Route path="audit-logs" element={<Suspense fallback={<RouteFallback />}><AuditLogs /></Suspense>} />

@@ -1,8 +1,8 @@
 import { create } from 'zustand';
-import { AdminUser, GlobalApiKey, SecurityLog } from '../types';
+import type { AdminPanelUser, GlobalApiKey, SecurityLog } from '../types';
 
 interface AdminState {
-  users: AdminUser[];
+  users: AdminPanelUser[];
   apiKeys: GlobalApiKey[];
   logs: SecurityLog[];
   metrics: {

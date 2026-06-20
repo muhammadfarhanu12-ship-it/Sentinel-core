@@ -21,7 +21,7 @@ import {
 import Loader from '../components/ui/Loader';
 import { fetchAdminAuditLogs } from '../lib/adminService';
 import { getErrorMessage } from '../lib/errors';
-import type { AdminAuditLog } from '../types';
+import type { AdminAuditLog, BrowserChartConstructor, BrowserChartInstance, BrowserChartWindow } from '../types';
 
 type AuditSeverity = 'CRITICAL' | 'WARNING' | 'INFO';
 type AuditCategory = 'Auth' | 'Gateway' | 'Admin' | 'Team' | 'Billing';
@@ -237,9 +237,17 @@ const CHART_SERIES = {
   },
 } as const;
 
-function loadChartJs() {
-  return new Promise<any>((resolve, reject) => {
-    const win = window as Window & { Chart?: any };
+function loadChartJs(): Promise<BrowserChartConstructor> {
+  return new Promise<BrowserChartConstructor>((resolve, reject) => {
+    const win = window as BrowserChartWindow;
+    const resolveChart = () => {
+      if (win.Chart) {
+        resolve(win.Chart);
+        return;
+      }
+      reject(new Error('Unable to load Chart.js.'));
+    };
+
     if (win.Chart) {
       resolve(win.Chart);
       return;
@@ -247,7 +255,7 @@ function loadChartJs() {
 
     const existing = document.querySelector<HTMLScriptElement>('script[data-chartjs="audit-logs"]');
     if (existing) {
-      existing.addEventListener('load', () => resolve(win.Chart), { once: true });
+      existing.addEventListener('load', resolveChart, { once: true });
       existing.addEventListener('error', () => reject(new Error('Unable to load Chart.js.')), { once: true });
       return;
     }
@@ -256,7 +264,7 @@ function loadChartJs() {
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js';
     script.async = true;
     script.dataset.chartjs = 'audit-logs';
-    script.onload = () => resolve(win.Chart);
+    script.onload = resolveChart;
     script.onerror = () => reject(new Error('Unable to load Chart.js.'));
     document.head.appendChild(script);
   });
@@ -423,7 +431,7 @@ export default function AdminAuditLogs() {
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'timestamp', direction: 'desc' });
   const chartRef = useRef<HTMLCanvasElement | null>(null);
-  const chartInstanceRef = useRef<any>(null);
+  const chartInstanceRef = useRef<BrowserChartInstance | null>(null);
 
   const loadAuditLogs = async () => {
     setLoading(true);

@@ -2,10 +2,10 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { useAdminStore } from '../../stores/adminStore';
 import { DataTable } from '../../components/tables/DataTable';
-import { ColumnDef } from '@tanstack/react-table';
-import { GlobalApiKey } from '../../types';
+import type { ColumnDef } from '@tanstack/react-table';
+import type { GlobalApiKey } from '../../types';
 import { Key, Trash2, ShieldOff } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils';
 
 export default function AdminApiKeys() {
   const { apiKeys, revokeApiKey } = useAdminStore();

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
 
-type ToastTone = 'success' | 'error' | 'info';
+type ToastTone = 'success' | 'error' | 'info' | 'warning';
 
 type ToastItem = {
   id: number;
@@ -48,14 +48,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 ? 'border-clean/20 bg-slate-950/90 text-clean'
                 : toast.tone === 'error'
                   ? 'border-red-500/20 bg-slate-950/90 text-red-300'
-                  : 'border-indigo-500/20 bg-slate-950/90 text-indigo-200'
+                  : toast.tone === 'warning'
+                    ? 'border-amber-500/20 bg-slate-950/90 text-amber-200'
+                    : 'border-indigo-500/20 bg-slate-950/90 text-indigo-200'
             }`}
           >
             <div className="flex items-start gap-3">
               <div className="mt-0.5">
                 {toast.tone === 'success' ? (
                   <CheckCircle2 className="h-4 w-4" />
-                ) : toast.tone === 'error' ? (
+                ) : toast.tone === 'error' || toast.tone === 'warning' ? (
                   <AlertTriangle className="h-4 w-4" />
                 ) : (
                   <Info className="h-4 w-4" />

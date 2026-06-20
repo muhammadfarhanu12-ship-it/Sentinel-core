@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type CSSProperties, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import {
   Check,
@@ -943,12 +943,12 @@ export default function TeamManagement() {
                         onClick={() => toggleMemberSuspended(member)}
                         className="flex h-7 w-7 items-center justify-center rounded-[6px] border border-transparent transition-colors"
                         style={{ color: THEME.textSoft }}
-                        onMouseEnter={(event) => {
+                        onMouseEnter={(event: MouseEvent<HTMLButtonElement>) => {
                           event.currentTarget.style.background = THEME.amberDim;
                           event.currentTarget.style.borderColor = THEME.amberBorder;
                           event.currentTarget.style.color = THEME.amber;
                         }}
-                        onMouseLeave={(event) => {
+                        onMouseLeave={(event: MouseEvent<HTMLButtonElement>) => {
                           event.currentTarget.style.background = 'transparent';
                           event.currentTarget.style.borderColor = 'transparent';
                           event.currentTarget.style.color = THEME.textSoft;
@@ -961,12 +961,12 @@ export default function TeamManagement() {
                         onClick={() => setRemoveConfirmId((current) => (current === member.id ? null : member.id))}
                         className="flex h-7 w-7 items-center justify-center rounded-[6px] border border-transparent transition-colors"
                         style={{ color: THEME.textSoft }}
-                        onMouseEnter={(event) => {
+                        onMouseEnter={(event: MouseEvent<HTMLButtonElement>) => {
                           event.currentTarget.style.background = THEME.redDim;
                           event.currentTarget.style.borderColor = THEME.redBorder;
                           event.currentTarget.style.color = THEME.red;
                         }}
-                        onMouseLeave={(event) => {
+                        onMouseLeave={(event: MouseEvent<HTMLButtonElement>) => {
                           event.currentTarget.style.background = 'transparent';
                           event.currentTarget.style.borderColor = 'transparent';
                           event.currentTarget.style.color = THEME.textSoft;
@@ -1106,7 +1106,7 @@ export default function TeamManagement() {
             </p>
           </div>
 
-          <form id="invite-member-form" className="space-y-[10px] p-5" onSubmit={(event) => void handleSendInvitation(event)}>
+          <form id="invite-member-form" className="space-y-[10px] p-5" onSubmit={(event: FormEvent<HTMLFormElement>) => void handleSendInvitation(event)}>
             <div>
               <label className="mb-2 block text-[10px] font-semibold tracking-[0.08em]" style={{ color: THEME.textMuted }}>
                 FULL NAME (OPTIONAL)
