@@ -93,12 +93,21 @@ export type AuditSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
 export interface AuditLogEntry {
   id: string;
   timestamp: string;
+  created_at?: string | null;
   actor: string;
   actor_type: 'USER' | 'SYSTEM' | string;
   action: string;
+  event_type?: string | null;
   resource: string;
   ip_address: string | null;
   severity: AuditSeverity | string;
+  request_id?: string | null;
+  decision?: string | null;
+  risk_score?: number | null;
+  matched_policies?: string[];
+  provider?: string | null;
+  model?: string | null;
+  prompt_preview?: string | null;
   old_value?: unknown;
   new_value?: unknown;
   metadata?: Record<string, unknown> | null;
@@ -110,6 +119,7 @@ export interface AuditLogsQuery {
   severity?: AuditSeverity | string;
   startDate?: string;
   endDate?: string;
+  q?: string;
 }
 
 export interface UsageTrendPoint {

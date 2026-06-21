@@ -437,7 +437,7 @@ function FieldShell({ label, children }: { label: string; children: React.ReactN
 
 function JsonView({ value }: { value: unknown }) {
   return (
-    <pre className="max-h-[420px] overflow-auto rounded-[7px] border border-white/10 bg-[#0D1117] p-4 font-mono text-xs leading-6 text-[#D1D9EE]">
+    <pre className="max-h-105 overflow-auto rounded-[7px] border border-white/10 bg-[#0D1117] p-4 font-mono text-xs leading-6 text-[#D1D9EE]">
       {JSON.stringify(value, null, 2)}
     </pre>
   );
@@ -657,7 +657,7 @@ export default function Playground() {
 
   return (
     <div className="min-h-screen bg-[#0D1117] p-4 text-[#D1D9EE] md:p-6">
-      <div className="mx-auto max-w-[1500px] space-y-5">
+      <div className="mx-auto max-w-375 space-y-5">
         <header className="flex flex-col gap-4 rounded-[10px] border border-white/[0.07] bg-[#111827] p-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-[22px] font-bold text-white">Security Test Lab</h1>
@@ -689,7 +689,7 @@ export default function Playground() {
                   <button
                     type="button"
                     onClick={() => window.location.reload()}
-                    className="rounded-[7px] border border-white/[0.13] bg-[#161D2E] px-3 py-2 text-xs font-bold text-[#D1D9EE]"
+                    className="rounded-[7px] border border-white/13 bg-[#161D2E] px-3 py-2 text-xs font-bold text-[#D1D9EE]"
                   >
                     <RefreshCcw className="mr-2 inline h-3.5 w-3.5" />
                     Refresh
@@ -698,7 +698,7 @@ export default function Playground() {
               />
               <div className="space-y-4 p-4">
                 {capabilitiesError ? (
-                  <div className="rounded-[8px] border border-[#F59E0B]/30 bg-[#F59E0B]/10 p-3 text-xs text-[#FCD34D]">
+                  <div className="rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/10 p-3 text-xs text-[#FCD34D]">
                     {capabilitiesError}
                   </div>
                 ) : null}
@@ -706,7 +706,7 @@ export default function Playground() {
                   <select
                     value={provider}
                     onChange={(event: ChangeEvent<HTMLSelectElement>) => setProvider(event.target.value)}
-                    className="w-full rounded-[7px] border border-white/[0.13] bg-[#161D2E] px-3 py-2 text-sm outline-none focus:border-[#6366F1]/50"
+                    className="w-full rounded-[7px] border border-white/13 bg-[#161D2E] px-3 py-2 text-sm outline-none focus:border-[#6366F1]/50"
                     disabled={loadingCapabilities || providerOptions.length === 0}
                   >
                     {providerOptions.map((item) => (
@@ -720,7 +720,7 @@ export default function Playground() {
                   <select
                     value={model}
                     onChange={(event: ChangeEvent<HTMLSelectElement>) => setModel(event.target.value)}
-                    className="w-full rounded-[7px] border border-white/[0.13] bg-[#161D2E] px-3 py-2 text-sm outline-none focus:border-[#6366F1]/50"
+                    className="w-full rounded-[7px] border border-white/13 bg-[#161D2E] px-3 py-2 text-sm outline-none focus:border-[#6366F1]/50"
                     disabled={loadingCapabilities || modelOptions.length === 0}
                   >
                     {modelOptions.map((item) => (
@@ -758,7 +758,7 @@ export default function Playground() {
               <CardHeader icon={<ShieldEllipsis className="h-5 w-5" />} title="Capability Matrix" subtitle="Implemented, disabled, and locked provider/model paths" />
               <div className="space-y-3 p-4">
                 {providerOptions.map((item) => (
-                  <div key={item.id} className="rounded-[8px] border border-white/[0.07] bg-[#161D2E] p-3">
+                  <div key={item.id} className="rounded-lg border border-white/[0.07] bg-[#161D2E] p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <div className="text-sm font-bold text-[#D1D9EE]">{item.label}</div>
@@ -796,7 +796,7 @@ export default function Playground() {
                   ['MONTHLY QUOTA', capabilities?.plan_limits.monthly_requests || 0, 'requests'],
                   ['AUDIT RETENTION', capabilities?.plan_limits.audit_retention_days || 0, 'days'],
                 ].map(([label, value, unit]) => (
-                  <div key={String(label)} className="rounded-[8px] border border-white/[0.07] bg-[#161D2E] p-3">
+                  <div key={String(label)} className="rounded-lg border border-white/[0.07] bg-[#161D2E] p-3">
                     <div className="text-[10px] font-bold text-[#6B7A99]">{label}</div>
                     <div className="mt-2 font-mono text-xl font-bold text-white">{String(value)}</div>
                     <div className="text-[11px] text-[#3A4560]">{String(unit)}</div>
@@ -809,7 +809,7 @@ export default function Playground() {
               <CardHeader icon={<Terminal className="h-5 w-5" />} title="Preflight Readiness" subtitle="Gateway-run blocks when backend truth is missing or unsafe" />
               <div className="space-y-2 p-4">
                 {readiness.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between gap-3 rounded-[8px] border border-white/[0.07] bg-[#161D2E] p-3">
+                  <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.07] bg-[#161D2E] p-3">
                     <div>
                       <div className="text-sm font-bold text-[#D1D9EE]">{item.label}</div>
                       <div className="text-xs text-[#6B7A99]">{item.detail}</div>
@@ -835,7 +835,7 @@ export default function Playground() {
             <SectionCard>
               <CardHeader icon={<Play className="h-5 w-5" />} title="Execution Mode" subtitle="Gateway Run calls the provider only after Sentinel checks. Security Scan never forwards to a provider." />
               <div className="space-y-4 p-4">
-                <div className="grid grid-cols-2 gap-2 rounded-[8px] bg-[#161D2E] p-1">
+                <div className="grid grid-cols-2 gap-2 rounded-lg bg-[#161D2E] p-1">
                   {(['gateway', 'scan'] as ExecutionMode[]).map((item) => (
                     <button
                       key={item}
@@ -877,7 +877,7 @@ export default function Playground() {
                 <textarea
                   value={prompt}
                   onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)}
-                  className="min-h-[150px] w-full resize-y rounded-[7px] border border-white/[0.13] bg-[#161D2E] px-3 py-3 font-mono text-sm text-[#D1D9EE] outline-none placeholder:text-[#3A4560] focus:border-[#6366F1]/50"
+                  className="min-h-37.5 w-full resize-y rounded-[7px] border border-white/13 bg-[#161D2E] px-3 py-3 font-mono text-sm text-[#D1D9EE] outline-none placeholder:text-[#3A4560] focus:border-[#6366F1]/50"
                   placeholder="Enter a prompt or load a scenario preset."
                 />
                 <div className="flex items-center justify-between gap-3 font-mono text-xs text-[#6B7A99]">
@@ -889,7 +889,7 @@ export default function Playground() {
                     <select
                       value={source}
                       onChange={(event: ChangeEvent<HTMLSelectElement>) => setSource(event.target.value as SourceId)}
-                      className="w-full rounded-[7px] border border-white/[0.13] bg-[#161D2E] px-3 py-2 text-sm outline-none focus:border-[#6366F1]/50"
+                      className="w-full rounded-[7px] border border-white/13 bg-[#161D2E] px-3 py-2 text-sm outline-none focus:border-[#6366F1]/50"
                     >
                       {SOURCE_OPTIONS.map((item) => (
                         <option key={item.id} value={item.id}>
@@ -902,7 +902,7 @@ export default function Playground() {
                     <select
                       value={operation}
                       onChange={(event: ChangeEvent<HTMLSelectElement>) => setOperation(event.target.value as OperationId)}
-                      className="w-full rounded-[7px] border border-white/[0.13] bg-[#161D2E] px-3 py-2 text-sm outline-none focus:border-[#6366F1]/50"
+                      className="w-full rounded-[7px] border border-white/13 bg-[#161D2E] px-3 py-2 text-sm outline-none focus:border-[#6366F1]/50"
                     >
                       {OPERATION_OPTIONS.map((item) => (
                         <option key={item.id} value={item.id}>
@@ -924,7 +924,7 @@ export default function Playground() {
                   <button
                     type="button"
                     onClick={() => setTrusted((value) => !value)}
-                    className={`flex items-start gap-3 rounded-[8px] border p-3 text-left ${trusted ? 'border-[#6366F1]/40 bg-[#6366F1]/[0.07]' : 'border-white/[0.07] bg-[#161D2E]'}`}
+                    className={`flex items-start gap-3 rounded-lg border p-3 text-left ${trusted ? 'border-[#6366F1]/40 bg-[#6366F1]/[0.07]' : 'border-white/[0.07] bg-[#161D2E]'}`}
                   >
                     <span className={`mt-0.5 flex h-5 w-5 items-center justify-center rounded border ${trusted ? 'border-[#6366F1] bg-[#6366F1]' : 'border-white/20 bg-[#111827]'}`}>
                       {trusted ? <Check className="h-3.5 w-3.5 text-white" /> : null}
@@ -937,7 +937,7 @@ export default function Playground() {
                   <button
                     type="button"
                     onClick={() => setUserConfirmed((value) => !value)}
-                    className={`flex items-start gap-3 rounded-[8px] border p-3 text-left ${userConfirmed ? 'border-[#6366F1]/40 bg-[#6366F1]/[0.07]' : 'border-white/[0.07] bg-[#161D2E]'}`}
+                    className={`flex items-start gap-3 rounded-lg border p-3 text-left ${userConfirmed ? 'border-[#6366F1]/40 bg-[#6366F1]/[0.07]' : 'border-white/[0.07] bg-[#161D2E]'}`}
                   >
                     <span className={`mt-0.5 flex h-5 w-5 items-center justify-center rounded border ${userConfirmed ? 'border-[#6366F1] bg-[#6366F1]' : 'border-white/20 bg-[#111827]'}`}>
                       {userConfirmed ? <Check className="h-3.5 w-3.5 text-white" /> : null}
@@ -958,7 +958,7 @@ export default function Playground() {
                   <input
                     value={toolName}
                     onChange={(event: ChangeEvent<HTMLInputElement>) => setToolName(event.target.value)}
-                    className="w-full rounded-[7px] border border-white/[0.13] bg-[#161D2E] px-3 py-2 text-sm outline-none focus:border-[#6366F1]/50"
+                    className="w-full rounded-[7px] border border-white/13 bg-[#161D2E] px-3 py-2 text-sm outline-none focus:border-[#6366F1]/50"
                   />
                 </FieldShell>
                 <FieldShell label="Tool Args JSON">
@@ -966,7 +966,7 @@ export default function Playground() {
                     value={toolArgsText}
                     onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setToolArgsText(event.target.value)}
                     rows={6}
-                    className="w-full resize-y rounded-[7px] border border-white/[0.13] bg-[#161D2E] px-3 py-2 font-mono text-xs outline-none focus:border-[#6366F1]/50"
+                    className="w-full resize-y rounded-[7px] border border-white/13 bg-[#161D2E] px-3 py-2 font-mono text-xs outline-none focus:border-[#6366F1]/50"
                   />
                 </FieldShell>
                 {toolArgsState.error ? (
@@ -1006,7 +1006,7 @@ export default function Playground() {
                   run_history: runHistory,
                   last_result: result?.auditPacket || null,
                 })}
-                className="rounded-[7px] border border-white/[0.13] bg-[#161D2E] px-4 py-3 text-sm font-bold text-[#D1D9EE]"
+                className="rounded-[7px] border border-white/13 bg-[#161D2E] px-4 py-3 text-sm font-bold text-[#D1D9EE]"
               >
                 <FileJson className="mr-2 inline h-4 w-4" />
                 Export Session Report
@@ -1023,7 +1023,7 @@ export default function Playground() {
               <div className="p-4">
                 {!result ? (
                   <div className="space-y-3 text-center">
-                    <div className="rounded-[8px] border border-white/[0.07] bg-[#161D2E] p-10">
+                    <div className="rounded-lg border border-white/[0.07] bg-[#161D2E] p-10">
                       <ShieldX className="mx-auto h-10 w-10 text-[#3A4560]" />
                       <p className="mx-auto mt-4 max-w-lg text-sm text-[#6B7A99]">{currentSummary}</p>
                     </div>
@@ -1048,7 +1048,7 @@ export default function Playground() {
 
                     {tab === 'summary' ? (
                       <div className="space-y-4">
-                        <div className={`rounded-[8px] border p-4 ${decisionClasses(result.envelope.decision)}`}>
+                        <div className={`rounded-lg border p-4 ${decisionClasses(result.envelope.decision)}`}>
                           <div className="text-xl font-black">{result.envelope.decision}</div>
                           <p className="mt-2 text-sm opacity-90">{resultSummary(result.raw, result.envelope)}</p>
                         </div>
@@ -1063,14 +1063,14 @@ export default function Playground() {
                             ['Source', sourceLabel(source)],
                             ['Operation', operationLabel(operation)],
                           ].map(([label, value]) => (
-                            <div key={String(label)} className="rounded-[8px] border border-white/[0.07] bg-[#161D2E] p-3">
+                            <div key={String(label)} className="rounded-lg border border-white/[0.07] bg-[#161D2E] p-3">
                               <div className="text-[10px] font-bold uppercase text-[#6B7A99]">{String(label)}</div>
                               <div className="mt-2 font-mono text-sm font-bold text-[#D1D9EE]">{String(value)}</div>
                             </div>
                           ))}
                         </div>
                         <div className="flex items-center gap-5">
-                          <div className="relative h-[88px] w-[88px]">
+                          <div className="relative h-22 w-22">
                             <svg viewBox="0 0 88 88" className="-rotate-90">
                               <circle cx="44" cy="44" r="38" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="8" />
                               <circle
@@ -1115,7 +1115,7 @@ export default function Playground() {
                         </div>
                         {result.policyRecords.length ? (
                           result.policyRecords.map((item, index) => (
-                            <div key={`${String(item.policy_name || 'policy')}-${index}`} className="rounded-[8px] border border-white/[0.07] bg-[#161D2E] p-3">
+                            <div key={`${String(item.policy_name || 'policy')}-${index}`} className="rounded-lg border border-white/[0.07] bg-[#161D2E] p-3">
                               <div className="text-sm font-bold text-[#D1D9EE]">{String(item.policy_name || 'Unnamed policy')}</div>
                               <div className="mt-1 text-xs text-[#6B7A99]">
                                 action={String(item.action || 'unknown')} | severity={String(item.severity || 'unknown')} | score={String(item.score || 0)}
@@ -1124,7 +1124,7 @@ export default function Playground() {
                             </div>
                           ))
                         ) : (
-                          <div className="rounded-[8px] border border-white/[0.07] bg-[#161D2E] p-3 text-sm text-[#6B7A99]">
+                          <div className="rounded-lg border border-white/[0.07] bg-[#161D2E] p-3 text-sm text-[#6B7A99]">
                             No structured policy objects were returned for this run.
                           </div>
                         )}
@@ -1133,7 +1133,7 @@ export default function Playground() {
 
                     {tab === 'trace' ? (
                       <div className="space-y-3">
-                        <div className="max-h-[360px] overflow-auto rounded-[8px] border border-white/[0.07] bg-[#0D1117] p-4 font-mono text-xs leading-7">
+                        <div className="max-h-90 overflow-auto rounded-lg border border-white/[0.07] bg-[#0D1117] p-4 font-mono text-xs leading-7">
                           {result.trace.map((item) => (
                             <div
                               key={item.label}
@@ -1155,7 +1155,7 @@ export default function Playground() {
                           <button
                             type="button"
                             onClick={() => navigator.clipboard.writeText(result.trace.map((item) => `${item.label}: ${item.status} - ${item.detail}`).join('\n'))}
-                            className="rounded-[7px] border border-white/[0.13] bg-[#161D2E] px-3 py-2 text-xs font-bold text-[#D1D9EE]"
+                            className="rounded-[7px] border border-white/13 bg-[#161D2E] px-3 py-2 text-xs font-bold text-[#D1D9EE]"
                           >
                             <Copy className="mr-2 inline h-3.5 w-3.5" />
                             Copy Trace
@@ -1163,7 +1163,7 @@ export default function Playground() {
                           <button
                             type="button"
                             onClick={() => exportJson(`sentinel-trace-${result.envelope.requestId}.json`, result.trace)}
-                            className="rounded-[7px] border border-white/[0.13] bg-[#161D2E] px-3 py-2 text-xs font-bold text-[#D1D9EE]"
+                            className="rounded-[7px] border border-white/13 bg-[#161D2E] px-3 py-2 text-xs font-bold text-[#D1D9EE]"
                           >
                             <Download className="mr-2 inline h-3.5 w-3.5" />
                             Export Trace
@@ -1174,11 +1174,11 @@ export default function Playground() {
 
                     {tab === 'provider' ? (
                       <div className="space-y-3">
-                        <div className="rounded-[8px] border border-white/[0.07] bg-[#161D2E] p-3">
+                        <div className="rounded-lg border border-white/[0.07] bg-[#161D2E] p-3">
                           <div className="text-[11px] font-bold uppercase text-[#6B7A99]">Provider response</div>
                           <div className="mt-2 whitespace-pre-wrap text-sm text-[#D1D9EE]">{providerContent}</div>
                         </div>
-                        <div className="rounded-[8px] border border-white/[0.07] bg-[#161D2E] p-3 text-xs text-[#6B7A99]">
+                        <div className="rounded-lg border border-white/[0.07] bg-[#161D2E] p-3 text-xs text-[#6B7A99]">
                           Backend provider details are normalized. Missing keys, model unavailability, timeout, auth errors, and rate limits are surfaced safely without leaking provider internals.
                         </div>
                       </div>
@@ -1191,7 +1191,7 @@ export default function Playground() {
                           <button
                             type="button"
                             onClick={() => exportJson(`sentinel-audit-${result.envelope.requestId}.json`, result.auditPacket)}
-                            className="rounded-[7px] border border-white/[0.13] bg-[#161D2E] px-3 py-2 text-xs font-bold text-[#D1D9EE]"
+                            className="rounded-[7px] border border-white/13 bg-[#161D2E] px-3 py-2 text-xs font-bold text-[#D1D9EE]"
                           >
                             <FileJson className="mr-2 inline h-3.5 w-3.5" />
                             Export Audit Report
@@ -1210,7 +1210,7 @@ export default function Playground() {
                     {tab === 'raw' ? (
                       <div className="space-y-3">
                         <JsonView value={result.rawJson} />
-                        <div className="rounded-[8px] border border-white/[0.07] bg-[#161D2E] p-3 text-xs text-[#6B7A99]">
+                        <div className="rounded-lg border border-white/[0.07] bg-[#161D2E] p-3 text-xs text-[#6B7A99]">
                           Sensitive prompt echoes, API keys, tokens, passwords, and long raw payloads are redacted before display or export.
                         </div>
                       </div>
@@ -1239,7 +1239,7 @@ export default function Playground() {
               </div>
             ))}
           </div>
-          <div className="min-w-[260px] rounded-[8px] border border-white/[0.07] bg-[#161D2E] p-3 text-xs text-[#6B7A99]">
+          <div className="min-w-65 rounded-lg border border-white/[0.07] bg-[#161D2E] p-3 text-xs text-[#6B7A99]">
             <div className="mb-2 font-bold uppercase text-[#D1D9EE]">Recent runs</div>
             {runHistory.length ? runHistory.map((item) => (
               <div key={item.id} className="mb-2 rounded bg-[#0D1117] px-3 py-2">

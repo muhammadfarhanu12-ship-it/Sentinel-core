@@ -492,7 +492,8 @@ def client(db_session: FakeSession, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(reports_router, "list_remediations", fake_remediations)
 
     async def fake_audit_logs(request: Any, current_user_arg: dict, limit: int = 12, offset: int = 0, **kwargs: Any):
-        _ = request, current_user_arg, kwargs
+        _ = request, current_user_arg
+        q = str(kwargs.get("q") or "").strip().lower()
         logs = db_session.query(SecurityLog).all()
         remediations = db_session.query(RemediationLog).all()
         rows = [
@@ -504,6 +505,10 @@ def client(db_session: FakeSession, monkeypatch: pytest.MonkeyPatch):
                 "action": "SECURITY_EVENT",
                 "resource": row.threat_type or "security_log",
                 "severity": "CRITICAL" if row.status == LogStatusEnum.BLOCKED else "INFO",
+                "request_id": getattr(row, "request_id", None),
+                "decision": str(row.status.value if hasattr(row.status, "value") else row.status).upper(),
+                "risk_score": float(row.risk_score or 0.0) * 100,
+                "model": getattr(row, "model", None),
             }
             for row in logs
         ]
@@ -516,9 +521,14 @@ def client(db_session: FakeSession, monkeypatch: pytest.MonkeyPatch):
                 "action": "REMEDIATION_EXECUTED",
                 "resource": row.threat_type or "remediation",
                 "severity": "CRITICAL",
+                "request_id": getattr(row, "request_id", None),
+                "decision": "SUCCESS",
+                "risk_score": float(row.threat_score or 0.0) * 100,
             }
             for row in remediations
         )
+        if q:
+            rows = [row for row in rows if q in str(row).lower()]
         return rows[offset: offset + limit]
 
     async def fake_usage_summary(request: Any, current_user_arg: dict):

@@ -361,7 +361,7 @@ function RoleBadge({
 function TeamAvatar({ initials, role }: { initials: string; role: Role }) {
   return (
     <div
-      className="flex h-[34px] w-[34px] items-center justify-center rounded-full border text-[12px] font-bold"
+      className="flex h-8.5 w-8.5 items-center justify-center rounded-full border text-[12px] font-bold"
       style={styleForRole(role)}
     >
       {initials}
@@ -702,25 +702,25 @@ export default function TeamManagement() {
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="space-y-[14px]" style={{ color: THEME.text }}>
+    <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="space-y-3.5" style={{ color: THEME.text }}>
       <style>{`
         .team-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
         .team-scroll::-webkit-scrollbar-track { background: transparent; }
         .team-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 999px; }
       `}</style>
 
-      <div className="flex flex-col gap-[10px] xl:flex-row xl:items-end xl:justify-between">
+      <div className="flex flex-col gap-2.5 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <h1 className="text-[22px] font-bold tracking-[-0.3px] text-white">Team Management</h1>
           <p className="mt-1 text-[12px]" style={{ color: THEME.textSoft }}>
             Manage workspace access with enterprise-ready roles, MFA enforcement, and full audit trails.
           </p>
         </div>
-        <div className="flex flex-wrap gap-[10px] xl:flex-nowrap">
+        <div className="flex flex-wrap gap-2.5 xl:flex-nowrap">
           <button
             type="button"
             onClick={resetPageState}
-            className="inline-flex whitespace-nowrap rounded-[7px] border px-[13px] py-[7px] text-[12px] font-semibold text-white transition-colors hover:bg-white/5"
+            className="inline-flex whitespace-nowrap rounded-[7px] border px-3.25 py-1.75 text-[12px] font-semibold text-white transition-colors hover:bg-white/5"
             style={{ borderColor: THEME.borderStrong }}
           >
             <RefreshCw className="mr-2 h-4 w-4" />
@@ -729,7 +729,7 @@ export default function TeamManagement() {
           <button
             type="button"
             onClick={handleImportCsv}
-            className="inline-flex whitespace-nowrap rounded-[7px] border px-[13px] py-[7px] text-[12px] font-semibold text-white transition-colors hover:bg-white/5"
+            className="inline-flex whitespace-nowrap rounded-[7px] border px-3.25 py-1.75 text-[12px] font-semibold text-white transition-colors hover:bg-white/5"
             style={{ borderColor: THEME.borderStrong }}
           >
             <Upload className="mr-2 h-4 w-4" />
@@ -738,7 +738,7 @@ export default function TeamManagement() {
           <button
             type="button"
             onClick={() => void copyPageLink()}
-            className="inline-flex whitespace-nowrap rounded-[7px] border px-[13px] py-[7px] text-[12px] font-semibold text-white transition-colors hover:bg-white/5"
+            className="inline-flex whitespace-nowrap rounded-[7px] border px-3.25 py-1.75 text-[12px] font-semibold text-white transition-colors hover:bg-white/5"
             style={{ borderColor: THEME.borderStrong }}
           >
             <Link2 className="mr-2 h-4 w-4" />
@@ -750,7 +750,7 @@ export default function TeamManagement() {
               const form = document.getElementById('invite-member-form');
               form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }}
-            className="inline-flex whitespace-nowrap rounded-[7px] px-[13px] py-[7px] text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
+            className="inline-flex whitespace-nowrap rounded-[7px] px-3.25 py-1.75 text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
             style={{ background: THEME.blue }}
           >
             <UserPlus className="mr-2 h-4 w-4" />
@@ -759,7 +759,7 @@ export default function TeamManagement() {
         </div>
       </div>
 
-      <div className="grid gap-[14px] md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => {
           const Icon = stat.icon;
           return (
@@ -768,7 +768,7 @@ export default function TeamManagement() {
                 <div className="text-[10px] font-bold tracking-[0.08em]" style={{ color: stat.color, opacity: 0.8 }}>
                   {stat.label}
                 </div>
-                <Icon className="h-[18px] w-[18px]" style={{ color: stat.color, opacity: 0.5 }} />
+                <Icon className="h-4.5 w-4.5" style={{ color: stat.color, opacity: 0.5 }} />
               </div>
               <div className="mt-3 font-mono text-[26px] font-extrabold" style={{ color: stat.color }}>
                 {stat.value}
@@ -781,10 +781,10 @@ export default function TeamManagement() {
         })}
       </div>
 
-      <div className="grid gap-[14px] xl:grid-cols-[2fr_1fr]">
+      <div className="grid gap-3.5 xl:grid-cols-[2fr_1fr]">
         <SectionCard>
           <div className="border-b px-5 py-4" style={{ borderColor: THEME.border }}>
-            <div className="flex flex-col gap-[14px] xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-col gap-3.5 xl:flex-row xl:items-center xl:justify-between">
               <div>
                 <div className="flex items-center gap-2 text-[15px] font-semibold text-white">
                   <Users className="h-4 w-4" style={{ color: THEME.blue }} />
@@ -808,7 +808,7 @@ export default function TeamManagement() {
               </label>
             </div>
 
-            <div className="mt-[14px] flex flex-col gap-[10px]">
+            <div className="mt-3.5 flex flex-col gap-2.5">
               <div className="flex flex-wrap gap-2">
                 {ROLE_FILTERS.map((item) => {
                   const active = roleFilter === item;
@@ -870,7 +870,7 @@ export default function TeamManagement() {
               {filteredMembers.map((member) => (
                 <div key={member.id} className="border-b" style={{ borderColor: THEME.border }}>
                   <div
-                    className="grid min-h-[58px] grid-cols-[170px_210px_120px_100px_80px_140px_110px] gap-4 px-5 py-3 transition-colors hover:bg-white/[0.025]"
+                    className="grid min-h-14.5 grid-cols-[170px_210px_120px_100px_80px_140px_110px] gap-4 px-5 py-3 transition-colors hover:bg-white/2.5"
                   >
                     <div className="flex items-center gap-3">
                       <TeamAvatar initials={member.initials} role={member.role} />
@@ -878,7 +878,7 @@ export default function TeamManagement() {
                         <div className="truncate text-[13px] font-semibold text-white">{member.name}</div>
                         {member.isCurrentUser ? (
                           <span
-                            className="mt-1 inline-flex rounded-[4px] px-[5px] py-[1px] text-[9px] font-semibold"
+                            className="mt-1 inline-flex rounded-sm px-1.25 py-px text-[9px] font-semibold"
                             style={{ background: THEME.blueDim, color: '#A5B4FC' }}
                           >
                             YOU
@@ -895,7 +895,7 @@ export default function TeamManagement() {
                       <RoleBadge role={member.role} caret onClick={() => setOpenRoleMenuId((current) => (current === member.id ? null : member.id))} />
                       {openRoleMenuId === member.id ? (
                         <div
-                          className="absolute left-0 top-[38px] z-20 min-w-[170px] rounded-[7px] border p-1 shadow-2xl"
+                          className="absolute left-0 top-9.5 z-20 min-w-42.5 rounded-[7px] border p-1 shadow-2xl"
                           style={{ background: THEME.cell, borderColor: THEME.borderStrong }}
                         >
                           {ROLE_ORDER.map((role) => (
@@ -903,7 +903,7 @@ export default function TeamManagement() {
                               key={role}
                               type="button"
                               onClick={() => changeMemberRole(member, role)}
-                              className="flex w-full items-center justify-between rounded-[6px] px-3 py-2 text-left text-[11px] transition-colors hover:bg-white/5"
+                              className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-[11px] transition-colors hover:bg-white/5"
                             >
                               <span>{role}</span>
                               {member.role === role ? <Check className="h-3.5 w-3.5" style={{ color: THEME.green }} /> : null}
@@ -933,15 +933,15 @@ export default function TeamManagement() {
                       <button
                         type="button"
                         onClick={() => setOpenRoleMenuId((current) => (current === member.id ? null : member.id))}
-                        className="flex h-7 w-7 items-center justify-center rounded-[6px] border border-transparent transition-colors hover:bg-indigo-500/10 hover:text-indigo-300"
+                        className="flex h-7 w-7 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-indigo-500/10 hover:text-indigo-300"
                         style={{ color: THEME.textSoft }}
                       >
-                        <Pencil className="h-[14px] w-[14px]" />
+                        <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <button
                         type="button"
                         onClick={() => toggleMemberSuspended(member)}
-                        className="flex h-7 w-7 items-center justify-center rounded-[6px] border border-transparent transition-colors"
+                        className="flex h-7 w-7 items-center justify-center rounded-md border border-transparent transition-colors"
                         style={{ color: THEME.textSoft }}
                         onMouseEnter={(event: MouseEvent<HTMLButtonElement>) => {
                           event.currentTarget.style.background = THEME.amberDim;
@@ -954,12 +954,12 @@ export default function TeamManagement() {
                           event.currentTarget.style.color = THEME.textSoft;
                         }}
                       >
-                        <PauseCircle className="h-[14px] w-[14px]" />
+                        <PauseCircle className="h-3.5 w-3.5" />
                       </button>
                       <button
                         type="button"
                         onClick={() => setRemoveConfirmId((current) => (current === member.id ? null : member.id))}
-                        className="flex h-7 w-7 items-center justify-center rounded-[6px] border border-transparent transition-colors"
+                        className="flex h-7 w-7 items-center justify-center rounded-md border border-transparent transition-colors"
                         style={{ color: THEME.textSoft }}
                         onMouseEnter={(event: MouseEvent<HTMLButtonElement>) => {
                           event.currentTarget.style.background = THEME.redDim;
@@ -972,7 +972,7 @@ export default function TeamManagement() {
                           event.currentTarget.style.color = THEME.textSoft;
                         }}
                       >
-                        <Trash2 className="h-[14px] w-[14px]" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </div>
@@ -1005,16 +1005,16 @@ export default function TeamManagement() {
             </div>
           </div>
 
-          <div className="grid gap-[14px] p-[14px] xl:hidden">
+          <div className="grid gap-3.5 p-3.5 xl:hidden">
             {filteredMembers.map((member) => (
-              <div key={member.id} className="rounded-[10px] border p-[14px]" style={{ background: THEME.panel, borderColor: THEME.border }}>
+              <div key={member.id} className="rounded-[10px] border p-3.5" style={{ background: THEME.panel, borderColor: THEME.border }}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <TeamAvatar initials={member.initials} role={member.role} />
                     <div>
                       <div className="text-[13px] font-semibold text-white">{member.name}</div>
                       {member.isCurrentUser ? (
-                        <span className="mt-1 inline-flex rounded-[4px] px-[5px] py-[1px] text-[9px] font-semibold" style={{ background: THEME.blueDim, color: '#A5B4FC' }}>
+                        <span className="mt-1 inline-flex rounded-sm px-1.25 py-px text-[9px] font-semibold" style={{ background: THEME.blueDim, color: '#A5B4FC' }}>
                           YOU
                         </span>
                       ) : null}
@@ -1063,14 +1063,14 @@ export default function TeamManagement() {
                 </div>
 
                 <div className="mt-4 flex gap-2">
-                  <button type="button" onClick={() => setOpenRoleMenuId(member.id)} className="flex h-7 w-7 items-center justify-center rounded-[6px] border" style={{ background: THEME.cell, borderColor: THEME.border }}>
-                    <Pencil className="h-[14px] w-[14px]" />
+                  <button type="button" onClick={() => setOpenRoleMenuId(member.id)} className="flex h-7 w-7 items-center justify-center rounded-md border" style={{ background: THEME.cell, borderColor: THEME.border }}>
+                    <Pencil className="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" onClick={() => toggleMemberSuspended(member)} className="flex h-7 w-7 items-center justify-center rounded-[6px] border" style={{ background: THEME.amberDim, borderColor: THEME.amberBorder, color: THEME.amber }}>
-                    <PauseCircle className="h-[14px] w-[14px]" />
+                  <button type="button" onClick={() => toggleMemberSuspended(member)} className="flex h-7 w-7 items-center justify-center rounded-md border" style={{ background: THEME.amberDim, borderColor: THEME.amberBorder, color: THEME.amber }}>
+                    <PauseCircle className="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" onClick={() => setRemoveConfirmId((current) => (current === member.id ? null : member.id))} className="flex h-7 w-7 items-center justify-center rounded-[6px] border" style={{ background: THEME.redDim, borderColor: THEME.redBorder, color: THEME.red }}>
-                    <Trash2 className="h-[14px] w-[14px]" />
+                  <button type="button" onClick={() => setRemoveConfirmId((current) => (current === member.id ? null : member.id))} className="flex h-7 w-7 items-center justify-center rounded-md border" style={{ background: THEME.redDim, borderColor: THEME.redBorder, color: THEME.red }}>
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
 
@@ -1106,7 +1106,7 @@ export default function TeamManagement() {
             </p>
           </div>
 
-          <form id="invite-member-form" className="space-y-[10px] p-5" onSubmit={(event: FormEvent<HTMLFormElement>) => void handleSendInvitation(event)}>
+          <form id="invite-member-form" className="space-y-2.5 p-5" onSubmit={(event: FormEvent<HTMLFormElement>) => void handleSendInvitation(event)}>
             <div>
               <label className="mb-2 block text-[10px] font-semibold tracking-[0.08em]" style={{ color: THEME.textMuted }}>
                 FULL NAME (OPTIONAL)
@@ -1189,8 +1189,8 @@ export default function TeamManagement() {
               <div className="text-[14px] font-semibold text-white">{inviteRole}</div>
               <div className="mt-1 text-[12px]" style={{ color: THEME.textSoft }}>{previewConfig.description}</div>
               {Object.entries(previewConfig.groups).map(([group, permissions]) => (
-                <div key={group} className="mt-[10px]">
-                  <div className="mb-[6px] text-[10px] font-semibold uppercase tracking-[0.09em]" style={{ color: THEME.textMuted }}>
+                <div key={group} className="mt-2.5">
+                  <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.09em]" style={{ color: THEME.textMuted }}>
                     {group}
                   </div>
                   <div className="space-y-2">
@@ -1240,12 +1240,12 @@ export default function TeamManagement() {
               </div>
             </div>
           ) : (
-            <div className="space-y-[14px]">
+            <div className="space-y-3.5">
               {pendingInvites.map((invite) => {
                 const urgent = invite.daysLeft <= 2;
                 const expired = invite.daysLeft < 0;
                 return (
-                  <div key={invite.id} className="rounded-[8px] border px-[14px] py-[11px]" style={{ background: THEME.panel, borderColor: THEME.border }}>
+                  <div key={invite.id} className="rounded-lg border px-3.5 py-2.75" style={{ background: THEME.panel, borderColor: THEME.border }}>
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                       <div className="flex items-center gap-3">
                         <TeamAvatar initials={invite.initials} role={invite.role} />
@@ -1305,7 +1305,7 @@ export default function TeamManagement() {
         </div>
       </SectionCard>
 
-      <div className="grid gap-[14px] xl:grid-cols-[2fr_1fr]">
+      <div className="grid gap-3.5 xl:grid-cols-[2fr_1fr]">
         <SectionCard>
           <div className="border-b px-5 py-4" style={{ borderColor: THEME.border }}>
             <div className="flex items-center gap-2 text-[15px] font-semibold text-white">
@@ -1318,7 +1318,7 @@ export default function TeamManagement() {
           </div>
 
           <div className="overflow-x-auto">
-            <div className="min-w-[760px]">
+            <div className="min-w-190">
               <div
                 className="grid grid-cols-[minmax(260px,1fr)_100px_100px_100px_100px] items-stretch gap-px"
                 style={{ background: THEME.border }}
@@ -1346,7 +1346,7 @@ export default function TeamManagement() {
                     return (
                       <div
                         key={`${group.category}-${label}`}
-                        className="grid grid-cols-[minmax(260px,1fr)_100px_100px_100px_100px] items-center border-b transition-colors hover:bg-white/[0.03]"
+                        className="grid grid-cols-[minmax(260px,1fr)_100px_100px_100px_100px] items-center border-b transition-colors hover:bg-white/3"
                         style={{ background: even ? 'rgba(255,255,255,0.015)' : 'transparent', borderColor: THEME.border }}
                       >
                         <div className="px-4 py-3 text-[12px]" style={{ color: THEME.text }}>{label}</div>
@@ -1383,11 +1383,11 @@ export default function TeamManagement() {
             </span>
           </div>
 
-          <div className="team-scroll max-h-[340px] overflow-y-auto">
+          <div className="team-scroll max-h-85 overflow-y-auto">
             {activities.map((activity) => (
-              <div key={activity.id} className="flex items-start gap-3 border-b px-3 py-[9px]" style={{ borderColor: THEME.border }}>
+              <div key={activity.id} className="flex items-start gap-3 border-b px-3 py-2.25" style={{ borderColor: THEME.border }}>
                 <div
-                  className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border text-[12px] font-bold"
+                  className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full border text-[12px] font-bold"
                   style={styleForTheme(activity.theme)}
                 >
                   {activity.initials}
@@ -1398,7 +1398,7 @@ export default function TeamManagement() {
                     <span style={{ color: THEME.textSoft }}>{activity.action}</span>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="rounded-[5px] border px-[7px] py-[2px] text-[10px]" style={{ background: 'rgba(255,255,255,0.05)', borderColor: THEME.border, color: THEME.text }}>
+                    <span className="rounded-[5px] border px-1.75 py-0.5 text-[10px]" style={{ background: 'rgba(255,255,255,0.05)', borderColor: THEME.border, color: THEME.text }}>
                       {activity.resource}
                     </span>
                   </div>

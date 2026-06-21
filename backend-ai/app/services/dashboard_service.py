@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
+import json
 import logging
 import re
 import secrets
@@ -853,6 +854,46 @@ def _notification_public(document: dict[str, Any]) -> dict[str, Any]:
     return public
 
 
+def _audit_log_matches_query(item: dict[str, Any], q: str | None) -> bool:
+    if not q or not q.strip():
+        return True
+
+    needle = q.strip().lower()
+    searchable_parts: list[str] = []
+    for key in (
+        "id",
+        "actor",
+        "actor_type",
+        "action",
+        "event_type",
+        "resource",
+        "ip_address",
+        "request_id",
+        "decision",
+        "provider",
+        "model",
+        "prompt_preview",
+        "severity",
+    ):
+        value = item.get(key)
+        if value is not None:
+            searchable_parts.append(str(value))
+
+    matched_policies = item.get("matched_policies")
+    if isinstance(matched_policies, list):
+        searchable_parts.extend(str(policy) for policy in matched_policies)
+
+    for key in ("metadata", "old_value", "new_value"):
+        value = item.get(key)
+        if value is not None:
+            try:
+                searchable_parts.append(json.dumps(value, default=str, sort_keys=True))
+            except TypeError:
+                searchable_parts.append(str(value))
+
+    return needle in " ".join(searchable_parts).lower()
+
+
 async def list_notifications(request: Request, current_user: dict[str, Any]) -> list[dict[str, Any]]:
     user_id = user_id_for(current_user)
     collection = collection_from_request(request, "notifications")
@@ -1254,6 +1295,7 @@ async def list_audit_logs(
     severity: str | None = None,
     start_date: datetime | None = None,
     end_date: datetime | None = None,
+    q: str | None = None,
 ) -> list[dict[str, Any]]:
     workspace_id = workspace_id_for(current_user)
     retention_start = utcnow() - timedelta(days=tier_limits_for(tier_for(current_user)).audit_retention_days)
@@ -1269,6 +1311,24 @@ async def list_audit_logs(
             if end_date:
                 range_query["$lte"] = ensure_datetime(end_date)
             query["timestamp"] = range_query
+            if q and q.strip():
+                regex = {"$regex": re.escape(q.strip()), "$options": "i"}
+                query["$or"] = [
+                    {"actor": regex},
+                    {"actor_type": regex},
+                    {"action": regex},
+                    {"event_type": regex},
+                    {"resource": regex},
+                    {"ip_address": regex},
+                    {"severity": regex},
+                    {"request_id": regex},
+                    {"decision": regex},
+                    {"provider": regex},
+                    {"model": regex},
+                    {"prompt_preview": regex},
+                    {"matched_policies": regex},
+                    {"metadata.request_id": regex},
+                ]
             documents = await list_collection_documents(
                 request,
                 collection_name="audit_logs",
@@ -1282,10 +1342,10 @@ async def list_audit_logs(
             documents = [item for item in _fallback_store["audit_logs"] if item.get("workspace_id") == workspace_id]
             if severity:
                 documents = [item for item in documents if normalize_audit_severity(item.get("severity")) == normalize_audit_severity(severity)]
-            if start_date:
-                documents = [item for item in documents if ensure_datetime(item.get("timestamp")) >= ensure_datetime(start_date)]
+            documents = [item for item in documents if ensure_datetime(item.get("timestamp")) >= effective_start]
             if end_date:
                 documents = [item for item in documents if ensure_datetime(item.get("timestamp")) <= ensure_datetime(end_date)]
+            documents = [item for item in documents if _audit_log_matches_query(item, q)]
             documents.sort(key=lambda item: ensure_datetime(item.get("timestamp")), reverse=True)
             documents = documents[offset: offset + limit]
     else:
@@ -1295,6 +1355,7 @@ async def list_audit_logs(
         documents = [item for item in documents if ensure_datetime(item.get("timestamp")) >= effective_start]
         if end_date:
             documents = [item for item in documents if ensure_datetime(item.get("timestamp")) <= end_date]
+        documents = [item for item in documents if _audit_log_matches_query(item, q)]
         documents.sort(key=lambda item: ensure_datetime(item.get("timestamp")), reverse=True)
         documents = documents[offset: offset + limit]
 
@@ -1335,6 +1396,7 @@ async def list_audit_logs(
             "metadata": {"mode": "synthetic_fallback"},
         }
     )
+    synthetic = [item for item in synthetic if _audit_log_matches_query(item, q)]
     return synthetic[offset: offset + limit]
 
 

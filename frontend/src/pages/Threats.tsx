@@ -721,7 +721,7 @@ export default function Threats() {
 
         <CardContent>
           <div className="overflow-x-auto rounded-lg border border-white/10">
-            <table className="min-w-[1120px] w-full divide-y divide-white/10 text-left text-sm">
+            <table className="min-w-280 w-full divide-y divide-white/10 text-left text-sm">
               <thead className="bg-slate-950/60 text-xs uppercase tracking-[0.12em] text-slate-500">
                 <tr>
                   <th className="w-10 px-4 py-3">

@@ -16,6 +16,7 @@ async def read_audit_logs(
     severity: str | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    q: str | None = Query(default=None, max_length=200),
 ):
     return ok(
         await list_audit_logs(
@@ -26,5 +27,6 @@ async def read_audit_logs(
             severity=severity,
             start_date=parse_optional_datetime(start_date),
             end_date=parse_optional_datetime(end_date),
+            q=q,
         )
     )

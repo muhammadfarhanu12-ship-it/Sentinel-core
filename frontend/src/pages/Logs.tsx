@@ -234,7 +234,7 @@ function RiskMini({ risk }: { risk: number }) {
   return (
     <div className="flex items-center gap-2 font-mono text-[10px]">
       <span style={{ color: riskColor(risk) }}>Risk {risk}</span>
-      <span className="h-1 w-[70px] rounded-full bg-[#0B0D14]">
+      <span className="h-1 w-17.5 rounded-full bg-[#0B0D14]">
         <span className="block h-full rounded-full" style={{ width: `${risk}%`, background: riskColor(risk) }} />
       </span>
       <span className="text-[#3A4560]">/100</span>
@@ -246,7 +246,7 @@ function MetaCell({ label, value, color }: { label: string; value: string | numb
   return (
     <div className="rounded-[7px] border border-white/[0.07] bg-[#1C253A] px-3 py-2">
       <div className="text-[10px] font-bold uppercase text-[#6B7A99]">{label}</div>
-      <div className="mt-1 break-words font-mono text-xs font-semibold" style={{ color: color || "#D1D9EE" }}>{value}</div>
+      <div className="mt-1 wrap-break-word font-mono text-xs font-semibold" style={{ color: color || "#D1D9EE" }}>{value}</div>
     </div>
   );
 }
@@ -295,8 +295,8 @@ function DetailPanel({ log, onClose }: { log: LogEvent; onClose: () => void }) {
             <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#6B7A99]">Matched Policies</div>
             <div className="flex flex-wrap gap-2">
               {log.policies.length ? log.policies.map((policy) => (
-                <span key={policy} className="rounded-full border border-[#EF4444]/30 bg-[#EF4444]/[0.11] px-2.5 py-1 font-mono text-[11px] text-[#EF4444]">{policy}</span>
-              )) : <span className="rounded-full border border-[#10B981]/30 bg-[#10B981]/[0.12] px-2.5 py-1 font-mono text-[11px] text-[#10B981]">CLEAN</span>}
+                <span key={policy} className="rounded-full border border-[#EF4444]/30 bg-[#EF4444]/11 px-2.5 py-1 font-mono text-[11px] text-[#EF4444]">{policy}</span>
+              )) : <span className="rounded-full border border-[#10B981]/30 bg-[#10B981]/12 px-2.5 py-1 font-mono text-[11px] text-[#10B981]">CLEAN</span>}
             </div>
           </div>
           <div>
@@ -424,7 +424,7 @@ export default function Logs() {
       <style>{`
         @keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
       `}</style>
-      <div className="mx-auto max-w-[1500px] space-y-5">
+      <div className="mx-auto max-w-375 space-y-5">
         <header className="rounded-[10px] border border-white/[0.07] bg-[#111827] p-5">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
@@ -436,19 +436,19 @@ export default function Logs() {
                 <span className="h-2 w-2 rounded-full bg-[#10B981]" style={{ animation: streaming ? "livePulse 1.5s infinite" : "none" }} />
                 <span>{streaming ? "Live streaming" : "Stream paused"}</span>
               </div>
-              <button type="button" onClick={() => setStreaming((value) => !value)} className={`btn rounded-[7px] border px-3 py-2 text-xs font-bold ${streaming ? "border-[#EF4444]/30 bg-[#EF4444]/[0.11] text-[#EF4444]" : "border-[#10B981]/30 bg-[#10B981]/[0.12] text-[#10B981]"}`} title={streaming ? "Pause Stream" : "Resume Stream"}>
+              <button type="button" onClick={() => setStreaming((value) => !value)} className={`btn rounded-[7px] border px-3 py-2 text-xs font-bold ${streaming ? "border-[#EF4444]/30 bg-[#EF4444]/11 text-[#EF4444]" : "border-[#10B981]/30 bg-[#10B981]/12 text-[#10B981]"}`} title={streaming ? "Pause Stream" : "Resume Stream"}>
                 {streaming ? <Pause className="inline h-4 w-4 md:mr-0 xl:mr-2" /> : <Play className="inline h-4 w-4 md:mr-0 xl:mr-2" />}
                 <span className="hidden xl:inline">{streaming ? "Pause Stream" : "Resume Stream"}</span>
               </button>
               <button type="button" onClick={clearLogs} className="btn rounded-[7px] border border-white/[0.07] bg-transparent px-3 py-2 text-xs font-bold text-[#6B7A99] hover:text-[#D1D9EE]" title="Clear">
                 <Trash2 className="inline h-4 w-4 md:mr-0 xl:mr-2" /><span className="hidden xl:inline">Clear</span>
               </button>
-              <button type="button" onClick={exportCsv} className="btn rounded-[7px] border border-[#6366F1]/30 bg-[#6366F1]/[0.12] px-3 py-2 text-xs font-bold text-[#A5B4FC]" title="Export CSV">
+              <button type="button" onClick={exportCsv} className="btn rounded-[7px] border border-[#6366F1]/30 bg-[#6366F1]/12 px-3 py-2 text-xs font-bold text-[#A5B4FC]" title="Export CSV">
                 <Download className="inline h-4 w-4 md:mr-0 xl:mr-2" /><span className="hidden xl:inline">Export CSV</span>
               </button>
               <div className="search-inp relative w-full sm:w-72">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#3A4560]" />
-                <input value={search} onChange={(event: ValueEvent) => setSearch(event.target.value)} placeholder="Search logs, keys, threats..." className="w-full rounded-[7px] border border-white/[0.13] bg-[#161D2E] py-2 pl-9 pr-3 text-sm text-[#D1D9EE] outline-none focus:border-[#6366F1]/50" />
+                <input value={search} onChange={(event: ValueEvent) => setSearch(event.target.value)} placeholder="Search logs, keys, threats..." className="w-full rounded-[7px] border border-white/13 bg-[#161D2E] py-2 pl-9 pr-3 text-sm text-[#D1D9EE] outline-none focus:border-[#6366F1]/50" />
               </div>
             </div>
           </div>
@@ -477,7 +477,7 @@ export default function Logs() {
             ))}
           </div>
           <div className="hidden h-7 w-px bg-white/[0.07] xl:block" />
-          <select value={timeRange} onChange={(event: ValueEvent) => setTimeRange(event.target.value)} className="rounded-[7px] border border-white/[0.13] bg-[#161D2E] px-3 py-2 text-sm text-[#D1D9EE] outline-none focus:border-[#6366F1]/50">
+          <select value={timeRange} onChange={(event: ValueEvent) => setTimeRange(event.target.value)} className="rounded-[7px] border border-white/13 bg-[#161D2E] px-3 py-2 text-sm text-[#D1D9EE] outline-none focus:border-[#6366F1]/50">
             {TIME_RANGES.map((item) => <option key={item}>{item}</option>)}
           </select>
         </section>
@@ -492,10 +492,10 @@ export default function Logs() {
             <button type="button" onClick={() => sortBy("risk")} className="flex items-center justify-end gap-2 text-right">Risk <ChevronsUpDown className="h-3 w-3" /></button>
             <div />
           </div>
-          <div className="max-h-[620px] overflow-auto">
+          <div className="max-h-155 overflow-auto">
             {pageRows.map((log) => (
               <div key={log.id}>
-                <button type="button" onClick={() => setSelectedId(log.id)} className={`grid min-h-[52px] w-full grid-cols-[148px_120px_190px_80px_minmax(90px,1fr)_44px] items-center gap-4 border-b border-white/[0.07] px-4 py-3 text-left transition hover:bg-white/[0.025] xl:grid-cols-[148px_120px_190px_160px_80px_minmax(90px,1fr)_44px] ${log.isNew ? "bg-[#6366F1]/[0.05]" : ""}`}>
+                <button type="button" onClick={() => setSelectedId(log.id)} className={`grid min-h-13 w-full grid-cols-[148px_120px_190px_80px_minmax(90px,1fr)_44px] items-center gap-4 border-b border-white/[0.07] px-4 py-3 text-left transition hover:bg-white/2.5 xl:grid-cols-[148px_120px_190px_160px_80px_minmax(90px,1fr)_44px] ${log.isNew ? "bg-[#6366F1]/5" : ""}`}>
                   <div className="font-mono"><div className="text-xs font-semibold text-[#D1D9EE]">{log.ts}</div><div className="text-[10px] text-[#3A4560]">{log.date}</div></div>
                   <StatusBadge status={log.status} />
                   <div><div className={`text-xs font-semibold ${log.threat ? "text-[#D1D9EE]" : "text-[#3A4560]"}`}>{log.threat || "-"}</div><div className="mt-1"><RiskMini risk={log.risk} /></div></div>
@@ -521,7 +521,7 @@ export default function Logs() {
 
         <section className="log-cards flex flex-col gap-2 md:hidden">
           {pageRows.map((log) => (
-            <button key={log.id} type="button" onClick={() => setSelectedId(log.id)} className={`rounded-[9px] border border-white/[0.07] bg-[#111827] px-3 py-3 text-left ${log.isNew ? "bg-[#6366F1]/[0.05]" : ""}`}>
+            <button key={log.id} type="button" onClick={() => setSelectedId(log.id)} className={`rounded-[9px] border border-white/[0.07] bg-[#111827] px-3 py-3 text-left ${log.isNew ? "bg-[#6366F1]/5" : ""}`}>
               <div className="flex items-center justify-between gap-3"><span className="font-mono text-xs text-[#D1D9EE]">{log.ts} <span className="text-[#3A4560]">{log.date}</span></span><StatusBadge status={log.status} /></div>
               <div className="mt-3 flex items-center justify-between gap-3"><span className="text-xs font-bold text-[#D1D9EE]">{log.threat || "-"}</span><RiskMini risk={log.risk} /></div>
               <div className="mt-3 flex items-center justify-between gap-3 font-mono text-[11px] text-[#6B7A99]"><span>API: {maskKey(log.apiKey)}</span><span>{log.tokens} tokens</span></div>

@@ -87,20 +87,26 @@ def test_enterprise_routes_return_audit_usage_and_team_data(client, db_session):
     user, _ = _seed_workspace_activity(db_session)
 
     audit_response = client.get("/api/v1/audit-logs?limit=12&offset=0")
+    audit_search_response = client.get("/api/v1/audit-logs?limit=12&offset=0&q=PROMPT_INJECTION")
     usage_response = client.get("/api/v1/usage")
     team_response = client.get("/api/v1/team")
 
     assert audit_response.status_code == 200, audit_response.text
+    assert audit_search_response.status_code == 200, audit_search_response.text
     assert usage_response.status_code == 200, usage_response.text
     assert team_response.status_code == 200, team_response.text
 
     audit_payload = audit_response.json()
+    audit_search_payload = audit_search_response.json()
     usage_payload = usage_response.json()
     team_payload = team_response.json()
 
     assert audit_payload["success"] is True
     assert len(audit_payload["data"]) >= 2
     assert any(entry["severity"] == "CRITICAL" for entry in audit_payload["data"])
+    assert audit_search_payload["success"] is True
+    assert audit_search_payload["data"]
+    assert all("PROMPT_INJECTION" in str(entry) for entry in audit_search_payload["data"])
 
     assert usage_payload["success"] is True
     assert usage_payload["data"]["total_requests"] >= 1

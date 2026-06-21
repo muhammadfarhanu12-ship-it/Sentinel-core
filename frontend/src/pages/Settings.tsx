@@ -484,7 +484,7 @@ export default function Settings() {
                 ) : null}
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[420px]">
+              <div className="grid gap-3 sm:grid-cols-3 xl:min-w-105">
                 <div className="rounded-2xl border border-white/10 bg-slate-950/65 p-4">
                   <div className={mutedLabelClassName}>Threat posture</div>
                   <div className="mt-2 text-lg font-semibold text-slate-100">{sensitivityLabel}</div>

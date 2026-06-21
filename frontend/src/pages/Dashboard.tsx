@@ -618,7 +618,7 @@ export default function Dashboard() {
             <div key={index} className="h-36 rounded-xl bg-slate-800" />
           ))}
         </div>
-        <div className="h-[420px] rounded-xl bg-slate-800" />
+        <div className="h-105 rounded-xl bg-slate-800" />
       </div>
     );
   }
@@ -627,7 +627,7 @@ export default function Dashboard() {
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-[14px] px-[20px] py-[18px]"
+      className="space-y-3.5 px-5 py-4.5"
       style={{ background: THEME.bg, color: THEME.text }}
     >
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -693,7 +693,7 @@ export default function Dashboard() {
         }
       `}</style>
 
-      <div className="grid gap-[14px] xl:grid-cols-[200px_minmax(0,1fr)]">
+      <div className="grid gap-3.5 xl:grid-cols-[200px_minmax(0,1fr)]">
         <Card className={styleCard()} style={{ borderColor: THEME.border, borderRadius: 10, background: THEME.card }}>
           <CardHeader className="px-5 py-4">
             <CardTitle className="text-sm text-white">Security Score</CardTitle>
@@ -720,7 +720,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-[14px] md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-5">
           {stats.map((stat) => {
             const Icon = stat.icon;
             return (
@@ -750,7 +750,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid gap-[14px] xl:grid-cols-[2fr_1fr]">
+      <div className="grid gap-3.5 xl:grid-cols-[2fr_1fr]">
         <Card className={styleCard()} style={{ borderColor: THEME.border, borderRadius: 10, background: THEME.card }}>
           <CardHeader className="px-5 py-4">
             <SectionHeader
@@ -758,14 +758,14 @@ export default function Dashboard() {
               subtitle="Blocked events by day with severity breakdown"
               right={
                 <div className="flex items-center gap-3 text-[10px]" style={{ color: THEME.textSoft }}>
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-[2px]" style={{ background: 'rgba(239,68,68,0.7)' }} />Critical/High</span>
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-[2px]" style={{ background: 'rgba(245,158,11,0.7)' }} />Medium</span>
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-[2px]" style={{ background: 'rgba(16,185,129,0.55)' }} />Low</span>
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-xs" style={{ background: 'rgba(239,68,68,0.7)' }} />Critical/High</span>
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-xs" style={{ background: 'rgba(245,158,11,0.7)' }} />Medium</span>
+                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-xs" style={{ background: 'rgba(16,185,129,0.55)' }} />Low</span>
                 </div>
               }
             />
           </CardHeader>
-          <CardContent className="h-[250px] px-5 pb-5">
+          <CardContent className="h-62.5 px-5 pb-5">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dashboardData.trendsByDay}>
                 <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
@@ -827,7 +827,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="grid gap-[14px] xl:grid-cols-2">
+      <div className="grid gap-3.5 xl:grid-cols-2">
         <Card className={styleCard()} style={{ borderColor: THEME.border, borderRadius: 10, background: THEME.card }}>
           <CardHeader className="px-5 py-4">
             <SectionHeader
@@ -840,7 +840,7 @@ export default function Dashboard() {
               }
             />
           </CardHeader>
-          <CardContent className="max-h-[280px] space-y-3 overflow-y-auto px-5 pb-5">
+          <CardContent className="max-h-70 space-y-3 overflow-y-auto px-5 pb-5">
             {dashboardData.feed.map((event, index) => {
               const severity = String(event.severity || 'LOW').toUpperCase();
               const severityStyle =
@@ -852,7 +852,7 @@ export default function Dashboard() {
                       ? { background: THEME.blueDim, borderColor: THEME.blueBorder, color: '#A5B4FC' }
                       : { background: THEME.greenDim, borderColor: THEME.greenBorder, color: THEME.green };
               return (
-                <div key={`${event.request_id}-${index}`} className="rounded-[8px] border p-3 transition-colors hover:border-white/15" style={{ background: THEME.panel, borderColor: THEME.border }}>
+                <div key={`${event.request_id}-${index}`} className="rounded-lg border p-3 transition-colors hover:border-white/15" style={{ background: THEME.panel, borderColor: THEME.border }}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="font-mono text-[10px]" style={{ color: THEME.textSoft }}>{formatDateTime(event.timestamp)}</div>
                     <span className="rounded-full border px-2.5 py-1 text-[10px] font-bold" style={severityStyle}>{severity}</span>
@@ -887,7 +887,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="grid gap-[14px] xl:grid-cols-2">
+      <div className="grid gap-3.5 xl:grid-cols-2">
         <Card className={styleCard()} style={{ borderColor: THEME.border, borderRadius: 10, background: THEME.card }}>
           <CardHeader className="px-5 py-4">
             <SectionHeader title="Attack Severity Distribution" subtitle="Breakdown of threats by severity level" />
@@ -897,8 +897,8 @@ export default function Dashboard() {
               const maxValue = Math.max(...dashboardData.attackSeverityDistribution.map((item) => item.value), 1);
               return (
                 <div key={row.label} className="flex items-center gap-3">
-                  <div className="w-[58px] text-right text-[11px]" style={{ color: THEME.textSoft }}>{row.label}</div>
-                  <div className="h-[18px] flex-1 overflow-hidden rounded-[3px]" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  <div className="w-14.5 text-right text-[11px]" style={{ color: THEME.textSoft }}>{row.label}</div>
+                  <div className="h-4.5 flex-1 overflow-hidden rounded-[3px]" style={{ background: 'rgba(255,255,255,0.06)' }}>
                     <div className="flex h-full items-center justify-end px-2 text-[10px] font-bold text-[#0B0D14]" style={{ width: `${(row.value / maxValue) * 100}%`, background: row.color }}>
                       {row.value}
                     </div>
@@ -946,7 +946,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="grid gap-[14px] xl:grid-cols-2">
+      <div className="grid gap-3.5 xl:grid-cols-2">
         <Card className={styleCard()} style={{ borderColor: THEME.border, borderRadius: 10, background: THEME.card }}>
           <CardHeader className="px-5 py-4">
             <SectionHeader title="Top Attack Signatures" subtitle="Highest frequency threat signatures detected" />
@@ -974,7 +974,7 @@ export default function Dashboard() {
             {dashboardData.userHeatmap.slice(0, 6).map((item) => (
               <div key={item.id} className="flex items-center gap-3 rounded-[7px] border px-3 py-3" style={{ background: THEME.panel, borderColor: THEME.border }}>
                 <div
-                  className="flex h-[34px] w-[34px] items-center justify-center rounded-full border text-xs font-bold"
+                  className="flex h-8.5 w-8.5 items-center justify-center rounded-full border text-xs font-bold"
                   style={{
                     background: item.risk > 70 ? THEME.redDim : item.risk > 40 ? THEME.amberDim : THEME.blueDim,
                     borderColor: item.risk > 70 ? THEME.redBorder : item.risk > 40 ? THEME.amberBorder : THEME.blueBorder,
@@ -999,7 +999,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="grid gap-[14px] xl:grid-cols-2">
+      <div className="grid gap-3.5 xl:grid-cols-2">
         <ASOCAnalyst initialSummary={dashboardData.asocSummary} />
         <ReasoningWindow
           reasoningLogs={reasoningLogs}

@@ -25,6 +25,19 @@ function asNumber(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : typeof value === 'string' && value.trim() ? Number(value) || fallback : fallback;
 }
 
+function asStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => asString(item).trim()).filter(Boolean);
+  }
+  if (typeof value === 'string' && value.trim()) {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
 function getNested(source: Record<string, unknown>, keys: string[]): unknown {
   for (const key of keys) {
     if (key in source) return source[key];
@@ -51,15 +64,25 @@ function titleFromEmail(email: string): string {
 function normalizeAuditLog(item: unknown): AuditLogEntry {
   const record = asRecord(item);
   const actorType = asString(getNested(record, ['actor_type', 'actorType']), 'SYSTEM').toUpperCase();
+  const riskScore = getNested(record, ['risk_score', 'riskScore']);
   return {
     id: asString(getNested(record, ['id', 'event_id']), `audit-${Date.now()}`),
     timestamp: asString(getNested(record, ['timestamp', 'created_at']), ''),
+    created_at: asString(getNested(record, ['created_at', 'createdAt'])) || null,
     actor: asString(getNested(record, ['actor', 'actor_email', 'user', 'initiator']), actorType === 'SYSTEM' ? 'System' : 'Unknown user'),
     actor_type: actorType,
     action: asString(getNested(record, ['action', 'event', 'operation']), 'UNKNOWN_ACTION'),
+    event_type: asString(getNested(record, ['event_type', 'eventType'])) || null,
     resource: asString(getNested(record, ['resource', 'target', 'resource_name']), 'Unknown resource'),
     ip_address: asString(getNested(record, ['ip_address', 'ipAddress', 'source_ip'])) || null,
     severity: asString(getNested(record, ['severity', 'level']), 'INFO').toUpperCase(),
+    request_id: asString(getNested(record, ['request_id', 'requestId', 'correlation_id', 'correlationId'])) || null,
+    decision: asString(getNested(record, ['decision', 'verdict', 'status'])) || null,
+    risk_score: riskScore == null || riskScore === '' ? null : asNumber(riskScore, 0),
+    matched_policies: asStringArray(getNested(record, ['matched_policies', 'matchedPolicies', 'policies'])),
+    provider: asString(getNested(record, ['provider', 'provider_name', 'providerName'])) || null,
+    model: asString(getNested(record, ['model', 'model_name', 'modelName'])) || null,
+    prompt_preview: asString(getNested(record, ['prompt_preview', 'promptPreview', 'prompt'])) || null,
     old_value: getNested(record, ['old_value', 'oldValue', 'before']),
     new_value: getNested(record, ['new_value', 'newValue', 'after']),
     metadata: (getNested(record, ['metadata', 'details']) as Record<string, unknown> | undefined) || null,
@@ -112,6 +135,7 @@ function buildAuditQuery(query: AuditLogsQuery = {}) {
   if (query.severity) params.set('severity', String(query.severity));
   if (query.startDate) params.set('start_date', query.startDate);
   if (query.endDate) params.set('end_date', query.endDate);
+  if (query.q?.trim()) params.set('q', query.q.trim());
   return params.toString();
 }
 

@@ -446,7 +446,7 @@ function ModelDonut({
         })}
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <div className="max-w-[78px] text-center font-mono text-[11px] font-semibold leading-tight text-white">{centerLabel}</div>
+        <div className="max-w-19.5 text-center font-mono text-[11px] font-semibold leading-tight text-white">{centerLabel}</div>
         <div className="mt-1 text-[10px]" style={{ color: THEME.textSoft }}>
           Most used
         </div>
@@ -755,7 +755,7 @@ export default function UsageAnalytics() {
     return [
       {
         label: 'Total Requests',
-        icon: <Activity className="h-[18px] w-[18px]" />,
+        icon: <Activity className="h-4.5 w-4.5" />,
         value: formatInteger(requestSummary.totalRequests),
         description: 'All gateway requests this period',
         delta: statDelta(requestSummary.totalRequests, requestSummary.previousRequests),
@@ -766,7 +766,7 @@ export default function UsageAnalytics() {
       },
       {
         label: 'Blocked Threats',
-        icon: <ShieldAlert className="h-[18px] w-[18px]" />,
+        icon: <ShieldAlert className="h-4.5 w-4.5" />,
         value: formatInteger(requestSummary.blockedThreats),
         description: 'Prevented by security engine',
         delta: statDelta(requestSummary.blockedThreats, requestSummary.previousBlocked),
@@ -777,7 +777,7 @@ export default function UsageAnalytics() {
       },
       {
         label: 'Block Rate',
-        icon: <Percent className="h-[18px] w-[18px]" />,
+        icon: <Percent className="h-4.5 w-4.5" />,
         value: formatPercent(requestSummary.blockRate),
         description: 'Ratio of blocked to total',
         delta: statDelta(requestSummary.blockRate, requestSummary.previousBlockRate, false, (value) => `${value.toFixed(1)}%`),
@@ -788,7 +788,7 @@ export default function UsageAnalytics() {
       },
       {
         label: 'Tokens Used',
-        icon: <Binary className="h-[18px] w-[18px]" />,
+        icon: <Binary className="h-4.5 w-4.5" />,
         value: formatInteger(combinedTokens),
         description: 'Total input + output tokens',
         delta: statDelta(combinedTokens, previousCombinedTokens),
@@ -799,7 +799,7 @@ export default function UsageAnalytics() {
       },
       {
         label: 'Est. Cost',
-        icon: <DollarSign className="h-[18px] w-[18px]" />,
+        icon: <DollarSign className="h-4.5 w-4.5" />,
         value: formatCurrency(estimatedCost),
         description: 'Estimated provider cost',
         delta: statDelta(estimatedCost, previousEstimatedCost, true, (value) => formatCurrency(value)),
@@ -810,7 +810,7 @@ export default function UsageAnalytics() {
       },
       {
         label: 'Quota Remaining',
-        icon: <Gauge className="h-[18px] w-[18px]" />,
+        icon: <Gauge className="h-4.5 w-4.5" />,
         value: formatInteger(quotaRemaining),
         description: 'Monthly requests remaining',
         delta: { label: `${formatPercent(100 - quotaUsedPercent)} quota left`, color: THEME.textSoft },
@@ -894,7 +894,7 @@ export default function UsageAnalytics() {
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="space-y-[14px]">
+    <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="space-y-3.5">
       <style>{`
         .usage-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
         .usage-scroll::-webkit-scrollbar-track { background: rgba(255,255,255,0.04); border-radius: 999px; }
@@ -907,7 +907,7 @@ export default function UsageAnalytics() {
         }
       `}</style>
 
-      <div className="page-header flex flex-col gap-[10px] xl:flex-row xl:items-end xl:justify-between">
+      <div className="page-header flex flex-col gap-2.5 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <h1 className="text-[22px] font-bold tracking-[-0.3px] text-white">Usage Analytics</h1>
           <p className="mt-1 max-w-3xl text-[12px]" style={{ color: THEME.textSoft }}>
@@ -959,7 +959,7 @@ export default function UsageAnalytics() {
         </div>
       ) : null}
 
-      <div className="stat-grid grid gap-[14px] md:grid-cols-3 xl:grid-cols-6">
+      <div className="stat-grid grid gap-3.5 md:grid-cols-3 xl:grid-cols-6">
         {statCards.map((card) => (
           <StatCard
             key={card.label}
@@ -976,7 +976,7 @@ export default function UsageAnalytics() {
         ))}
       </div>
 
-      <div className="grid-2-1 grid gap-[14px] xl:grid-cols-[2fr_1fr]">
+      <div className="grid-2-1 grid gap-3.5 xl:grid-cols-[2fr_1fr]">
         <div className="min-w-0 rounded-[10px] border" style={{ background: THEME.card, borderColor: THEME.border }}>
           <div className="px-5 py-4">
             <SectionHeader
@@ -1008,7 +1008,7 @@ export default function UsageAnalytics() {
               }
             />
           </div>
-          <div className="h-[220px] min-w-0 px-5 pb-4">
+          <div className="h-55 min-w-0 px-5 pb-4">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={requestsChartSeries} margin={{ top: 10, right: 8, left: -14, bottom: 0 }}>
                 <defs>
@@ -1060,7 +1060,7 @@ export default function UsageAnalytics() {
             {chartSummaryPills.map((pill) => (
               <div
                 key={pill}
-                className="rounded-[6px] border px-3 py-2 font-mono text-[11px]"
+                className="rounded-md border px-3 py-2 font-mono text-[11px]"
                 style={{ background: THEME.panel, borderColor: THEME.border, color: THEME.textSoft }}
               >
                 {pill}
@@ -1073,12 +1073,12 @@ export default function UsageAnalytics() {
           <div className="px-5 py-4">
             <SectionHeader title="Quota Progress" subtitle="Current month request consumption against plan capacity" />
           </div>
-          <div className="space-y-[14px] px-5 pb-5">
-            <div className="grid gap-[14px] md:grid-cols-[140px_1fr] xl:grid-cols-[120px_1fr]">
+          <div className="space-y-3.5 px-5 pb-5">
+            <div className="grid gap-3.5 md:grid-cols-[140px_1fr] xl:grid-cols-[120px_1fr]">
               <div className="flex items-center justify-center">
                 <QuotaDonut used={summary.quotaUsed} limit={summary.quotaLimit} usedPercent={quotaUsedPercent} />
               </div>
-              <div className="grid grid-cols-2 gap-[14px]">
+              <div className="grid grid-cols-2 gap-3.5">
                 {[
                   ['Used This Month', `${formatInteger(summary.quotaUsed)} req`],
                   ['Remaining', `${formatInteger(quotaRemaining)} req`],
@@ -1087,7 +1087,7 @@ export default function UsageAnalytics() {
                   ['Resets In', `${resetsInDays} days`],
                   ['Plan Limit', `${formatInteger(summary.quotaLimit)} req`],
                 ].map(([label, value]) => (
-                  <div key={label} className="rounded-[8px] border px-3 py-3" style={{ background: THEME.cell, borderColor: THEME.border }}>
+                  <div key={label} className="rounded-lg border px-3 py-3" style={{ background: THEME.cell, borderColor: THEME.border }}>
                     <div className="text-[10px] uppercase tracking-[0.08em]" style={{ color: THEME.textMuted }}>
                       {label}
                     </div>
@@ -1098,7 +1098,7 @@ export default function UsageAnalytics() {
             </div>
 
             <div>
-              <div className="h-[10px] w-full overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+              <div className="h-2.5 w-full overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
                 <div
                   className="h-full rounded-full"
                   style={{
@@ -1122,7 +1122,7 @@ export default function UsageAnalytics() {
         </div>
       </div>
 
-      <div className="grid-1-1 grid gap-[14px] xl:grid-cols-2">
+      <div className="grid-1-1 grid gap-3.5 xl:grid-cols-2">
         <div className="rounded-[10px] border" style={{ background: THEME.card, borderColor: THEME.border }}>
           <div className="px-5 py-4">
             <SectionHeader
@@ -1136,7 +1136,7 @@ export default function UsageAnalytics() {
               }
             />
           </div>
-          <div className="h-[190px] px-5 pb-4">
+          <div className="h-47.5 px-5 pb-4">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={tokenSeries}>
                 <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
@@ -1156,14 +1156,14 @@ export default function UsageAnalytics() {
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <div className="grid grid-cols-2 gap-[14px] px-5 pb-5">
+          <div className="grid grid-cols-2 gap-3.5 px-5 pb-5">
             {[
               ['Total Input', `${formatInteger(inputTokenTotal)} tokens`],
               ['Total Output', `${formatInteger(outputTokenTotal)} tokens`],
               ['Total Combined', `${formatInteger(combinedTokens)} tokens`],
               ['Avg per Req', `${formatDecimal(requestSummary.totalRequests > 0 ? combinedTokens / requestSummary.totalRequests : 0, 1)} tokens`],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-[8px] border px-3 py-3" style={{ background: THEME.cell, borderColor: THEME.border }}>
+              <div key={label} className="rounded-lg border px-3 py-3" style={{ background: THEME.cell, borderColor: THEME.border }}>
                 <div className="text-[10px] uppercase tracking-[0.08em]" style={{ color: THEME.textMuted }}>
                   {label}
                 </div>
@@ -1185,9 +1185,9 @@ export default function UsageAnalytics() {
               }
             />
           </div>
-          <div className="space-y-[10px] px-5 pb-5">
+          <div className="space-y-2.5 px-5 pb-5">
             {providerCostRows.map((row) => (
-              <div key={row.name} className="rounded-[8px] border px-4 py-3" style={{ background: THEME.panel, borderColor: THEME.border }}>
+              <div key={row.name} className="rounded-lg border px-4 py-3" style={{ background: THEME.panel, borderColor: THEME.border }}>
                 <div className="grid items-center gap-3 md:grid-cols-[auto_1fr_auto_minmax(120px,1fr)_auto]">
                   {providerBadge(row.name, row.color)}
                   <div>
@@ -1209,13 +1209,13 @@ export default function UsageAnalytics() {
               </div>
             ))}
 
-            <div className="grid grid-cols-1 gap-[14px] md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3.5 md:grid-cols-3">
               {[
                 ['Total Estimated Cost This Cycle', formatCurrency(providerCostRows.reduce((total, row) => total + row.cost, 0))],
                 ['Projected End of Month', formatCurrency((providerCostRows.reduce((total, row) => total + row.cost, 0) / Math.max(summary.quotaUsed || 1, 1)) * projectedEndOfMonth)],
                 ['Cost per 1K Tokens', '$0.075'],
               ].map(([label, value]) => (
-                <div key={label} className="rounded-[8px] border px-3 py-3" style={{ background: THEME.cell, borderColor: THEME.border }}>
+                <div key={label} className="rounded-lg border px-3 py-3" style={{ background: THEME.cell, borderColor: THEME.border }}>
                   <div className="text-[10px] uppercase tracking-[0.08em]" style={{ color: THEME.textMuted }}>
                     {label}
                   </div>
@@ -1231,7 +1231,7 @@ export default function UsageAnalytics() {
         </div>
       </div>
 
-      <div className="grid-1-1 grid gap-[14px] xl:grid-cols-2">
+      <div className="grid-1-1 grid gap-3.5 xl:grid-cols-2">
         <div className="rounded-[10px] border" style={{ background: THEME.card, borderColor: THEME.border }}>
           <div className="px-5 py-4">
             <SectionHeader title="Provider Breakdown" subtitle="Request and token distribution across AI providers" />
@@ -1243,7 +1243,7 @@ export default function UsageAnalytics() {
                 <div key={provider.name} className="rounded-[7px] border px-3 py-3" style={{ background: THEME.panel, borderColor: THEME.border }}>
                   <div className="grid items-center gap-3 md:grid-cols-[120px_1fr_auto_auto]">
                     <div className="text-sm font-medium text-white">{provider.name}</div>
-                    <div className="h-[18px] overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                    <div className="h-4.5 overflow-hidden rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
                       <div
                         className="flex h-full items-center justify-end px-2 text-[10px] font-bold"
                         style={{
@@ -1264,14 +1264,14 @@ export default function UsageAnalytics() {
               );
             })}
 
-            <div className="grid grid-cols-1 gap-[14px] md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
               {[
                 ['Most Used Provider', providerBreakdown[0]?.requests >= providerBreakdown[1]?.requests ? 'Google Gemini' : 'OpenAI'],
                 ['Provider Count', `${providerBreakdown.filter((item) => item.requests > 0).length} active`],
                 ['Fastest Avg Latency', 'OpenAI (41ms)'],
                 ['Slowest Provider', 'Gemini (53ms)'],
               ].map(([label, value]) => (
-                <div key={label} className="rounded-[8px] border px-3 py-3" style={{ background: THEME.cell, borderColor: THEME.border }}>
+                <div key={label} className="rounded-lg border px-3 py-3" style={{ background: THEME.cell, borderColor: THEME.border }}>
                   <div className="text-[10px] uppercase tracking-[0.08em]" style={{ color: THEME.textMuted }}>
                     {label}
                   </div>
@@ -1286,7 +1286,7 @@ export default function UsageAnalytics() {
           <div className="px-5 py-4">
             <SectionHeader title="Model Usage Distribution" subtitle="Request share by AI model across providers" />
           </div>
-          <div className="grid gap-[14px] px-5 pb-5 md:grid-cols-[140px_1fr]">
+          <div className="grid gap-3.5 px-5 pb-5 md:grid-cols-[140px_1fr]">
             <div className="flex items-center justify-center">
               <ModelDonut
                 centerLabel={modelRows[0]?.model || 'n/a'}
@@ -1295,7 +1295,7 @@ export default function UsageAnalytics() {
             </div>
             <div className="space-y-3">
               {modelRows.map((row) => (
-                <div key={row.model} className="flex items-center gap-3 rounded-[8px] border px-3 py-3" style={{ background: THEME.panel, borderColor: THEME.border }}>
+                <div key={row.model} className="flex items-center gap-3 rounded-lg border px-3 py-3" style={{ background: THEME.panel, borderColor: THEME.border }}>
                   <span className="h-2 w-2 rounded-full" style={{ background: row.color }} />
                   <div className="min-w-0 flex-1 font-mono text-[12px] text-white">{row.model}</div>
                   <div className="font-mono text-[11px]" style={{ color: THEME.textSoft }}>
@@ -1311,7 +1311,7 @@ export default function UsageAnalytics() {
         </div>
       </div>
 
-      <div className="grid-1-1 grid gap-[14px] xl:grid-cols-2">
+      <div className="grid-1-1 grid gap-3.5 xl:grid-cols-2">
         <div className="rounded-[10px] border" style={{ background: THEME.card, borderColor: THEME.border }}>
           <div className="px-5 py-4">
             <SectionHeader
@@ -1331,7 +1331,7 @@ export default function UsageAnalytics() {
               }
             />
           </div>
-          <div className="h-[190px] px-5 pb-4">
+          <div className="h-47.5 px-5 pb-4">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={burnProjectionSeries}>
                 <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
@@ -1371,7 +1371,7 @@ export default function UsageAnalytics() {
               `Days Remaining: ${resetsInDays}`,
               `Quota At Risk: ${quotaAtRisk ? 'Yes' : 'No'}`,
             ].map((pill) => (
-              <div key={pill} className="rounded-[6px] border px-3 py-2 font-mono text-[11px]" style={{ background: THEME.panel, borderColor: THEME.border, color: THEME.textSoft }}>
+              <div key={pill} className="rounded-md border px-3 py-2 font-mono text-[11px]" style={{ background: THEME.panel, borderColor: THEME.border, color: THEME.textSoft }}>
                 {pill}
               </div>
             ))}
@@ -1390,8 +1390,8 @@ export default function UsageAnalytics() {
               }
             />
           </div>
-          <div className="space-y-[12px] px-5 pb-5">
-            <div className="rounded-[8px] border px-4 py-3" style={{ background: THEME.greenDim, borderColor: THEME.greenBorder }}>
+          <div className="space-y-3 px-5 pb-5">
+            <div className="rounded-lg border px-4 py-3" style={{ background: THEME.greenDim, borderColor: THEME.greenBorder }}>
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="mt-0.5 h-4 w-4" style={{ color: THEME.green }} />
                 <div>
@@ -1404,7 +1404,7 @@ export default function UsageAnalytics() {
             </div>
 
             {alertItems.map((item) => (
-              <div key={item.pct} className="rounded-[8px] border px-4 py-3" style={{ background: THEME.panel, borderColor: THEME.border }}>
+              <div key={item.pct} className="rounded-lg border px-4 py-3" style={{ background: THEME.panel, borderColor: THEME.border }}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <ToggleSwitch
@@ -1453,11 +1453,11 @@ export default function UsageAnalytics() {
               ))}
             </div>
 
-            <div className="rounded-[8px] border px-4 py-3" style={{ background: THEME.panel, borderColor: THEME.border }}>
+            <div className="rounded-lg border px-4 py-3" style={{ background: THEME.panel, borderColor: THEME.border }}>
               <div className="text-[10px] font-bold uppercase tracking-[0.08em]" style={{ color: THEME.textMuted }}>
                 Alert History
               </div>
-              <div className="usage-scroll mt-3 max-h-[112px] space-y-2 overflow-y-auto pr-1">
+              <div className="usage-scroll mt-3 max-h-28 space-y-2 overflow-y-auto pr-1">
                 {alertHistory.length === 0 ? (
                   <div className="font-mono text-[11px]" style={{ color: THEME.textSoft }}>
                     [No alerts triggered this billing cycle]
