@@ -150,6 +150,9 @@ async def _record_auth_audit_event(
             metadata={
                 "request_id": _request_id(request),
                 "ip_address": _client_identifier(request),
+                "auth_method": "Password",
+                "client": "Web browser",
+                "user_agent": request.headers.get("user-agent"),
                 **(metadata or {}),
             },
         )
@@ -233,7 +236,7 @@ async def login(request: Request):
     except Exception:
         await _record_auth_audit_event(
             request,
-            action="login_failure",
+            action="login_failed",
             email=normalized_email,
             success=False,
         )

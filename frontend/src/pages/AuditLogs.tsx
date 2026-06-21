@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import {
   AlertTriangle,
   CalendarRange,
+  Check,
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
@@ -32,6 +33,14 @@ const PAGE_SIZE = 12;
 
 const inputClass =
   'mt-2 h-10 w-full min-w-0 rounded-lg border border-white/10 bg-slate-950/60 px-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400/70 focus:ring-1 focus:ring-cyan-400/30';
+const refreshButtonClass =
+  'h-auto gap-2 rounded-[7px] border border-[rgba(16,185,129,0.28)] bg-[rgba(16,185,129,0.12)] px-3.5 py-[7px] text-xs font-semibold text-[#10B981] transition hover:bg-[rgba(16,185,129,0.12)] hover:opacity-[0.85] active:scale-[0.98]';
+const exportButtonClass =
+  'h-auto gap-2 rounded-[7px] border border-[rgba(99,102,241,0.28)] bg-[rgba(99,102,241,0.12)] px-3.5 py-[7px] text-xs font-semibold text-[#A5B4FC] transition hover:bg-[rgba(99,102,241,0.12)] hover:opacity-[0.85] active:scale-[0.98]';
+const applyButtonClass =
+  'h-auto gap-2 rounded-[7px] bg-[#6366F1] px-3.5 py-[7px] text-xs font-semibold text-white transition hover:bg-[#6366F1] hover:opacity-90 active:scale-[0.98]';
+const clearButtonClass =
+  'h-auto gap-2 rounded-[7px] border border-white/15 bg-transparent px-3.5 py-[7px] text-xs font-semibold text-[#6B7A99] transition hover:bg-transparent hover:opacity-[0.85] active:scale-[0.98]';
 
 function severityVariant(severity: string) {
   const normalized = severity.toUpperCase();
