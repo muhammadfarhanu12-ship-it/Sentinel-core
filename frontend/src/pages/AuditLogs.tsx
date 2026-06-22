@@ -311,8 +311,8 @@ export default function AuditLogs() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div className="min-w-0">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0 md:pr-6">
           <div className="flex flex-wrap items-center gap-2 text-sm text-cyan-300">
             <DatabaseZap className="h-4 w-4" />
             <span>Backend audit stream</span>
@@ -322,12 +322,12 @@ export default function AuditLogs() {
             Workspace-scoped audit evidence from `/api/v1/audit-logs`, filtered by retention policy and redacted at write time.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button variant="outline" className="gap-2 text-slate-200" onClick={() => void loadAuditLogs()} disabled={auditLogsLoading}>
+        <div className="flex shrink-0 items-center gap-2 self-start md:self-center md:justify-end">
+          <Button variant="outline" className="h-9 gap-2 whitespace-nowrap px-4 text-slate-200" onClick={() => void loadAuditLogs()} disabled={auditLogsLoading}>
             <RefreshCw className={`h-4 w-4 ${auditLogsLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          <Button variant="outline" className="gap-2 text-slate-200" onClick={exportCurrentPage} disabled={auditLogs.length === 0}>
+          <Button variant="outline" className="h-9 gap-2 whitespace-nowrap px-4 text-slate-200" onClick={exportCurrentPage} disabled={auditLogs.length === 0}>
             <Download className="h-4 w-4" />
             Export CSV
           </Button>
