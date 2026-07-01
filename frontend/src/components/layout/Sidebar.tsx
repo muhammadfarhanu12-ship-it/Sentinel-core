@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   Terminal,
   Users2,
+  X,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { UserDropdown } from './UserDropdown';
@@ -57,7 +58,7 @@ const utilityItems: SidebarItem[] = [
   { icon: Settings, label: 'Settings', path: '/app/settings', end: true },
 ];
 
-function renderSidebarLink(item: SidebarItem) {
+function renderSidebarLink(item: SidebarItem, onNavigate?: () => void) {
   const Icon = item.icon;
 
   return (
@@ -73,25 +74,26 @@ function renderSidebarLink(item: SidebarItem) {
             : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-50',
         )
       }
+      onClick={onNavigate}
     >
-      <Icon className="w-4 h-4 mr-3" />
-      {item.label}
+      <Icon className="mr-3 h-4 w-4 shrink-0" />
+      <span className="truncate">{item.label}</span>
     </NavLink>
   );
 }
 
-export function Sidebar() {
+function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 shrink-0 flex-col border-r border-white/10 bg-slate-950/85 backdrop-blur-xl lg:flex">
-      <div className="h-16 flex items-center px-6 border-b border-white/10">
-        <Shield className="w-6 h-6 text-indigo-500 mr-3" />
-        <span className="font-bold text-lg tracking-tight">Sentinel</span>
+    <>
+      <div className="flex h-16 items-center border-b border-white/10 px-6">
+        <Shield className="mr-3 h-6 w-6 shrink-0 text-indigo-500" />
+        <span className="truncate text-lg font-bold tracking-tight">Sentinel</span>
       </div>
 
-      <div className="flex-1 min-h-0 flex flex-col">
+      <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex-1 overflow-y-auto px-3 py-6">
           <div className="space-y-1">
-            {primaryItems.map(renderSidebarLink)}
+            {primaryItems.map((item) => renderSidebarLink(item, onNavigate))}
           </div>
 
           <div className="mt-8 space-y-5">
@@ -101,21 +103,64 @@ export function Sidebar() {
                   {group.title}
                 </div>
                 <div className="space-y-1">
-                  {group.items.map(renderSidebarLink)}
+                  {group.items.map((item) => renderSidebarLink(item, onNavigate))}
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="border-t border-white/10 px-3 py-4 space-y-1">
-          {utilityItems.map(renderSidebarLink)}
+        <div className="space-y-1 border-t border-white/10 px-3 py-4">
+          {utilityItems.map((item) => renderSidebarLink(item, onNavigate))}
         </div>
 
-        <div className="p-4 border-t border-white/10">
+        <div className="border-t border-white/10 p-4">
           <UserDropdown />
         </div>
       </div>
-    </aside>
+    </>
+  );
+}
+
+export function Sidebar({
+  mobileOpen = false,
+  onMobileClose,
+}: {
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+}) {
+  return (
+    <>
+      <div
+        className={cn(
+          'fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm transition-opacity lg:hidden',
+          mobileOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
+        )}
+        onClick={onMobileClose}
+        aria-hidden="true"
+      />
+
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-50 flex w-72 max-w-[calc(100vw-2rem)] shrink-0 flex-col border-r border-white/10 bg-slate-950/95 shadow-2xl backdrop-blur-xl transition-transform duration-200 lg:hidden',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full',
+        )}
+        aria-label="Mobile navigation"
+      >
+        <button
+          type="button"
+          onClick={onMobileClose}
+          className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-slate-900/80 text-slate-300 transition hover:bg-slate-800 hover:text-white"
+          aria-label="Close navigation"
+        >
+          <X className="h-4 w-4" />
+        </button>
+        <SidebarContent onNavigate={onMobileClose} />
+      </aside>
+
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 shrink-0 flex-col border-r border-white/10 bg-slate-950/85 backdrop-blur-xl lg:flex">
+        <SidebarContent />
+      </aside>
+    </>
   );
 }

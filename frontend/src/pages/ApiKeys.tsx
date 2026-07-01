@@ -60,12 +60,12 @@ export default function ApiKeys() {
       animate={{ opacity: 1, y: 0 }}
       className="space-y-8"
     >
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-3xl font-bold tracking-tight">API Keys</h1>
           <p className="text-slate-400 mt-1">Manage your gateway access keys and monitor usage.</p>
         </div>
-        <Button onClick={handleGenerate} disabled={isGenerating}>
+        <Button onClick={handleGenerate} disabled={isGenerating} className="w-full sm:w-auto">
           <Plus className="w-4 h-4 mr-2" />
           {isGenerating ? 'Generating...' : 'Generate New Key'}
         </Button>
@@ -79,9 +79,9 @@ export default function ApiKeys() {
         <CardContent>
           <div className="space-y-4">
             {apiKeys.map((apiKey) => (
-              <div key={apiKey.id} className={`p-4 rounded-lg border ${apiKey.status === 'revoked' ? 'border-red-900/30 bg-red-900/10 opacity-60' : 'border-white/10 bg-slate-950/50'} flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all`}>
-                <div className="space-y-1 flex-1">
-                  <div className="flex items-center space-x-2">
+              <div key={apiKey.id} className={`p-4 rounded-lg border ${apiKey.status === 'revoked' ? 'border-red-900/30 bg-red-900/10 opacity-60' : 'border-white/10 bg-slate-950/50'} flex min-w-0 flex-col justify-between gap-4 transition-all md:flex-row md:items-center`}>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="font-medium text-slate-200">{apiKey.name}</span>
                     {apiKey.status === 'revoked' ? (
                       <Badge variant="destructive" className="bg-red-900/50 text-red-400 border-red-800/50">Revoked</Badge>
@@ -89,15 +89,15 @@ export default function ApiKeys() {
                       <Badge variant="clean">Active</Badge>
                     )}
                   </div>
-                  <div className="flex items-center space-x-2 text-sm text-slate-400">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-400">
                     <span>Created {safeFormatDateWithPattern(apiKey.created_at, 'MMM d, yyyy')}</span>
                     <span>•</span>
                     <span>Last used {apiKey.last_used ? safeFormatDateWithPattern(apiKey.last_used, 'MMM d, yyyy') : 'Never'}</span>
                   </div>
                 </div>
 
-                <div className="flex-1 flex items-center space-x-2">
-                  <div className="relative flex-1">
+                <div className="flex min-w-0 flex-1 items-center space-x-2">
+                  <div className="relative min-w-0 flex-1">
                     <div className="bg-[#0d1117] border border-white/10 rounded-md px-3 py-2 font-mono text-sm text-slate-300 flex items-center justify-between">
                       <span className="truncate mr-2">
                         {apiKey.key
@@ -133,7 +133,7 @@ export default function ApiKeys() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between md:justify-end space-x-6 w-full md:w-auto">
+                <div className="flex w-full items-center justify-between gap-4 md:w-auto md:justify-end md:space-x-6">
                   <div className="text-sm">
                     <p className="text-slate-400">Requests</p>
                     <p className="font-medium text-slate-200">{apiKey.usage_count.toLocaleString()}</p>
@@ -165,7 +165,7 @@ export default function ApiKeys() {
         title="Revoke API Key"
         description="Are you sure you want to revoke this API key? Any applications using this key will immediately lose access to the Sentinel Gateway."
       >
-        <div className="flex justify-end space-x-3 mt-6">
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <Button variant="outline" onClick={() => setKeyToRevoke(null)}>Cancel</Button>
           <Button variant="destructive" onClick={confirmRevoke}>Yes, Revoke Key</Button>
         </div>

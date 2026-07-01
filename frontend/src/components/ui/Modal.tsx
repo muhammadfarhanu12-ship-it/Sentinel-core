@@ -30,7 +30,7 @@ export function Modal({ isOpen, onClose, title, description, children, className
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             className={cn(
-              "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-white/10 bg-slate-900 p-6 shadow-lg sm:rounded-xl",
+              "fixed left-[50%] top-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-xl border border-white/10 bg-slate-900 p-5 shadow-lg sm:p-6",
               className
             )}
           >

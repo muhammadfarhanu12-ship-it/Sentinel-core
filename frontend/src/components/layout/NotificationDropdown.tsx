@@ -55,7 +55,7 @@ export function NotificationDropdown() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 mt-2 w-80 bg-slate-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50"
+            className="fixed left-4 right-4 top-16 z-50 overflow-hidden rounded-xl border border-white/10 bg-slate-900 shadow-2xl sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80"
           >
             <div className="p-4 border-b border-white/10 bg-slate-950/50 flex items-center justify-between">
               <h3 className="font-semibold text-slate-200">Notifications</h3>

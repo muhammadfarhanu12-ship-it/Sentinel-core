@@ -239,8 +239,8 @@ function SectionHeader({
   right?: import('react').ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3">
-      <div>
+    <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
         <h3 className="text-[15px] font-semibold text-white">{title}</h3>
         <p className="mt-1 text-xs" style={{ color: THEME.textSoft }}>
           {subtitle}
@@ -627,7 +627,7 @@ export default function Dashboard() {
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-3.5 px-5 py-4.5"
+      className="min-w-0 space-y-3.5 overflow-hidden px-0 py-0 sm:px-5 sm:py-4.5"
       style={{ background: THEME.bg, color: THEME.text }}
     >
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -640,7 +640,7 @@ export default function Dashboard() {
 
         <div className="flex flex-wrap items-center gap-2">
           <div
-            className="flex items-center gap-3 rounded-lg border px-4 py-2"
+            className="flex min-w-0 flex-wrap items-center gap-3 rounded-lg border px-4 py-2"
             style={{
               background: dashboardData.gatewayStatus.active ? THEME.greenDim : THEME.redDim,
               borderColor: dashboardData.gatewayStatus.active ? THEME.greenBorder : THEME.redBorder,
@@ -649,7 +649,7 @@ export default function Dashboard() {
           >
             <span className="h-2 w-2 rounded-full" style={{ background: 'currentColor', animation: 'sentinel-pulse 1.5s infinite' }} />
             <div className="text-xs font-semibold">{dashboardData.gatewayStatus.active ? 'Gateway Active' : 'Gateway Offline'}</div>
-            <div className="font-mono text-[11px] opacity-70">{dashboardData.gatewayStatus.detail}</div>
+            <div className="min-w-0 break-words font-mono text-[11px] opacity-70">{dashboardData.gatewayStatus.detail}</div>
           </div>
 
           <select
@@ -757,7 +757,7 @@ export default function Dashboard() {
               title="Threats Over Time"
               subtitle="Blocked events by day with severity breakdown"
               right={
-                <div className="flex items-center gap-3 text-[10px]" style={{ color: THEME.textSoft }}>
+                <div className="flex flex-wrap items-center gap-3 text-[10px]" style={{ color: THEME.textSoft }}>
                   <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-xs" style={{ background: 'rgba(239,68,68,0.7)' }} />Critical/High</span>
                   <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-xs" style={{ background: 'rgba(245,158,11,0.7)' }} />Medium</span>
                   <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-xs" style={{ background: 'rgba(16,185,129,0.55)' }} />Low</span>

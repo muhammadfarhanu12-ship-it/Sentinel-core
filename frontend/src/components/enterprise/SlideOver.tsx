@@ -32,10 +32,10 @@ export function SlideOver({
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 24, stiffness: 220 }}
-            className="fixed top-0 right-0 z-50 h-full w-full max-w-2xl overflow-y-auto border-l border-white/10 bg-slate-950/95 shadow-2xl"
+            className="fixed right-0 top-0 z-50 h-full w-full max-w-[calc(100vw-0.75rem)] overflow-y-auto border-l border-white/10 bg-slate-950/95 shadow-2xl sm:max-w-2xl"
           >
-            <div className="sticky top-0 z-10 flex items-start justify-between border-b border-white/10 bg-slate-950/90 px-6 py-5 backdrop-blur-xl">
-              <div>
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-white/10 bg-slate-950/90 px-4 py-4 backdrop-blur-xl sm:px-6 sm:py-5">
+              <div className="min-w-0">
                 <h2 className="text-xl font-semibold text-slate-50">{title}</h2>
                 {subtitle ? <p className="mt-1 text-sm text-slate-400">{subtitle}</p> : null}
               </div>
@@ -47,7 +47,7 @@ export function SlideOver({
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="px-6 py-6">{children}</div>
+            <div className="min-w-0 px-4 py-5 sm:px-6 sm:py-6">{children}</div>
           </motion.aside>
         </>
       ) : null}
