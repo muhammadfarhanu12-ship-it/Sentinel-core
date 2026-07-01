@@ -4,7 +4,7 @@ import { NotificationDropdown } from './NotificationDropdown';
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   return (
     <header className="sticky top-0 z-20 h-16 shrink-0 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-full w-full max-w-[1600px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-full w-full max-w-400 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <button
             type="button"
@@ -16,7 +16,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           </button>
           <div className="flex min-w-0 items-center gap-2 sm:hidden">
             <Shield className="h-5 w-5 shrink-0 text-indigo-500" />
-            <span className="truncate text-sm font-semibold">Sentinel</span>
+            <span className="truncate text-sm font-semibold">Mefyx</span>
           </div>
           <div className="relative hidden w-full max-w-xs sm:block">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />

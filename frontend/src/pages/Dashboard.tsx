@@ -649,7 +649,7 @@ export default function Dashboard() {
           >
             <span className="h-2 w-2 rounded-full" style={{ background: 'currentColor', animation: 'sentinel-pulse 1.5s infinite' }} />
             <div className="text-xs font-semibold">{dashboardData.gatewayStatus.active ? 'Gateway Active' : 'Gateway Offline'}</div>
-            <div className="min-w-0 break-words font-mono text-[11px] opacity-70">{dashboardData.gatewayStatus.detail}</div>
+            <div className="min-w-0 wrap-break-words font-mono text-[11px] opacity-70">{dashboardData.gatewayStatus.detail}</div>
           </div>
 
           <select
