@@ -383,7 +383,7 @@ async def gateway_chat(payload: GatewayChatRequest, request: Request, current_us
         return _error_response(
             status_code=status.HTTP_403_FORBIDDEN,
             code="policy_blocked",
-            message="Request blocked by Sentinel-Core policy.",
+            message="Request blocked by Mefyx policy.",
             request_id=request_id,
             details={"security": security_payload},
         )

@@ -1,10 +1,10 @@
-# Sentinel-Core Security Enforcement Layer
+# Mefyx Security Enforcement Layer
 
-This document describes the additive AI Security Enforcement Layer integrated into Sentinel-Core.
+This document describes the additive AI Security Enforcement Layer integrated into Mefyx.
 
 ## Pipeline Order
 
-Sentinel-Core now executes a pre/post security pipeline in this order:
+Mefyx now executes a pre/post security pipeline in this order:
 
 1. Input received
 2. Decoder layer (`base64`, `hex`, `morse`, `url`)

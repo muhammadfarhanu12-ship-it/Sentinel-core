@@ -1,4 +1,4 @@
-# Sentinel-Core Threat Model (Security Enforcement Layer)
+# Mefyx Threat Model (Security Enforcement Layer)
 
 ## Scope
 

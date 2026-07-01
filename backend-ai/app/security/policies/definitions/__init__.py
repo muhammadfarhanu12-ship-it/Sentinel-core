@@ -1,4 +1,4 @@
 """
-Policy definition constants for Sentinel-Core security modules.
+Policy definition constants for Mefyx security modules.
 """
 

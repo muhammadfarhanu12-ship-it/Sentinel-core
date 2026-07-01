@@ -634,7 +634,7 @@ export default function Dashboard() {
         <div>
           <h1 className="text-[22px] font-bold tracking-[-0.3px] text-white">Dashboard</h1>
           <p className="mt-1 text-xs" style={{ color: THEME.textSoft }}>
-            Real-time security analytics, threat intelligence, and gateway health for Sentinel-Core.
+            Real-time security analytics, threat intelligence, and gateway health for Mefyx.
           </p>
         </div>
 

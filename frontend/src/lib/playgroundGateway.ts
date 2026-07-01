@@ -199,7 +199,7 @@ export function buildExecutionTrace(envelope: PlaygroundResultEnvelope, executio
     {
       label: 'Prompt scanned',
       status: envelope.validationError || envelope.networkError || envelope.timeout ? 'skipped' : envelope.blocked ? 'blocked' : 'completed',
-      detail: envelope.blocked ? 'Sentinel-Core policy blocked the request before provider execution.' : executionMode === 'scan' ? 'Security-only scan completed.' : 'Gateway scan completed before downstream provider handling.',
+      detail: envelope.blocked ? 'Mefyx policy blocked the request before provider execution.' : executionMode === 'scan' ? 'Security-only scan completed.' : 'Gateway scan completed before downstream provider handling.',
     },
     {
       label: 'Tool risk classified',

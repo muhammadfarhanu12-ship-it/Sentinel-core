@@ -212,7 +212,7 @@ const FALLBACK_EVENTS: AuditEvent[] = [
     after: { requestStatus: 'blocked', policy: 'TOOL-ABU-004', risk: 88 },
     suspicious: false,
     complianceTags: ['SOC2-CC7.2', 'ISO27001-A.16.1'],
-    userAgent: 'Sentinel-Core Gateway',
+    userAgent: 'Mefyx Gateway',
   },
 ];
 
@@ -611,7 +611,7 @@ export default function AdminAuditLogs() {
     }
     if (format === 'pdf') {
       const content = [
-        'Sentinel-Core Audit Log Compliance Report',
+        'Mefyx Audit Log Compliance Report',
         '',
         ...rows.map((row) => `${row.timestamp} | ${row.severity} | ${row.actor} | ${row.action} | ${row.resource} | ${row.ip}`),
       ].join('\n');

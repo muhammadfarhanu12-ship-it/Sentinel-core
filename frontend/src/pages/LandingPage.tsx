@@ -26,7 +26,7 @@ export default function LandingPage() {
             <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
               <Shield className="w-5 h-5 text-indigo-400" />
             </div>
-            <span className="text-xl font-bold tracking-tight">Sentinel</span>
+            <span className="text-xl font-bold tracking-tight">Mefyx</span>
           </div>
           <div className="hidden md:flex items-center space-x-8 text-sm text-slate-300">
             <a href="#features" className="hover:text-white transition-colors">Features</a>
@@ -56,10 +56,10 @@ export default function LandingPage() {
             >
               <span className="inline-flex items-center space-x-2 bg-indigo-500/10 border border-indigo-500/20 rounded-full px-3 py-1 text-xs font-medium text-indigo-300 mb-6">
                 <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
-                <span>Sentinel Core 2.0 is now live</span>
+                <span>Mefyx 2.0 is now live</span>
               </span>
               <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6 leading-tight">
-                Secure Your AI Infrastructure with Sentinel-Core: <br className="hidden md:block" />
+                Secure Your AI Infrastructure with Mefyx: <br className="hidden md:block" />
                 <span className="text-transparent bg-clip-text bg-linear-to-r from-indigo-400 to-cyan-400">The Intelligent Firewall for the LLM Era.</span>
               </h1>
               <p className="text-lg md:text-xl text-slate-400 mb-10 max-w-3xl mx-auto">
@@ -175,9 +175,9 @@ export default function LandingPage() {
         {/* 3. HOW IT WORKS */}
         <section id="how-it-works" className="py-32 px-6 max-w-7xl mx-auto">
           <div className="text-center mb-20">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">How Sentinel Works</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">How Mefyx Works</h2>
             <p className="text-slate-400 max-w-2xl mx-auto text-lg">
-              Sentinel acts as an intelligent security middleware, scanning every prompt in real-time before it reaches your AI model.
+              Mefyx acts as an intelligent security middleware, scanning every prompt in real-time before it reaches your AI model.
             </p>
           </div>
 
@@ -198,7 +198,7 @@ export default function LandingPage() {
                 <div className="w-16 h-16 rounded-full bg-indigo-500/20 border border-indigo-500/50 flex items-center justify-center mb-4 shadow-[0_0_20px_rgba(99,102,241,0.3)]">
                   <Shield className="w-6 h-6 text-indigo-400" />
                 </div>
-                <h4 className="font-semibold mb-2">Sentinel Scan</h4>
+                <h4 className="font-semibold mb-2">Mefyx Scan</h4>
                 <p className="text-xs text-slate-400">Real-time threat detection and redaction.</p>
               </div>
 
@@ -264,7 +264,7 @@ export default function LandingPage() {
             <div className="lg:w-1/2 space-y-6">
               <h2 className="text-3xl md:text-4xl font-bold">Deep visibility into your AI traffic.</h2>
               <p className="text-slate-400 text-lg leading-relaxed">
-                The Sentinel Dashboard gives you unprecedented insight into how your AI models are being used, what threats are being blocked, and where vulnerabilities might exist.
+                The Mefyx gives you unprecedented insight into how your AI models are being used, what threats are being blocked, and where vulnerabilities might exist.
               </p>
               <ul className="space-y-4 pt-4">
                 {[
@@ -399,7 +399,7 @@ export default function LandingPage() {
           <div className="max-w-4xl mx-auto px-6 relative z-10 text-center">
             <h2 className="text-4xl md:text-5xl font-bold mb-6">Secure Your AI Before It's Too Late</h2>
             <p className="text-xl text-slate-300 mb-10">
-              Join thousands of developers building safe, secure, and reliable AI applications with Sentinel.
+              Join thousands of developers building safe, secure, and reliable AI applications with Mefyx.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4">
               <Link to="/signup" className="w-full sm:w-auto bg-indigo-500 hover:bg-indigo-600 text-white px-8 py-4 rounded-lg font-medium transition-all shadow-[0_0_20px_rgba(99,102,241,0.4)] hover:shadow-[0_0_30px_rgba(99,102,241,0.6)]">
@@ -419,7 +419,7 @@ export default function LandingPage() {
           <div className="col-span-2 md:col-span-1">
             <div className="flex items-center space-x-2 mb-4">
               <Shield className="w-5 h-5 text-indigo-400" />
-              <span className="text-lg font-bold tracking-tight">Sentinel</span>
+              <span className="text-lg font-bold tracking-tight">Mefyx</span>
             </div>
             <p className="text-sm text-slate-500">
               The Firewall for AI Applications. Securing the next generation of software.
@@ -454,7 +454,7 @@ export default function LandingPage() {
           </div>
         </div>
         <div className="max-w-7xl mx-auto px-6 mt-12 pt-8 border-t border-white/5 text-sm text-slate-600 flex flex-col md:flex-row justify-between items-center">
-          <p>© {new Date().getFullYear()} Sentinel Security Inc. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Mefyx Security Inc. All rights reserved.</p>
           <div className="flex space-x-4 mt-4 md:mt-0">
             <div className="flex items-center space-x-2">
               <div className="w-2 h-2 rounded-full bg-clean" />

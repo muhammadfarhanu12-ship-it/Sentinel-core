@@ -381,7 +381,7 @@ function resultSummary(raw: unknown, envelope: PlaygroundResultEnvelope): string
     scan?.analysis?.reasoning ||
     scan?.explanation ||
     payload?.error?.message ||
-    (envelope.allowed ? 'Request completed through the active Sentinel-Core path.' : 'Sentinel-Core intercepted or constrained this request.')
+    (envelope.allowed ? 'Request completed through the active Mefyx path.' : 'Mefyx intercepted or constrained this request.')
   );
 }
 
@@ -662,7 +662,7 @@ export default function Playground() {
           <div>
             <h1 className="text-[22px] font-bold text-white">Security Test Lab</h1>
             <p className="mt-2 max-w-4xl text-sm text-[#6B7A99]">
-              Production-wired Sentinel-Core gateway testing for prompt injection, indirect injection, PII exposure, unsafe tool calls, financial abuse, and plan enforcement.
+              Production-wired Mefyx gateway testing for prompt injection, indirect injection, PII exposure, unsafe tool calls, financial abuse, and plan enforcement.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

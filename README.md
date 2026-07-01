@@ -1,6 +1,6 @@
-# Sentinel-Core AI Gateway App
+# Mefyx AI Security Gateway App
 
-Sentinel-Core is an AI security gateway and analyst dashboard for protecting LLM applications from prompt injection, data leakage, unsafe tool execution, and abuse. The repository contains three deployable surfaces:
+Mefyx is an AI security gateway and analyst dashboard for protecting LLM applications from prompt injection, data leakage, unsafe tool execution, and abuse. The repository contains three deployable surfaces:
 
 - `backend-ai/`: FastAPI API, auth, MongoDB access, AI security enforcement, audit/reporting endpoints, and WebSockets.
 - `frontend/`: React/Vite user dashboard, playground, logs, reports, billing, settings, and API key workflows.
@@ -114,7 +114,7 @@ The production scan/gateway path is:
 
 ## Gateway Proxy
 
-`POST /api/v1/gateway/chat` forwards allowed requests to configured AI providers after Sentinel-Core enforcement. It supports `gemini` and `openai` providers.
+`POST /api/v1/gateway/chat` forwards allowed requests to configured AI providers after Mefyx enforcement. It supports `gemini` and `openai` providers.
 
 Example request:
 
@@ -167,7 +167,7 @@ Example blocked response:
   "data": null,
   "error": {
     "code": "policy_blocked",
-    "message": "Request blocked by Sentinel-Core policy.",
+    "message": "Request blocked by Mefyx policy.",
     "request_id": "..."
   }
 }
