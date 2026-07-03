@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
+import { ROBOTS_NOINDEX, SITE_URL } from '../../seo.config';
 
 type SEOProps = {
   title: string;
   description: string;
   path: string;
+  robots?: string;
 };
-
-const SITE_URL = 'https://mefyx.com';
 
 function canonicalFor(path: string) {
   return `${SITE_URL}${path.startsWith('/') ? path : `/${path}`}`;
@@ -41,7 +41,7 @@ function setHeadAttribute(
   element.setAttribute(attributeName, value);
 }
 
-export function SEO({ title, description, path }: SEOProps) {
+export function SEO({ title, description, path, robots }: SEOProps) {
   useEffect(() => {
     const previousTitle = document.title;
     const url = canonicalFor(path);
@@ -114,6 +114,20 @@ export function SEO({ title, description, path }: SEOProps) {
       records,
     );
 
+    if (robots) {
+      setHeadAttribute(
+        'meta[name="robots"]',
+        () => {
+          const meta = document.createElement('meta');
+          meta.setAttribute('name', 'robots');
+          return meta;
+        },
+        'content',
+        robots,
+        records,
+      );
+    }
+
     return () => {
       document.title = previousTitle;
 
@@ -130,7 +144,47 @@ export function SEO({ title, description, path }: SEOProps) {
         }
       });
     };
-  }, [description, path, title]);
+  }, [description, path, robots, title]);
+
+  return null;
+}
+
+export function RobotsMeta({ content = ROBOTS_NOINDEX }: { content?: string }) {
+  useEffect(() => {
+    const records: Array<{
+      element: HTMLMetaElement | HTMLLinkElement;
+      attributeName: 'content' | 'href';
+      previousValue: string | null;
+      created: boolean;
+    }> = [];
+
+    setHeadAttribute(
+      'meta[name="robots"]',
+      () => {
+        const meta = document.createElement('meta');
+        meta.setAttribute('name', 'robots');
+        return meta;
+      },
+      'content',
+      content,
+      records,
+    );
+
+    return () => {
+      records.reverse().forEach(({ element, attributeName, previousValue, created }) => {
+        if (created) {
+          element.remove();
+          return;
+        }
+
+        if (previousValue === null) {
+          element.removeAttribute(attributeName);
+        } else {
+          element.setAttribute(attributeName, previousValue);
+        }
+      });
+    };
+  }, [content]);
 
   return null;
 }

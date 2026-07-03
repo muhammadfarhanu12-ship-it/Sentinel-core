@@ -1,8 +1,9 @@
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, lazy, useEffect, type ReactNode } from 'react';
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import { LoadingSkeleton } from './components/enterprise/LoadingSkeleton';
 import { ScrollToTop } from './components/ScrollToTop';
+import { RobotsMeta } from './components/SEO';
 import { ToastProvider } from './components/ui/ToastProvider';
 import Dashboard from './pages/Dashboard';
 import Logs from './pages/Logs';
@@ -37,6 +38,15 @@ function RouteFallback() {
   return <LoadingSkeleton rows={2} compact />;
 }
 
+function NoIndexRoute({ children }: { children: ReactNode }) {
+  return (
+    <>
+      <RobotsMeta />
+      {children}
+    </>
+  );
+}
+
 function AdminAppRedirect() {
   const location = useLocation();
 
@@ -63,16 +73,16 @@ export default function App() {
           <Route path="/contact" element={<Contact />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route path="/terms-of-service" element={<TermsOfService />} />
-          <Route path="/signin" element={<SignIn />} />
-          <Route path="/signup" element={<SignUp />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/reset" element={<ResetPassword />} />
-          <Route path="/oauth/callback" element={<OAuthCallback />} />
-          <Route path="/verify-email" element={<VerifyEmail />} />
-          <Route path="/verify" element={<VerifyEmail />} />
-          <Route path="/admin/*" element={<AdminAppRedirect />} />
-          <Route path="/app" element={<AppLayout />}>
+          <Route path="/signin" element={<NoIndexRoute><SignIn /></NoIndexRoute>} />
+          <Route path="/signup" element={<NoIndexRoute><SignUp /></NoIndexRoute>} />
+          <Route path="/forgot-password" element={<NoIndexRoute><ForgotPassword /></NoIndexRoute>} />
+          <Route path="/reset-password" element={<NoIndexRoute><ResetPassword /></NoIndexRoute>} />
+          <Route path="/reset" element={<NoIndexRoute><ResetPassword /></NoIndexRoute>} />
+          <Route path="/oauth/callback" element={<NoIndexRoute><OAuthCallback /></NoIndexRoute>} />
+          <Route path="/verify-email" element={<NoIndexRoute><VerifyEmail /></NoIndexRoute>} />
+          <Route path="/verify" element={<NoIndexRoute><VerifyEmail /></NoIndexRoute>} />
+          <Route path="/admin/*" element={<NoIndexRoute><AdminAppRedirect /></NoIndexRoute>} />
+          <Route path="/app" element={<NoIndexRoute><AppLayout /></NoIndexRoute>}>
             <Route index element={<Dashboard />} />
             <Route path="playground" element={<Playground />} />
             <Route path="threats" element={<Threats />} />

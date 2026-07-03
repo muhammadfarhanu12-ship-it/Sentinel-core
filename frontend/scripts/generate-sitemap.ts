@@ -1,28 +1,15 @@
 import fs from "node:fs";
-
-const domain = "https://mefyx.com";
-
-// Only include PUBLIC pages here
-const routes: string[] = [
-  "/",
-  "/features",
-  "/pricing",
-  "/docs",
-  "/blog",
-  "/contact",
-  "/privacy-policy",
-  "/terms-of-service",
-];
+import { CRAWLABLE_PUBLIC_ROUTES, SITE_URL } from "../seo.config";
 
 const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${routes
+${CRAWLABLE_PUBLIC_ROUTES
   .map(
     (route) => `
   <url>
-    <loc>${domain}${route}</loc>
-    <changefreq>${route === "/" ? "weekly" : "monthly"}</changefreq>
-    <priority>${route === "/" ? "1.0" : "0.8"}</priority>
+    <loc>${SITE_URL}${route}</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
   </url>`
   )
   .join("")}

@@ -4,13 +4,17 @@ import { createServer as createViteServer } from "vite";
 import http from "http";
 import { Server } from "socket.io";
 import WebSocket from "ws";
+import fs from "fs";
 import { request as httpRequest } from "http";
 import { request as httpsRequest } from "https";
 import path from "path";
 import { fileURLToPath } from "url";
+import { ROBOTS_NOINDEX, isNoindexPath } from "./seo.config";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const DIST_DIR = path.resolve(__dirname, "dist");
+const INDEX_HTML_PATH = path.join(DIST_DIR, "index.html");
 
 dotenv.config({ path: path.resolve(__dirname, ".env"), override: false });
 
@@ -235,6 +239,53 @@ function emitStrategyUpdate(io: Server, log: any) {
   });
 }
 
+function stripPrerenderedLanding(html: string) {
+  return html.replace(
+    /<div id="root"><!--prerender:landing-->[\s\S]*?<!--\/prerender:landing--><\/div>/i,
+    '<div id="root"></div>',
+  );
+}
+
+function withNoindexMeta(html: string) {
+  const meta = `<meta name="robots" content="${ROBOTS_NOINDEX}" />`;
+  const robotsMetaPattern = /<meta\s+[^>]*name=["']robots["'][^>]*>/i;
+
+  return robotsMetaPattern.test(html)
+    ? html.replace(robotsMetaPattern, meta)
+    : html.replace("</head>", `    ${meta}\n  </head>`);
+}
+
+function removePublicLandingHead(html: string) {
+  return html
+    .replace(/\s*<meta\s+[^>]*name=["']description["'][^>]*>/i, "")
+    .replace(/\s*<link\s+[^>]*rel=["']canonical["'][^>]*>/i, "")
+    .replace(/\s*<script\s+[^>]*id=["']mefyx-software-schema["'][\s\S]*?<\/script>/i, "")
+    .replace(/<title>[\s\S]*?<\/title>/i, "<title>Mefyx App</title>");
+}
+
+function serveSpaHtml(req: express.Request, res: express.Response) {
+  if (!fs.existsSync(INDEX_HTML_PATH)) {
+    res.status(404).send("Frontend build not found. Run npm run build first.");
+    return;
+  }
+
+  const normalizedPath = req.path.replace(/\/+$/, "") || "/";
+  const shouldNoindex = isNoindexPath(normalizedPath);
+  let html = fs.readFileSync(INDEX_HTML_PATH, "utf-8");
+
+  if (normalizedPath !== "/") {
+    html = stripPrerenderedLanding(html);
+  }
+
+  if (shouldNoindex) {
+    res.setHeader("X-Robots-Tag", ROBOTS_NOINDEX);
+    html = removePublicLandingHead(html);
+    html = withNoindexMeta(html);
+  }
+
+  res.type("html").send(html);
+}
+
 async function fetchJsonWithRetry(
   url: string,
   init: RequestInit,
@@ -420,6 +471,13 @@ async function startServer() {
 
   app.use(["/api", "/api/v1", "/brain", "/analyze", "/health"], (req, res) => proxyStream(req, res));
 
+  app.use((req, res, next) => {
+    if (isNoindexPath(req.path)) {
+      res.setHeader("X-Robots-Tag", ROBOTS_NOINDEX);
+    }
+    next();
+  });
+
   if (ENABLE_BACKEND_WS_BRIDGE) {
     startBackendWebSocketBridge(io);
   } else {
@@ -433,7 +491,8 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static("dist"));
+    app.use(express.static(DIST_DIR, { index: false }));
+    app.get("*", serveSpaHtml);
   }
 
   server.listen(GATEWAY_PORT, "0.0.0.0", () => {

@@ -7,7 +7,7 @@
     "dev": "tsx server.ts",
     "start": "node --import tsx server.ts",
     "generate:sitemap": "tsx scripts/generate-sitemap.ts",
-    "build": "npm run generate:sitemap && vite build",
+    "build": "npm run generate:sitemap && vite build && tsx scripts/prerender-public.ts",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "clean": "rm -rf dist",

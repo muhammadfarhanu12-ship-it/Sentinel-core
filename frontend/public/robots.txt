@@ -1,4 +1,13 @@
 User-agent: *
-Allow: /
+Disallow: /app
+Disallow: /admin
+Disallow: /signin
+Disallow: /signup
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /reset
+Disallow: /oauth/callback
+Disallow: /verify-email
+Disallow: /verify
 
 Sitemap: https://mefyx.com/sitemap.xml
