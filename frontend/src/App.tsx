@@ -21,6 +21,7 @@ import Docs from './pages/Docs';
 import Blog from './pages/Blog';
 import Contact from './pages/Contact';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import RefundPolicy from './pages/RefundPolicy';
 import TermsOfService from './pages/TermsOfService';
 import SignIn from './pages/auth/SignIn';
 import SignUp from './pages/auth/SignUp';
@@ -71,8 +72,11 @@ export default function App() {
           <Route path="/docs" element={<Docs />} />
           <Route path="/blog" element={<Blog />} />
           <Route path="/contact" element={<Contact />} />
-          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-          <Route path="/terms-of-service" element={<TermsOfService />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy canonicalPath="/privacy-policy" />} />
+          <Route path="/refunds" element={<RefundPolicy />} />
+          <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/terms-of-service" element={<TermsOfService canonicalPath="/terms-of-service" />} />
           <Route path="/signin" element={<NoIndexRoute><SignIn /></NoIndexRoute>} />
           <Route path="/signup" element={<NoIndexRoute><SignUp /></NoIndexRoute>} />
           <Route path="/forgot-password" element={<NoIndexRoute><ForgotPassword /></NoIndexRoute>} />

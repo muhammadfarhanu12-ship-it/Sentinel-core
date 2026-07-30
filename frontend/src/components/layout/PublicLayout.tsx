@@ -70,8 +70,9 @@ export function PublicLayout({ children }: PublicLayoutProps) {
           <div>
             <h2 className="font-semibold text-slate-200 mb-4">Company</h2>
             <ul className="space-y-2 text-sm text-slate-500">
-              <li><Link to="/privacy-policy" className={footerLinkClass}>Privacy Policy</Link></li>
-              <li><Link to="/terms-of-service" className={footerLinkClass}>Terms of Service</Link></li>
+              <li><Link to="/privacy" className={footerLinkClass}>Privacy Policy</Link></li>
+              <li><Link to="/terms" className={footerLinkClass}>Terms of Service</Link></li>
+              <li><Link to="/refunds" className={footerLinkClass}>Refund Policy</Link></li>
               <li><Link to="/contact" className={footerLinkClass}>Contact</Link></li>
             </ul>
           </div>

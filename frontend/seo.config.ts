@@ -6,7 +6,7 @@ export const LANDING_DESCRIPTION =
 
 export const ROBOTS_NOINDEX = 'noindex, nofollow';
 
-export const CRAWLABLE_PUBLIC_ROUTES = ['/'];
+export const CRAWLABLE_PUBLIC_ROUTES = ['/', '/terms', '/privacy', '/refunds'];
 
 export const AUTH_ROUTE_PATHS = [
   '/signin',
