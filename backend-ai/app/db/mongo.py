@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -29,6 +30,10 @@ _mongo_client: AsyncIOMotorClient | None = None
 _database: AsyncIOMotorDatabase | None = None
 _mongo_uri: str = ""
 _mongo_db_name: str = ""
+
+# Retry tuning for MongoDB Atlas cold starts / transient network issues
+_MAX_CONNECT_RETRIES = 5
+_BASE_RETRY_DELAY_SECONDS = 2  # doubles each attempt: 2s, 4s, 8s, 16s, 32s
 
 
 def _utcnow() -> datetime:
@@ -141,6 +146,14 @@ def get_collection(name: str, *, request: Request | None = None) -> AsyncIOMotor
 
 
 async def connect_to_mongo(*, app=None) -> None:
+    """
+    Connect to MongoDB with retry + exponential backoff.
+
+    Startup will retry up to `_MAX_CONNECT_RETRIES` times before giving up,
+    since Atlas (especially free-tier M0 clusters) can be slow to accept
+    connections on a cold start. Auth failures are NOT retried since retrying
+    won't fix bad credentials.
+    """
     global _mongo_client, _database, _mongo_uri, _mongo_db_name
 
     if _mongo_client is not None and _database is not None:
@@ -155,67 +168,102 @@ async def connect_to_mongo(*, app=None) -> None:
 
     parsed = urlparse(_mongo_uri)
     client_kwargs: dict[str, object] = {
-        "serverSelectionTimeoutMS": 5000,
-        "connectTimeoutMS": 5000,
-        "socketTimeoutMS": 10000,
+        "serverSelectionTimeoutMS": 15000,  # was 5000 - Atlas cold starts need more room
+        "connectTimeoutMS": 15000,          # was 5000
+        "socketTimeoutMS": 20000,           # was 10000
     }
 
-    client = AsyncIOMotorClient(_mongo_uri, **client_kwargs)
-    database = client[_mongo_db_name]
+    last_exc: Exception | None = None
 
-    try:
-        logger.info("Attempting MongoDB connection host=%s db=%s", parsed.hostname, _mongo_db_name)
-        await client.admin.command("ping")
-        await database.command("ping")
+    for attempt in range(1, _MAX_CONNECT_RETRIES + 1):
+        client = AsyncIOMotorClient(_mongo_uri, **client_kwargs)
+        database = client[_mongo_db_name]
 
-        await database.get_collection("users").create_indexes(
-            [
-                IndexModel([("email", 1)], unique=True),
-                IndexModel([("role", 1)]),
-                IndexModel([("verification_token_hash", 1)]),
-                IndexModel([("verify_token_hash", 1)]),
-                IndexModel([("verification_token", 1)]),
-                IndexModel([("verify_token", 1)]),
-                IndexModel([("last_verification_token_hash", 1)]),
-                IndexModel([("last_verify_token_hash", 1)]),
-                IndexModel([("reset_token_hash", 1)]),
-            ]
-        )
-        await database.get_collection("auth_sessions").create_indexes(
-            [
-                IndexModel([("jti_hash", 1)], unique=True),
-                IndexModel([("user_id", 1), ("revoked_at", 1)]),
-                IndexModel([("expires_at", 1)], expireAfterSeconds=0),
-            ]
-        )
+        try:
+            logger.info(
+                "Attempting MongoDB connection host=%s db=%s attempt=%s/%s",
+                parsed.hostname, _mongo_db_name, attempt, _MAX_CONNECT_RETRIES,
+            )
+            await client.admin.command("ping")
+            await database.command("ping")
 
-        _mongo_client = client
-        _database = database
+            await database.get_collection("users").create_indexes(
+                [
+                    IndexModel([("email", 1)], unique=True),
+                    IndexModel([("role", 1)]),
+                    IndexModel([("verification_token_hash", 1)]),
+                    IndexModel([("verify_token_hash", 1)]),
+                    IndexModel([("verification_token", 1)]),
+                    IndexModel([("verify_token", 1)]),
+                    IndexModel([("last_verification_token_hash", 1)]),
+                    IndexModel([("last_verify_token_hash", 1)]),
+                    IndexModel([("reset_token_hash", 1)]),
+                ]
+            )
+            await database.get_collection("auth_sessions").create_indexes(
+                [
+                    IndexModel([("jti_hash", 1)], unique=True),
+                    IndexModel([("user_id", 1), ("revoked_at", 1)]),
+                    IndexModel([("expires_at", 1)], expireAfterSeconds=0),
+                ]
+            )
 
-        if app is not None:
-            app.state.mongodb_client = client
-            app.state.database = database
-            app.state.mongo_connection_state = mongo_connection_state
+            _mongo_client = client
+            _database = database
 
-        _mark_ready()
-        logger.info("Connected to MongoDB database '%s'", _mongo_db_name)
-    except OperationFailure as exc:
-        _mark_error(exc)
-        client.close()
-        raise RuntimeError(
-            "MongoDB Atlas authentication failed. Check MONGODB_URI credentials in backend-ai/.env."
-        ) from exc
-    except Exception as exc:
-        _mark_error(exc)
-        client.close()
-        raise
+            if app is not None:
+                app.state.mongodb_client = client
+                app.state.database = database
+                app.state.mongo_connection_state = mongo_connection_state
+
+            _mark_ready()
+            logger.info("Connected to MongoDB database '%s'", _mongo_db_name)
+            return  # success - stop retrying
+
+        except OperationFailure as exc:
+            # Bad credentials won't be fixed by retrying - fail immediately
+            _mark_error(exc)
+            client.close()
+            raise RuntimeError(
+                "MongoDB Atlas authentication failed. Check MONGODB_URI credentials in backend-ai/.env."
+            ) from exc
+
+        except Exception as exc:
+            _mark_error(exc)
+            client.close()
+            last_exc = exc
+            if attempt < _MAX_CONNECT_RETRIES:
+                delay = _BASE_RETRY_DELAY_SECONDS * (2 ** (attempt - 1))
+                logger.warning(
+                    "MongoDB connection attempt %s/%s failed (%s); retrying in %ss",
+                    attempt, _MAX_CONNECT_RETRIES, exc, delay,
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.error("All MongoDB connection attempts exhausted (%s/%s)", attempt, _MAX_CONNECT_RETRIES)
+
+    assert last_exc is not None
+    raise last_exc
 
 
 async def ping_mongo() -> None:
+    """
+    Ping MongoDB to verify connectivity. Self-heals: if the client was never
+    successfully initialized (e.g. startup exhausted its retries), this will
+    attempt a fresh connect_to_mongo() instead of failing forever.
+    """
+    global _mongo_client
     try:
+        if _mongo_client is None:
+            logger.info("Mongo client not initialized; attempting reconnect from ping_mongo()")
+            await connect_to_mongo()
         await get_client().admin.command("ping")
         _mark_ready()
     except PyMongoError as exc:
+        _mark_error(exc)
+        raise
+    except Exception as exc:
+        # connect_to_mongo() can raise RuntimeError (auth failure, bad URI, etc.)
         _mark_error(exc)
         raise
 
