@@ -246,25 +246,69 @@ async def connect_to_mongo(*, app=None) -> None:
     raise last_exc
 
 
+_background_connect_task: asyncio.Task | None = None
+_connecting_lock = asyncio.Lock()
+
+
+async def start_mongo_connection_background(app=None) -> None:
+    """
+    Kick off connect_to_mongo() as a background task instead of blocking
+    server startup (or a request) on it. Atlas cold starts can take longer
+    than a frontend's HTTP timeout (commonly 15s), so the connection must
+    happen independently of any incoming request.
+
+    Safe to call multiple times; only schedules one background attempt at
+    a time.
+    """
+    global _background_connect_task
+
+    if _mongo_client is not None:
+        return  # already connected
+
+    if _background_connect_task is not None and not _background_connect_task.done():
+        return  # already connecting
+
+    async def _runner() -> None:
+        try:
+            await connect_to_mongo(app=app)
+        except Exception:
+            logger.exception("Background MongoDB connection attempt failed; will retry on next request")
+
+    _background_connect_task = asyncio.create_task(_runner())
+
+
 async def ping_mongo() -> None:
     """
-    Ping MongoDB to verify connectivity. Self-heals: if the client was never
-    successfully initialized (e.g. startup exhausted its retries), this will
-    attempt a fresh connect_to_mongo() instead of failing forever.
+    Ping MongoDB to verify connectivity.
+
+    IMPORTANT: this does NOT block on a fresh connect_to_mongo() retry loop
+    (that can take 15-60+ seconds on a cold Atlas cluster, which is longer
+    than most frontend request timeouts). Instead, if the client isn't ready
+    yet, it raises immediately and kicks off a background connection attempt
+    so the NEXT request has a better chance of succeeding quickly.
     """
     global _mongo_client
+    if _mongo_client is None:
+        # Fire-and-forget: don't await this, so the current request fails fast.
+        async with _connecting_lock:
+            if _mongo_client is None:
+                await start_mongo_connection_background()
+        raise RuntimeError(
+            "MongoDB connection is still starting up. Please retry in a few seconds."
+        )
+
     try:
-        if _mongo_client is None:
-            logger.info("Mongo client not initialized; attempting reconnect from ping_mongo()")
-            await connect_to_mongo()
         await get_client().admin.command("ping")
         _mark_ready()
     except PyMongoError as exc:
         _mark_error(exc)
-        raise
-    except Exception as exc:
-        # connect_to_mongo() can raise RuntimeError (auth failure, bad URI, etc.)
-        _mark_error(exc)
+        # Connection dropped after being ready - clear it and kick off a
+        # background reconnect so subsequent requests recover on their own,
+        # without this (or any single) request blocking on a long retry.
+        _mongo_client = None
+        async with _connecting_lock:
+            if _mongo_client is None:
+                await start_mongo_connection_background()
         raise
 
 
@@ -299,4 +343,5 @@ __all__ = [
     "get_mongo_uri",
     "mongo_connection_state",
     "ping_mongo",
+    "start_mongo_connection_background",
 ]

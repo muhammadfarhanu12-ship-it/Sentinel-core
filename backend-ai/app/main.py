@@ -24,6 +24,7 @@ from app.db.mongo import (
     get_mongo_connection_status,
     get_mongo_db_name,
     ping_mongo,
+    start_mongo_connection_background,
 )
 from app.middleware.auth_middleware import attach_security_context
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -124,10 +125,12 @@ async def lifespan(app: FastAPI):
     app.state.security_startup_status = None
 
     try:
-        try:
-            await connect_to_mongo(app=app)
-        except TypeError:
-            await connect_to_mongo()
+        # Non-blocking: don't await the full connection here. Atlas cold
+        # starts can take longer than a frontend request timeout, so the
+        # connection attempt runs in the background while the server
+        # starts accepting requests immediately. ping_mongo()/health checks
+        # will report "still starting up" until this completes.
+        await start_mongo_connection_background(app=app)
     except Exception as exc:
         app.state.mongo_startup_error = str(exc)
         logger.exception("MongoDB startup failed; continuing in degraded mode")
