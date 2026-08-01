@@ -125,7 +125,11 @@ function toAuthApiError(error: unknown): AuthApiError {
 
 async function authRequest<T>(endpoint: string, init: RequestInit): Promise<T> {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), 15000);
+  // Bumped from 15000ms to 30000ms: MongoDB Atlas cold starts on the backend
+  // can take up to ~15-20s to establish a connection, which was longer than
+  // the old 15s frontend timeout, causing "Server unavailable" even though
+  // the backend eventually succeeded.
+  const timeoutId = window.setTimeout(() => controller.abort(), 30000);
 
   try {
     return await apiRequest<T>(endpoint, {

@@ -88,7 +88,11 @@ async function request<T>(
   const url = inputUrl.startsWith('http') ? inputUrl : `${baseURL}${inputUrl}`;
 
   const controller = new AbortController();
-  const timeoutMs = typeof config.timeout === 'number' ? config.timeout : 15000;
+  // Default bumped from 15000ms to 30000ms: MongoDB Atlas cold starts on the
+  // backend can take up to ~15-20s to establish a connection, which was
+  // longer than the old 15s timeout here, causing premature aborts even
+  // though the backend eventually succeeded.
+  const timeoutMs = typeof config.timeout === 'number' ? config.timeout : 30000;
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
