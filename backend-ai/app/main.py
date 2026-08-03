@@ -25,6 +25,7 @@ from app.db.mongo import (
     get_mongo_db_name,
     ping_mongo,
     start_mongo_connection_background,
+    wait_for_mongo_ready,
 )
 from app.middleware.auth_middleware import attach_security_context
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -209,6 +210,40 @@ async def request_size_limit_middleware(request: Request, call_next):
                     code="request_too_large",
                     message="Request body exceeds the configured maximum size.",
                     details={"max_request_size_bytes": settings.MAX_REQUEST_SIZE_BYTES},
+                ).model_dump(mode="json"),
+            )
+    return await call_next(request)
+
+
+# Auth endpoints that touch MongoDB directly (login/signup/refresh). On a
+# fresh Render/Atlas cold start these used to instant-fail via ping_mongo()'s
+# fast-fail-by-design behavior, forcing the user to manually retry a couple
+# of times until the background connection (see start_mongo_connection_background
+# in the lifespan handler below) finished. This set is checked against the
+# request path so ONE request absorbs the cold-start wait instead.
+_MONGO_COLD_START_SENSITIVE_SUFFIXES = (
+    "/auth/login",
+    "/auth/signup",
+    "/auth/refresh",
+)
+
+
+@app.middleware("http")
+async def mongo_cold_start_wait_middleware(request: Request, call_next):
+    path = request.url.path
+    if request.method == "POST" and path.endswith(_MONGO_COLD_START_SENSITIVE_SUFFIXES):
+        try:
+            await wait_for_mongo_ready(timeout_seconds=20.0)
+        except RuntimeError as exc:
+            logger.warning(
+                "Database not ready for cold-start-sensitive request path=%s error=%s",
+                path, exc,
+            )
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content=fail(
+                    code="database_starting_up",
+                    message="The server is still starting up. Please try again in a few seconds.",
                 ).model_dump(mode="json"),
             )
     return await call_next(request)

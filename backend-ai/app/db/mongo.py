@@ -312,6 +312,37 @@ async def ping_mongo() -> None:
         raise
 
 
+async def wait_for_mongo_ready(*, timeout_seconds: float = 20.0, poll_interval_seconds: float = 0.5) -> None:
+    """
+    Bounded wait for the MongoDB client to become ready.
+
+    Unlike ping_mongo() (which fails fast on purpose so a single request never
+    blocks server-wide), this is meant to be awaited from a single latency-
+    tolerant request path (e.g. login/signup) so a cold start on Render/Atlas
+    resolves within ONE request instead of forcing the user to manually retry
+    every few seconds until the background connection catches up.
+
+    Raises RuntimeError if still not ready after `timeout_seconds`.
+    """
+    if _mongo_client is not None and mongo_connection_state.ready:
+        return
+
+    async with _connecting_lock:
+        if _mongo_client is None:
+            await start_mongo_connection_background()
+
+    loop = asyncio.get_event_loop()
+    deadline = loop.time() + timeout_seconds
+
+    while not (_mongo_client is not None and mongo_connection_state.ready):
+        if loop.time() >= deadline:
+            raise RuntimeError(
+                "MongoDB connection is still starting up after waiting "
+                f"{timeout_seconds:.0f}s. Please try again shortly."
+            )
+        await asyncio.sleep(poll_interval_seconds)
+
+
 async def close_mongo_connection(*, app=None) -> None:
     global _mongo_client, _database
 
@@ -344,4 +375,5 @@ __all__ = [
     "mongo_connection_state",
     "ping_mongo",
     "start_mongo_connection_background",
+    "wait_for_mongo_ready",
 ]
