@@ -143,20 +143,6 @@ async function authRequest<T>(endpoint: string, init: RequestInit): Promise<T> {
   }
 }
 
-async function assertBackendHealthyForAuthentication(): Promise<void> {
-  try {
-    const health = await authRequest<{ status?: string }>('/api/v1/health', {
-      method: 'GET',
-      cache: 'no-store',
-    });
-    if (String(health?.status || '').toLowerCase() !== 'ok') {
-      throw new AuthApiError(AUTH_SERVICE_UNAVAILABLE_MESSAGE, 'server-unavailable', 503);
-    }
-  } catch (error) {
-    throw toAuthApiError(error);
-  }
-}
-
 export async function verifyBackendSession(accessToken: string): Promise<AuthUser> {
   const normalizedAccessToken = String(accessToken || '').trim();
   if (!normalizedAccessToken) {
@@ -199,7 +185,13 @@ export async function signInWithEmail(email: string, password: string): Promise<
     loginUrl,
   });
 
-  await assertBackendHealthyForAuthentication();
+  // NOTE: we intentionally do NOT pre-flight /api/v1/health here anymore.
+  // The backend's /auth/login endpoint now absorbs a Mongo/Render cold start
+  // itself (see mongo_cold_start_wait_middleware in main.py), waiting up to
+  // 20s before returning a clear 503. A health pre-check here used to
+  // instant-fail on a cold cluster (health uses the fast-fail ping_mongo())
+  // and short-circuit before login ever got a chance to wait it out —
+  // which is why a fresh sign-in needed a second manual attempt.
 
   try {
     const data = await authRequest<LoginResponse>('/api/v1/auth/login', {
