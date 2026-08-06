@@ -12,11 +12,11 @@ def render_verify_email_email(*, recipient_email: str, verification_link: str, e
     <div style="max-width:640px;margin:0 auto;padding:32px 20px;">
       <div style="background:linear-gradient(135deg,#0f172a,#111827);border:1px solid #1e293b;border-radius:20px;padding:32px;">
         <div style="display:inline-block;padding:10px 14px;border-radius:999px;background:#0f766e;color:#f0fdfa;font-weight:700;font-size:13px;letter-spacing:0.06em;text-transform:uppercase;">
-          Sentinel Security
+          Mefyx AI
         </div>
         <h1 style="margin:20px 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">Verify your email</h1>
         <p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#cbd5e1;">
-          Welcome to Sentinel. Confirm that <strong>{safe_email}</strong> belongs to you so we can activate your account securely.
+          Welcome to Mefyx AI. Confirm that <strong>{safe_email}</strong> belongs to you so we can activate your account securely.
         </p>
         <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#94a3b8;">
           This verification link expires in {expires_minutes} minutes.
@@ -38,8 +38,8 @@ def render_verify_email_email(*, recipient_email: str, verification_link: str, e
 """
 
     text = (
-        "Sentinel Security\n\n"
-        f"Welcome to Sentinel. Verify your email address ({recipient_email}) using this secure link: {verification_link}\n\n"
+        "Mefyx AI\n\n"
+        f"Welcome to Mefyx AI. Verify your email address ({recipient_email}) using this secure link: {verification_link}\n\n"
         f"This verification link expires in {expires_minutes} minutes.\n\n"
         "If you did not create an account, you can ignore this email.\n"
     )

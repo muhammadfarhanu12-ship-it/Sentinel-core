@@ -1,6 +1,6 @@
-# Sentinel AI Security Gateway - Backend
+# Mefyx Gateway - Backend
 
-FastAPI backend for Sentinel, the "Cloudflare for AI".
+FastAPI backend for Mefyx AI, the "Cloudflare for AI".
 
 ## Setup
 
@@ -21,7 +21,7 @@ The running backend never uses `.env.example` as runtime config. Local developme
 
 ## Automated remediation
 
-When a threat is detected (e.g. `status=BLOCKED`, `threat_score≈0.99`), Sentinel automatically:
+When a threat is detected (e.g. `status=BLOCKED`, `threat_score≈0.99`), Mefyx Gateway automatically:
 
 - Quarantines the API key (sets `api_keys.status=QUARANTINED`)
 - Marks the triggering request/event as quarantined (`security_logs.is_quarantined=1`)

@@ -833,7 +833,7 @@ export default function Playground() {
 
           <div className="space-y-5">
             <SectionCard>
-              <CardHeader icon={<Play className="h-5 w-5" />} title="Execution Mode" subtitle="Gateway Run calls the provider only after Sentinel checks. Security Scan never forwards to a provider." />
+              <CardHeader icon={<Play className="h-5 w-5" />} title="Execution Mode" subtitle="Gateway Run calls the provider only after Mefyx Gateway checks. Security Scan never forwards to a provider." />
               <div className="space-y-4 p-4">
                 <div className="grid grid-cols-2 gap-2 rounded-lg bg-[#161D2E] p-1">
                   {(['gateway', 'scan'] as ExecutionMode[]).map((item) => (

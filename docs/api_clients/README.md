@@ -1,4 +1,4 @@
-# Sentinel Core API clients (examples)
+# Mefyx Gateway API clients (examples)
 
 These are minimal reference clients for the versioned API namespace: `BASE_URL/api/v1/*`.
 

@@ -380,7 +380,7 @@ class SecurityRequest(BaseModel):
 
 @app.get("/")
 async def root() -> dict[str, str]:
-    return {"message": "Sentinel backend is running."}
+    return {"message": "Mefyx AI backend is running."}
 
 
 @app.post("/analyze", include_in_schema=False)

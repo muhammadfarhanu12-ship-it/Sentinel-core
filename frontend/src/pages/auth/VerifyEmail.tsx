@@ -66,7 +66,7 @@ export default function VerifyEmail() {
           <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
             <Shield className="w-6 h-6 text-emerald-300" />
           </div>
-          <span className="text-2xl font-bold tracking-tight text-white">Sentinel</span>
+          <span className="text-2xl font-bold tracking-tight text-white">Mefyx AI</span>
         </Link>
         <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-white">
           Verify email

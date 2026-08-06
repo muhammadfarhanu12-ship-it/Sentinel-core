@@ -55,7 +55,7 @@ def send_admin_login_success_email(
 </html>
 """
     text_body = (
-        "Sentinel admin login activity\n\n"
+        "Mefyx AI admin login activity\n\n"
         "A successful admin-panel login was detected.\n"
         f"Admin email: {admin_email.strip() or 'Unavailable'}\n"
         f"Timestamp: {timestamp_label}\n"
@@ -64,7 +64,7 @@ def send_admin_login_success_email(
     )
     return send_email(
         to=recipient_email,
-        subject="Sentinel admin login activity",
+        subject="Mefyx AI admin login activity",
         html=html_body,
         text=text_body,
     )
@@ -104,7 +104,7 @@ def send_admin_login_failed_attempt_alert(
 </html>
 """
     text_body = (
-        "Sentinel admin login alert\n\n"
+        "Mefyx AI admin login alert\n\n"
         "Repeated failed admin-panel login attempts reached the configured threshold.\n"
         f"Attempted email: {attempted_email.strip() or 'Unavailable'}\n"
         f"Failed attempts: {attempt_count}\n"
@@ -114,7 +114,7 @@ def send_admin_login_failed_attempt_alert(
     )
     return send_email(
         to=recipient_email,
-        subject="Sentinel admin login failed-attempt alert",
+        subject="Mefyx AI admin login failed-attempt alert",
         html=html_body,
         text=text_body,
     )

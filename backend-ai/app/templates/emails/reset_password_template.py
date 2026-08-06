@@ -12,7 +12,7 @@ def render_reset_password_email(*, recipient_email: str, reset_link: str, expire
     <div style="max-width:640px;margin:0 auto;padding:32px 20px;">
       <div style="background:linear-gradient(135deg,#0f172a,#111827);border:1px solid #1e293b;border-radius:20px;padding:32px;">
         <div style="display:inline-block;padding:10px 14px;border-radius:999px;background:#1d4ed8;color:#eff6ff;font-weight:700;font-size:13px;letter-spacing:0.06em;text-transform:uppercase;">
-          Sentinel Security
+          Mefyx AI
         </div>
         <h1 style="margin:20px 0 12px;font-size:28px;line-height:1.2;color:#f8fafc;">Reset your password</h1>
         <p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#cbd5e1;">
@@ -38,7 +38,7 @@ def render_reset_password_email(*, recipient_email: str, reset_link: str, expire
 """
 
     text = (
-        "Sentinel Security\n\n"
+        "Mefyx AI\n\n"
         f"We received a password reset request for {recipient_email}.\n"
         f"Reset your password using this secure link: {reset_link}\n\n"
         f"This link expires in {expires_minutes} minutes and becomes invalid after your password is changed.\n\n"

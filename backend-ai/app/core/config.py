@@ -71,7 +71,7 @@ class Settings:
         self.API_KEY_PREFIX: str = _env_str("API_KEY_PREFIX", "sentinel_sk_gateway_") or "sentinel_sk_gateway_"
         self.API_KEY_MASK: str = _env_str("API_KEY_MASK", "sentinel_sk_****") or "sentinel_sk_****"
 
-        self.PROJECT_NAME: str = _env_str("PROJECT_NAME", "Sentinel AI Security Gateway") or "Sentinel AI Security Gateway"
+        self.PROJECT_NAME: str = _env_str("PROJECT_NAME", "Mefyx Gateway") or "Mefyx Gateway"
         self.API_V1_PREFIX: str = _env_str("API_V1_PREFIX", "/api") or "/api"
         self.MONGODB_URI: str = _env_str("MONGODB_URI", aliases=("MONGO_URI",)) or ""
         self.MONGO_URI: str = self.MONGODB_URI
@@ -194,7 +194,7 @@ class Settings:
 
         self.REMEDIATION_EMAIL_ENABLED: bool = _env_bool("REMEDIATION_EMAIL_ENABLED", True)
         self.REMEDIATION_EMAIL_FROM: str | None = _env_str("REMEDIATION_EMAIL_FROM", aliases=("FROM_EMAIL", "EMAIL_FROM"))
-        self.REMEDIATION_EMAIL_FROM_NAME: str = _env_str("REMEDIATION_EMAIL_FROM_NAME", "Sentinel Core Alerts") or "Sentinel Core Alerts"
+        self.REMEDIATION_EMAIL_FROM_NAME: str = _env_str("REMEDIATION_EMAIL_FROM_NAME", "Mefyx Gateway Alerts") or "Mefyx Gateway Alerts"
         self.REMEDIATION_EMAIL_TO: str | None = _env_str("REMEDIATION_EMAIL_TO")
         self.SMTP_HOST: str | None = _env_str("SMTP_HOST")
         self.SMTP_PORT: int | None = _env_int("SMTP_PORT", 0) or None

@@ -471,7 +471,7 @@ export default function Settings() {
                 <Badge variant="outline" className="border-sky-500/20 bg-sky-500/5 text-sky-200">
                   Workspace Security Control Plane
                 </Badge>
-                <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-50">Sentinel security configuration</h1>
+                <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-50">Mefyx AI security configuration</h1>
                 <p className="mt-3 text-sm leading-6 text-slate-300">
                   Tune detection posture, delivery paths, data handling, and API safeguards from one hardened workspace.
                   Backend-supported controls sync through the gateway, and forward-looking options remain persisted locally
@@ -574,7 +574,7 @@ export default function Settings() {
             <SectionHeading
               icon={SlidersHorizontal}
               title="Advanced Security Configuration"
-              description="Dial how aggressively Sentinel reacts to prompt abuse and which operator guardrails get enforced automatically."
+              description="Dial how aggressively Mefyx Gateway reacts to prompt abuse and which operator guardrails get enforced automatically."
             />
 
             <div className="mt-8 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
@@ -630,7 +630,7 @@ export default function Settings() {
                 />
                 <ToggleRow
                   title="Auto-quarantine"
-                  description="Automatically isolate API keys or users when Sentinel scores a threat as severe."
+                  description="Automatically isolate API keys or users when Mefyx Gateway scores a threat as severe."
                   enabled={draft.autoQuarantine}
                   onToggle={() =>
                     setDraft((current) => ({
@@ -803,7 +803,7 @@ export default function Settings() {
                 <div className="mt-4">
                   <ToggleRow
                     title="In-app operator alerts"
-                    description="Backend-backed notifications directly inside the Sentinel console."
+                    description="Backend-backed notifications directly inside the Mefyx AI console."
                     enabled={draft.inAppAlerts}
                     onToggle={() =>
                       setDraft((current) => ({
@@ -984,7 +984,7 @@ export default function Settings() {
                   <div>
                     <div className="text-sm font-semibold text-slate-100">Soft-limit behavior</div>
                     <div className="mt-1 text-sm text-slate-400">
-                      When the workspace reaches {draft.usageSoftLimit}% monthly usage, Sentinel can escalate through the enabled channels above.
+                      When the workspace reaches {draft.usageSoftLimit}% monthly usage, Mefyx Gateway can escalate through the enabled channels above.
                     </div>
                   </div>
                 </div>

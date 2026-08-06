@@ -31,7 +31,7 @@ export function getSecurityNoticeFromScanResult(payload: unknown): SecurityNotic
       code: 'blocked_request',
       tone: 'critical',
       title: 'Request Blocked',
-      message: `Sentinel blocked this request due to ${threatType.toLowerCase()} risk.`,
+      message: `Mefyx Gateway blocked this request due to ${threatType.toLowerCase()} risk.`,
     };
   }
 
@@ -40,7 +40,7 @@ export function getSecurityNoticeFromScanResult(payload: unknown): SecurityNotic
       code: 'suspicious_activity',
       tone: 'warning',
       title: 'Suspicious Activity Detected',
-      message: 'Sentinel flagged this request and applied additional safeguards.',
+      message: 'Mefyx Gateway flagged this request and applied additional safeguards.',
     };
   }
 

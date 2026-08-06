@@ -87,7 +87,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     <>
       <div className="flex h-16 items-center border-b border-white/10 px-6">
         <Shield className="mr-3 h-6 w-6 shrink-0 text-indigo-500" />
-        <span className="truncate text-lg font-bold tracking-tight">Sentinel</span>
+        <span className="truncate text-lg font-bold tracking-tight">Mefyx AI</span>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">

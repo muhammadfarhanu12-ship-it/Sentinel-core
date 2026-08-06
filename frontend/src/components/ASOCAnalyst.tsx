@@ -174,7 +174,7 @@ export function ASOCAnalyst({ initialSummary }: ASOCAnalystProps) {
           }}
         >
           <CheckCircle2 className="h-4 w-4 text-[#10B981]" />
-          <span>Sentinel ASOC Analyst online. Awaiting anomalies or manual review requests.</span>
+          <span>Mefyx Gateway ASOC Analyst online. Awaiting anomalies or manual review requests.</span>
         </div>
 
         <div ref={messagesContainerRef} className="flex-1 space-y-4 overflow-y-auto pr-1">

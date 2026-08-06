@@ -174,7 +174,7 @@ def _build_security_state(result: dict[str, Any]) -> dict[str, Any]:
         message = "MFA verification is required before this operation can continue."
     elif status == "BLOCKED":
         code = "blocked_request"
-        message = "The request was blocked by Sentinel security policies."
+        message = "The request was blocked by Mefyx Gateway security policies."
     elif suspicious_activity:
         code = "suspicious_activity"
         message = "Suspicious activity detected. The request was sanitized or flagged for review."

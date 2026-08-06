@@ -21,7 +21,7 @@ export default function Sidebar() {
           <LockKeyhole size={18} />
         </div>
         <div>
-          <div className="admin-brand__eyebrow">Sentinel Core</div>
+          <div className="admin-brand__eyebrow">Mefyx Ai</div>
           <div className="admin-brand__title">Admin Control</div>
         </div>
       </div>

@@ -40,7 +40,7 @@ export default function AdminLayout() {
                   <ShieldAlert className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="text-sm font-semibold tracking-[0.18em] text-red-200/90">SENTINEL ADMIN</div>
+                  <div className="text-sm font-semibold tracking-[0.18em] text-red-200/90">MEFYX AI ADMIN</div>
                   <div className="text-xs text-slate-400">Isolated control plane</div>
                 </div>
               </div>

@@ -226,7 +226,7 @@ def send_verification_email(*, recipient_email: str, token: str) -> EmailSendRes
     )
     return send_email(
         to=recipient_email,
-        subject="Verify your Sentinel account",
+        subject="Verify your Mefyx AI account",
         html=rendered["html"],
         text=rendered["text"],
     )
@@ -241,7 +241,7 @@ def send_password_reset_email(*, recipient_email: str, token: str) -> EmailSendR
     )
     return send_email(
         to=recipient_email,
-        subject="Reset your Sentinel password",
+        subject="Reset your Mefyx AI password",
         html=rendered["html"],
         text=rendered["text"],
     )
@@ -255,7 +255,7 @@ def send_test_email(*, recipient_email: str) -> EmailSendResult:
     <div style="max-width:560px;margin:0 auto;background:#0f172a;border:1px solid #1e293b;border-radius:18px;padding:28px;">
       <h1 style="margin:0 0 12px;color:#f8fafc;">SMTP test email</h1>
       <p style="margin:0 0 12px;line-height:1.7;color:#cbd5e1;">
-        This is a test email from Sentinel. Your FastAPI SMTP configuration is working.
+        This is a test email from Mefyx AI. Your FastAPI SMTP configuration is working.
       </p>
       <p style="margin:0;color:#94a3b8;font-size:14px;">
         Recipient: {recipient_email}
@@ -265,11 +265,11 @@ def send_test_email(*, recipient_email: str) -> EmailSendResult:
 </html>
 """
     text = (
-        "Sentinel SMTP test email\n\n"
-        "This is a test email from Sentinel. Your FastAPI SMTP configuration is working.\n"
+        "Mefyx AI SMTP test email\n\n"
+        "This is a test email from Mefyx AI. Your FastAPI SMTP configuration is working.\n"
         f"Recipient: {recipient_email}\n"
     )
-    return send_email(to=recipient_email, subject="Sentinel SMTP test email", html=html, text=text)
+    return send_email(to=recipient_email, subject="Mefyx AI SMTP test email", html=html, text=text)
 
 
 async def send_verification_email_async(*, recipient_email: str, token: str) -> EmailSendResult:

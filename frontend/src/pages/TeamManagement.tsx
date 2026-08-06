@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import {
   Check,
@@ -25,7 +25,10 @@ import {
   X,
 } from 'lucide-react';
 
+import { LoadingSkeleton } from '../components/enterprise/LoadingSkeleton';
 import { useToast } from '../components/ui/ToastProvider';
+import { getErrorMessage } from '../lib/errors';
+import { HttpError, authedFetchJson } from '../services/authenticatedFetch';
 
 const THEME = {
   bg: '#0B0D14',
@@ -102,6 +105,29 @@ type RolePermissionConfig = {
   description: string;
   color: ActivityTheme;
   groups: Record<string, PermissionGroup>;
+};
+
+type TeamApiRecord = {
+  id: number | string;
+  name?: string | null;
+  email?: string | null;
+  role?: string | null;
+  status?: string | null;
+  mfa?: boolean | null;
+  mfa_enabled?: boolean | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  last_active_at?: string | null;
+  expires_at?: string | null;
+};
+
+type AuditLogRecord = {
+  id: number | string;
+  actor?: string | null;
+  action?: string | null;
+  resource?: string | null;
+  timestamp?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 const ROLE_ORDER: Role[] = ['OWNER', 'ADMIN', 'VIEWER', 'AUDITOR'];
@@ -223,74 +249,6 @@ const permissionMatrix = [
   },
 ] as const;
 
-function createSeedMembers(): MemberRecord[] {
-  return [
-    {
-      id: 'member-fk',
-      name: 'Farhan Khan',
-      email: 'muhammadfarhanu12@gmail.com',
-      role: 'OWNER',
-      status: 'ACTIVE',
-      mfa: true,
-      lastActive: 'Just now',
-      lastActiveSort: 0,
-      initials: 'FK',
-      isCurrentUser: true,
-    },
-    {
-      id: 'member-sa',
-      name: 'Sarah Ahmed',
-      email: 'sarah.ahmed@company.com',
-      role: 'ADMIN',
-      status: 'ACTIVE',
-      mfa: false,
-      lastActive: '2h ago',
-      lastActiveSort: 2,
-      initials: 'SA',
-      isCurrentUser: false,
-    },
-    {
-      id: 'member-ar',
-      name: 'Alex Rivera',
-      email: 'alex.rivera@company.com',
-      role: 'VIEWER',
-      status: 'INACTIVE',
-      mfa: false,
-      lastActive: '12 days ago',
-      lastActiveSort: 288,
-      initials: 'AR',
-      isCurrentUser: false,
-    },
-  ];
-}
-
-function createSeedInvites(): PendingInvite[] {
-  return [
-    {
-      id: 'invite-compliance',
-      email: 'compliance@company.com',
-      role: 'AUDITOR',
-      sentDate: '08/06/2026',
-      expiresDate: '15/06/2026',
-      daysLeft: 4,
-      initials: 'CO',
-    },
-  ];
-}
-
-function createSeedActivities(): ActivityEntry[] {
-  return [
-    { id: 'act-1', actor: 'Farhan Khan', initials: 'FK', theme: 'blue', action: 'ran a gateway security scan', resource: 'Playground', ts: 'Just now' },
-    { id: 'act-2', actor: 'Farhan Khan', initials: 'FK', theme: 'blue', action: 'exported threat report (CSV)', resource: 'Reports', ts: '2h ago' },
-    { id: 'act-3', actor: 'Sarah Ahmed', initials: 'SA', theme: 'amber', action: 'viewed audit logs', resource: 'Audit Logs', ts: '3h ago' },
-    { id: 'act-4', actor: 'Farhan Khan', initials: 'FK', theme: 'blue', action: 'rotated API key sk-••••a3f2', resource: 'API Keys', ts: '1 day ago' },
-    { id: 'act-5', actor: 'Farhan Khan', initials: 'FK', theme: 'blue', action: 'invited compliance@company.com as AUDITOR', resource: 'Team', ts: '2 days ago' },
-    { id: 'act-6', actor: 'Sarah Ahmed', initials: 'SA', theme: 'amber', action: 'modified security profile to STRICT', resource: 'Gateway', ts: '3 days ago' },
-    { id: 'act-7', actor: 'Farhan Khan', initials: 'FK', theme: 'blue', action: 'changed Alex Rivera role to VIEWER', resource: 'Team', ts: '5 days ago' },
-    { id: 'act-8', actor: 'Alex Rivera', initials: 'AR', theme: 'green', action: 'reviewed compliance report', resource: 'Reports', ts: '12 days ago' },
-  ];
-}
-
 function styleForRole(role: Role): CSSProperties {
   if (role === 'OWNER') return { background: THEME.blueDim, borderColor: THEME.blueBorder, color: '#A5B4FC' };
   if (role === 'ADMIN') return { background: THEME.amberDim, borderColor: THEME.amberBorder, color: THEME.amber };
@@ -320,6 +278,126 @@ function statusTheme(member: MemberRecord): ActivityTheme {
   if (member.role === 'ADMIN') return 'amber';
   if (member.role === 'AUDITOR') return 'cyan';
   return 'green';
+}
+
+function normalizeRole(value: unknown): Role {
+  const role = String(value || '').toUpperCase();
+  return ROLE_ORDER.includes(role as Role) ? (role as Role) : 'VIEWER';
+}
+
+function normalizeMemberStatus(value: unknown): MemberStatus {
+  const status = String(value || '').toUpperCase();
+  if (status === 'ACTIVE' || status === 'SUSPENDED') return status;
+  return 'INACTIVE';
+}
+
+function parseDate(value: unknown): Date | null {
+  if (!value) return null;
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatRelativeTime(value: unknown, fallback = 'No recent activity'): string {
+  const date = parseDate(value);
+  if (!date) return fallback;
+  const diffMinutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60_000));
+  if (diffMinutes < 1) return 'Just now';
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+}
+
+function formatDate(value: unknown): string {
+  const date = parseDate(value);
+  return date ? new Intl.DateTimeFormat('en-GB').format(date) : 'Not available';
+}
+
+function initialsFromName(value: string, email: string): string {
+  const source = value.trim();
+  if (source) {
+    const words = source.split(/\s+/).slice(0, 2);
+    return words.map((word) => word[0]?.toUpperCase() || '').join('').slice(0, 2) || 'TM';
+  }
+  const local = email.split('@')[0] || 'TM';
+  return local.slice(0, 2).toUpperCase();
+}
+
+function displayNameFromEmail(value: string): string {
+  const local = value.split('@')[0] || 'Workspace member';
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => `${part[0]?.toUpperCase() || ''}${part.slice(1)}`)
+    .join(' ') || 'Workspace member';
+}
+
+function mapMember(record: TeamApiRecord, currentUserEmail: string): MemberRecord {
+  const email = String(record.email || 'unknown@workspace.local').trim().toLowerCase();
+  const lastActiveAt = record.last_active_at || record.updated_at || record.created_at;
+  const lastActiveDate = parseDate(lastActiveAt);
+  const name = String(record.name || '').trim() || displayNameFromEmail(email);
+  return {
+    id: String(record.id),
+    name,
+    email,
+    role: normalizeRole(record.role),
+    status: normalizeMemberStatus(record.status),
+    mfa: Boolean(record.mfa ?? record.mfa_enabled ?? false),
+    lastActive: formatRelativeTime(lastActiveAt),
+    lastActiveSort: lastActiveDate ? Math.max(0, Date.now() - lastActiveDate.getTime()) : Number.MAX_SAFE_INTEGER,
+    initials: initialsFromName(name, email),
+    isCurrentUser: Boolean(currentUserEmail) && email === currentUserEmail.toLowerCase(),
+  };
+}
+
+function mapPendingInvite(record: TeamApiRecord): PendingInvite {
+  const email = String(record.email || 'unknown@workspace.local').trim().toLowerCase();
+  const sentAt = parseDate(record.created_at || record.updated_at) || new Date();
+  const expiresAt = parseDate(record.expires_at) || new Date(sentAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+  return {
+    id: String(record.id),
+    email,
+    role: normalizeRole(record.role),
+    sentDate: formatDate(sentAt),
+    expiresDate: formatDate(expiresAt),
+    daysLeft: Math.ceil((expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)),
+    initials: initialsFromName(String(record.name || ''), email),
+  };
+}
+
+function mapTeamActivity(record: AuditLogRecord): ActivityEntry {
+  const action = String(record.action || '').toUpperCase();
+  const metadata = record.metadata && typeof record.metadata === 'object' ? record.metadata : {};
+  const email = typeof metadata.email === 'string' ? metadata.email : '';
+  const role = typeof metadata.role === 'string' ? metadata.role.toUpperCase() : '';
+  const memberLabel = email || 'a team member';
+  let actionText = action.replace(/^TEAM_/, '').toLowerCase().replace(/_/g, ' ');
+  if (action === 'TEAM_MEMBER_INVITED') actionText = `invited ${memberLabel}${role ? ` as ${role}` : ''}`;
+  if (action === 'TEAM_INVITE_RESENT') actionText = `resent the invitation to ${memberLabel}`;
+  if (action === 'TEAM_INVITE_REVOKED') actionText = `revoked the invitation for ${memberLabel}`;
+  if (action === 'TEAM_MEMBER_REMOVED') actionText = `removed ${memberLabel} from the workspace`;
+  if (action === 'TEAM_MEMBER_ROLE_UPDATED') actionText = `changed ${memberLabel} role${role ? ` to ${role}` : ''}`;
+  if (action === 'TEAM_MEMBER_STATUS_UPDATED') actionText = `updated ${memberLabel} status`;
+
+  const actor = String(record.actor || 'Workspace member');
+  const theme: ActivityTheme = action.includes('INVITED') || action.includes('RESENT')
+    ? 'green'
+    : action.includes('REMOVED') || action.includes('REVOKED')
+      ? 'amber'
+      : action.includes('UPDATED')
+        ? 'cyan'
+        : 'blue';
+  return {
+    id: String(record.id),
+    actor: displayNameFromEmail(actor),
+    initials: initialsFromName('', actor),
+    theme,
+    action: actionText,
+    resource: 'Team',
+    ts: formatRelativeTime(record.timestamp),
+  };
 }
 
 function cx(...values: Array<string | false | null | undefined>): string {
@@ -388,9 +466,12 @@ function SectionCard({
 
 export default function TeamManagement() {
   const { pushToast } = useToast();
-  const [members, setMembers] = useState<MemberRecord[]>(() => createSeedMembers());
-  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>(() => createSeedInvites());
-  const [activities, setActivities] = useState<ActivityEntry[]>(() => createSeedActivities());
+  const [members, setMembers] = useState<MemberRecord[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
+  const [activities, setActivities] = useState<ActivityEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<(typeof ROLE_FILTERS)[number]>('All');
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>('All');
@@ -402,6 +483,7 @@ export default function TeamManagement() {
   const [inviteMessage, setInviteMessage] = useState('');
   const [sendingInvite, setSendingInvite] = useState(false);
   const [inviteBanner, setInviteBanner] = useState<string | null>(null);
+  const [inviteBannerTone, setInviteBannerTone] = useState<'success' | 'error'>('success');
   const [openRoleMenuId, setOpenRoleMenuId] = useState<string | null>(null);
   const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
   const [revokeConfirmId, setRevokeConfirmId] = useState<string | null>(null);
@@ -415,6 +497,46 @@ export default function TeamManagement() {
     }
     window.scrollTo(0, 0);
   }, []);
+
+  const loadTeamData = useCallback(async (showSuccessToast = false) => {
+    setIsLoading(true);
+    try {
+      const [teamResponse, auditResponse, profile] = await Promise.all([
+        authedFetchJson<TeamApiRecord[]>('/api/v1/team'),
+        authedFetchJson<AuditLogRecord[]>('/api/v1/audit-logs?limit=50&q=TEAM_'),
+        authedFetchJson<{ email?: string | null }>('/api/v1/auth/me'),
+      ]);
+      const currentUserEmail = String(profile?.email || '').trim().toLowerCase();
+      const records = Array.isArray(teamResponse) ? teamResponse : [];
+      const auditEntries = Array.isArray(auditResponse) ? auditResponse : [];
+      setMembers(records.filter((record) => String(record.status || '').toUpperCase() !== 'PENDING').map((record) => mapMember(record, currentUserEmail)));
+      setPendingInvites(records.filter((record) => String(record.status || '').toUpperCase() === 'PENDING').map(mapPendingInvite));
+      setActivities(
+        auditEntries
+          .filter((record) => String(record.resource || '').toLowerCase() === 'team' || String(record.action || '').toUpperCase().startsWith('TEAM_'))
+          .map(mapTeamActivity),
+      );
+      setLoadError(null);
+      if (showSuccessToast) {
+        pushToast({
+          title: 'Team refreshed',
+          description: 'Workspace members, invitations, and activity are up to date.',
+          tone: 'success',
+        });
+      }
+    } catch (error) {
+      const message = getErrorMessage(error, 'Unable to load team management data.');
+      setLoadError(message);
+      pushToast({ title: 'Unable to load team', description: message, tone: 'error' });
+    } finally {
+      setHasLoaded(true);
+      setIsLoading(false);
+    }
+  }, [pushToast]);
+
+  useEffect(() => {
+    void loadTeamData();
+  }, [loadTeamData]);
 
   const stats = useMemo(() => {
     const activeCount = members.filter((member) => member.status === 'ACTIVE').length;
@@ -482,34 +604,18 @@ export default function TeamManagement() {
 
   const previewConfig = rolePermissions[inviteRole];
 
-  function addActivity(entry: Omit<ActivityEntry, 'id'>) {
-    setActivities((current) => [{ id: `activity-${Date.now()}-${current.length}`, ...entry }, ...current]);
-  }
-
-  function resetPageState() {
-    setMembers(createSeedMembers());
-    setPendingInvites(createSeedInvites());
-    setActivities(createSeedActivities());
+  async function resetPageState() {
     setSearch('');
     setRoleFilter('All');
     setStatusFilter('All');
     setSortKey('name');
     setSortDirection('asc');
-    setInviteName('');
-    setInviteEmail('');
-    setInviteRole('VIEWER');
-    setInviteMessage('');
-    setSendingInvite(false);
-    setInviteBanner(null);
     setOpenRoleMenuId(null);
     setRemoveConfirmId(null);
     setRevokeConfirmId(null);
     setResentInviteId(null);
-    pushToast({
-      title: 'Team state refreshed',
-      description: 'Workspace members, invites, and audit activity were reloaded.',
-      tone: 'success',
-    });
+    setInviteBanner(null);
+    await loadTeamData(true);
   }
 
   function toggleSort(nextKey: SortKey) {
@@ -521,57 +627,52 @@ export default function TeamManagement() {
     setSortDirection('asc');
   }
 
-  function changeMemberRole(member: MemberRecord, nextRole: Role) {
+  async function changeMemberRole(member: MemberRecord, nextRole: Role) {
     if (member.role === nextRole) {
       setOpenRoleMenuId(null);
       return;
     }
-    setMembers((current) => current.map((item) => (item.id === member.id ? { ...item, role: nextRole } : item)));
     setOpenRoleMenuId(null);
-    addActivity({
-      actor: 'Farhan Khan',
-      initials: 'FK',
-      theme: 'blue',
-      action: `changed ${member.name} role to ${nextRole}`,
-      resource: 'Team',
-      ts: 'Just now',
-    });
-    pushToast({
-      title: 'Role updated',
-      description: `${member.name} is now ${nextRole}.`,
-      tone: 'success',
-    });
+    try {
+      await authedFetchJson<TeamApiRecord>(`/api/v1/team/${encodeURIComponent(member.id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role: nextRole }),
+      });
+      await loadTeamData();
+      pushToast({ title: 'Role updated', description: `${member.name} is now ${nextRole}.`, tone: 'success' });
+    } catch (error) {
+      pushToast({ title: 'Unable to update role', description: getErrorMessage(error, 'Please try again.'), tone: 'error' });
+    }
   }
 
-  function toggleMemberSuspended(member: MemberRecord) {
+  async function toggleMemberSuspended(member: MemberRecord) {
     const nextStatus: MemberStatus = member.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
-    setMembers((current) => current.map((item) => (item.id === member.id ? { ...item, status: nextStatus } : item)));
-    addActivity({
-      actor: 'Farhan Khan',
-      initials: 'FK',
-      theme: 'blue',
-      action: `${nextStatus === 'SUSPENDED' ? 'suspended' : 'reactivated'} ${member.name}`,
-      resource: 'Team',
-      ts: 'Just now',
-    });
+    try {
+      await authedFetchJson<TeamApiRecord>(`/api/v1/team/${encodeURIComponent(member.id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      await loadTeamData();
+      pushToast({
+        title: nextStatus === 'SUSPENDED' ? 'Member suspended' : 'Member reactivated',
+        description: `${member.name} is now ${nextStatus.toLowerCase()}.`,
+        tone: 'success',
+      });
+    } catch (error) {
+      pushToast({ title: 'Unable to update member', description: getErrorMessage(error, 'Please try again.'), tone: 'error' });
+    }
   }
 
-  function removeMember(member: MemberRecord) {
-    setMembers((current) => current.filter((item) => item.id !== member.id));
-    setRemoveConfirmId(null);
-    addActivity({
-      actor: 'Farhan Khan',
-      initials: 'FK',
-      theme: 'blue',
-      action: `removed ${member.name} from the workspace`,
-      resource: 'Team',
-      ts: 'Just now',
-    });
-    pushToast({
-      title: 'Member removed',
-      description: `${member.name} no longer has workspace access.`,
-      tone: 'success',
-    });
+  async function removeMember(member: MemberRecord) {
+    try {
+      const result = await authedFetchJson<{ deleted?: boolean }>(`/api/v1/team/${encodeURIComponent(member.id)}`, { method: 'DELETE' });
+      if (!result?.deleted) throw new Error('The team member could not be removed.');
+      setRemoveConfirmId(null);
+      await loadTeamData();
+      pushToast({ title: 'Member removed', description: `${member.name} no longer has workspace access.`, tone: 'success' });
+    } catch (error) {
+      pushToast({ title: 'Unable to remove member', description: getErrorMessage(error, 'Please try again.'), tone: 'error' });
+    }
   }
 
   async function copyPageLink() {
@@ -602,32 +703,28 @@ export default function TeamManagement() {
     });
   }
 
-  function handleResendInvite(invite: PendingInvite) {
-    setResentInviteId(invite.id);
-    window.setTimeout(() => setResentInviteId((current) => (current === invite.id ? null : current)), 2000);
-  }
-
-  function handleRevokeInvite(invite: PendingInvite) {
-    setPendingInvites((current) => current.filter((item) => item.id !== invite.id));
-    setRevokeConfirmId(null);
-    addActivity({
-      actor: 'Farhan Khan',
-      initials: 'FK',
-      theme: 'blue',
-      action: `revoked invitation for ${invite.email}`,
-      resource: 'Team',
-      ts: 'Just now',
-    });
-  }
-
-  function initialsFromName(value: string, email: string) {
-    const source = value.trim();
-    if (source) {
-      const words = source.split(/\s+/).slice(0, 2);
-      return words.map((word) => word[0]?.toUpperCase() || '').join('').slice(0, 2) || 'TM';
+  async function handleResendInvite(invite: PendingInvite) {
+    try {
+      await authedFetchJson<TeamApiRecord>(`/api/v1/team/${encodeURIComponent(invite.id)}/resend-invite`, { method: 'POST' });
+      await loadTeamData();
+      setResentInviteId(invite.id);
+      window.setTimeout(() => setResentInviteId((current) => (current === invite.id ? null : current)), 2000);
+      pushToast({ title: 'Invitation resent', description: `A new invitation was sent to ${invite.email}.`, tone: 'success' });
+    } catch (error) {
+      pushToast({ title: 'Unable to resend invitation', description: getErrorMessage(error, 'Please try again.'), tone: 'error' });
     }
-    const local = email.split('@')[0] || 'TM';
-    return local.slice(0, 2).toUpperCase();
+  }
+
+  async function handleRevokeInvite(invite: PendingInvite) {
+    try {
+      const result = await authedFetchJson<{ deleted?: boolean }>(`/api/v1/team/${encodeURIComponent(invite.id)}/invite`, { method: 'DELETE' });
+      if (!result?.deleted) throw new Error('The invitation could not be revoked.');
+      setRevokeConfirmId(null);
+      await loadTeamData();
+      pushToast({ title: 'Invitation revoked', description: `${invite.email} can no longer use this invitation.`, tone: 'success' });
+    } catch (error) {
+      pushToast({ title: 'Unable to revoke invitation', description: getErrorMessage(error, 'Please try again.'), tone: 'error' });
+    }
   }
 
   function resetInviteForm() {
@@ -650,41 +747,29 @@ export default function TeamManagement() {
 
     setSendingInvite(true);
     setInviteBanner(null);
-    await new Promise((resolve) => window.setTimeout(resolve, 1200));
-
-    const initials = initialsFromName(inviteName, inviteEmail);
-    const sentDate = '11/06/2026';
-    const expiresDate = '18/06/2026';
-
-    setPendingInvites((current) => [
-      {
-        id: `invite-${Date.now()}`,
-        email: inviteEmail.trim(),
-        role: inviteRole,
-        sentDate,
-        expiresDate,
-        daysLeft: 7,
-        initials,
-      },
-      ...current,
-    ]);
-
-    addActivity({
-      actor: 'Farhan Khan',
-      initials: 'FK',
-      theme: 'blue',
-      action: `invited ${inviteEmail.trim()} as ${inviteRole}`,
-      resource: 'Team',
-      ts: 'Just now',
-    });
-    setInviteBanner(`Invitation sent to ${inviteEmail.trim()}`);
-    pushToast({
-      title: 'Invitation sent',
-      description: `${inviteEmail.trim()} has been added to pending invitations.`,
-      tone: 'success',
-    });
-    resetInviteForm();
-    setSendingInvite(false);
+    try {
+      await authedFetchJson<TeamApiRecord>('/api/v1/team/invite', {
+        method: 'POST',
+        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole, generate_invite_link: true }),
+      });
+      await loadTeamData();
+      setInviteBanner(`Invitation sent to ${inviteEmail.trim()}`);
+      setInviteBannerTone('success');
+      pushToast({ title: 'Invitation sent', description: `${inviteEmail.trim()} has been added to pending invitations.`, tone: 'success' });
+      resetInviteForm();
+    } catch (error) {
+      const message = getErrorMessage(error, 'Unable to send the invitation.');
+      const isPlanRestriction = error instanceof HttpError && error.status === 403;
+      setInviteBanner(isPlanRestriction ? 'Team invitations require a Pro or Business plan.' : null);
+      setInviteBannerTone('error');
+      pushToast({
+        title: isPlanRestriction ? 'Upgrade required' : 'Unable to send invitation',
+        description: isPlanRestriction ? 'Team invitations require a Pro or Business plan.' : message,
+        tone: 'error',
+      });
+    } finally {
+      setSendingInvite(false);
+    }
   }
 
   function renderSortLabel(label: string, key: SortKey) {
@@ -701,6 +786,10 @@ export default function TeamManagement() {
     );
   }
 
+  if (isLoading && !hasLoaded) {
+    return <LoadingSkeleton rows={4} />;
+  }
+
   return (
     <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="space-y-3.5" style={{ color: THEME.text }}>
       <style>{`
@@ -708,6 +797,12 @@ export default function TeamManagement() {
         .team-scroll::-webkit-scrollbar-track { background: transparent; }
         .team-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 999px; }
       `}</style>
+
+      {loadError ? (
+        <div className="rounded-[7px] border px-3.5 py-2.5 text-[12px]" style={{ background: THEME.redDim, borderColor: THEME.redBorder, color: THEME.red }}>
+          {loadError}
+        </div>
+      ) : null}
 
       <div className="flex flex-col gap-2.5 xl:flex-row xl:items-end xl:justify-between">
         <div>
@@ -719,7 +814,7 @@ export default function TeamManagement() {
         <div className="flex flex-wrap gap-2.5 xl:flex-nowrap">
           <button
             type="button"
-            onClick={resetPageState}
+            onClick={() => void resetPageState()}
             className="inline-flex whitespace-nowrap rounded-[7px] border px-3.25 py-1.75 text-[12px] font-semibold text-white transition-colors hover:bg-white/5"
             style={{ borderColor: THEME.borderStrong }}
           >
@@ -867,7 +962,11 @@ export default function TeamManagement() {
             </div>
 
             <div>
-              {filteredMembers.map((member) => (
+              {filteredMembers.length === 0 ? (
+                <div className="px-5 py-8 text-center text-[12px]" style={{ color: THEME.textSoft }}>
+                  No workspace members match the current filters.
+                </div>
+              ) : filteredMembers.map((member) => (
                 <div key={member.id} className="border-b" style={{ borderColor: THEME.border }}>
                   <div
                     className="grid min-h-14.5 grid-cols-[170px_210px_120px_100px_80px_140px_110px] gap-4 px-5 py-3 transition-colors hover:bg-white/2.5"
@@ -902,7 +1001,7 @@ export default function TeamManagement() {
                             <button
                               key={role}
                               type="button"
-                              onClick={() => changeMemberRole(member, role)}
+                              onClick={() => void changeMemberRole(member, role)}
                               className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-[11px] transition-colors hover:bg-white/5"
                             >
                               <span>{role}</span>
@@ -940,7 +1039,7 @@ export default function TeamManagement() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => toggleMemberSuspended(member)}
+                        onClick={() => void toggleMemberSuspended(member)}
                         className="flex h-7 w-7 items-center justify-center rounded-md border border-transparent transition-colors"
                         style={{ color: THEME.textSoft }}
                         onMouseEnter={(event: MouseEvent<HTMLButtonElement>) => {
@@ -991,7 +1090,7 @@ export default function TeamManagement() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => removeMember(member)}
+                          onClick={() => void removeMember(member)}
                           className="rounded-[7px] border px-3 py-1.5 text-[11px] font-semibold"
                           style={{ background: THEME.redDim, borderColor: THEME.redBorder, color: THEME.red }}
                         >
@@ -1006,7 +1105,11 @@ export default function TeamManagement() {
           </div>
 
           <div className="grid gap-3.5 p-3.5 xl:hidden">
-            {filteredMembers.map((member) => (
+            {filteredMembers.length === 0 ? (
+              <div className="rounded-[10px] border px-4 py-7 text-center text-[12px]" style={{ background: THEME.panel, borderColor: THEME.border, color: THEME.textSoft }}>
+                No workspace members match the current filters.
+              </div>
+            ) : filteredMembers.map((member) => (
               <div key={member.id} className="rounded-[10px] border p-3.5" style={{ background: THEME.panel, borderColor: THEME.border }}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
@@ -1053,7 +1156,7 @@ export default function TeamManagement() {
                     <button
                       key={role}
                       type="button"
-                      onClick={() => changeMemberRole(member, role)}
+                      onClick={() => void changeMemberRole(member, role)}
                       className="rounded-[7px] border px-2.5 py-1 text-[10px] font-semibold"
                       style={member.role === role ? styleForRole(role) : { borderColor: THEME.border, color: THEME.textSoft }}
                     >
@@ -1066,7 +1169,7 @@ export default function TeamManagement() {
                   <button type="button" onClick={() => setOpenRoleMenuId(member.id)} className="flex h-7 w-7 items-center justify-center rounded-md border" style={{ background: THEME.cell, borderColor: THEME.border }}>
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" onClick={() => toggleMemberSuspended(member)} className="flex h-7 w-7 items-center justify-center rounded-md border" style={{ background: THEME.amberDim, borderColor: THEME.amberBorder, color: THEME.amber }}>
+                  <button type="button" onClick={() => void toggleMemberSuspended(member)} className="flex h-7 w-7 items-center justify-center rounded-md border" style={{ background: THEME.amberDim, borderColor: THEME.amberBorder, color: THEME.amber }}>
                     <PauseCircle className="h-3.5 w-3.5" />
                   </button>
                   <button type="button" onClick={() => setRemoveConfirmId((current) => (current === member.id ? null : member.id))} className="flex h-7 w-7 items-center justify-center rounded-md border" style={{ background: THEME.redDim, borderColor: THEME.redBorder, color: THEME.red }}>
@@ -1078,7 +1181,7 @@ export default function TeamManagement() {
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
                     <span style={{ color: THEME.textSoft }}>Remove {member.name}?</span>
                     <button type="button" onClick={() => setRemoveConfirmId(null)} className="rounded-[7px] border px-3 py-1.5 text-[11px]" style={{ borderColor: THEME.border, color: THEME.text }}>Cancel</button>
-                    <button type="button" onClick={() => removeMember(member)} className="rounded-[7px] border px-3 py-1.5 text-[11px]" style={{ background: THEME.redDim, borderColor: THEME.redBorder, color: THEME.red }}>Confirm Remove</button>
+                    <button type="button" onClick={() => void removeMember(member)} className="rounded-[7px] border px-3 py-1.5 text-[11px]" style={{ background: THEME.redDim, borderColor: THEME.redBorder, color: THEME.red }}>Confirm Remove</button>
                   </div>
                 ) : null}
               </div>
@@ -1180,8 +1283,11 @@ export default function TeamManagement() {
             </button>
 
             {inviteBanner ? (
-              <div className="rounded-[7px] border px-3 py-2 text-[12px]" style={{ background: THEME.greenDim, borderColor: THEME.greenBorder, color: THEME.green }}>
-                ✓ {inviteBanner}
+              <div
+                className="rounded-[7px] border px-3 py-2 text-[12px]"
+                style={inviteBannerTone === 'success' ? { background: THEME.greenDim, borderColor: THEME.greenBorder, color: THEME.green } : { background: THEME.redDim, borderColor: THEME.redBorder, color: THEME.red }}
+              >
+                {inviteBannerTone === 'success' ? '✓' : '!'} {inviteBanner}
               </div>
             ) : null}
 
@@ -1271,7 +1377,7 @@ export default function TeamManagement() {
                       <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => handleResendInvite(invite)}
+                          onClick={() => void handleResendInvite(invite)}
                           className="inline-flex items-center rounded-[7px] border px-3 py-1.5 text-[11px] font-semibold transition-colors"
                           style={{ borderColor: THEME.border, color: resentInviteId === invite.id ? THEME.green : THEME.text }}
                         >
@@ -1294,7 +1400,7 @@ export default function TeamManagement() {
                       <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
                         <span style={{ color: THEME.textSoft }}>Revoke this invite?</span>
                         <button type="button" onClick={() => setRevokeConfirmId(null)} className="rounded-[7px] border px-3 py-1.5 text-[11px]" style={{ borderColor: THEME.border, color: THEME.text }}>Cancel</button>
-                        <button type="button" onClick={() => handleRevokeInvite(invite)} className="rounded-[7px] border px-3 py-1.5 text-[11px]" style={{ background: THEME.redDim, borderColor: THEME.redBorder, color: THEME.red }}>Confirm</button>
+                        <button type="button" onClick={() => void handleRevokeInvite(invite)} className="rounded-[7px] border px-3 py-1.5 text-[11px]" style={{ background: THEME.redDim, borderColor: THEME.redBorder, color: THEME.red }}>Confirm</button>
                       </div>
                     ) : null}
                   </div>
@@ -1384,7 +1490,11 @@ export default function TeamManagement() {
           </div>
 
           <div className="team-scroll max-h-85 overflow-y-auto">
-            {activities.map((activity) => (
+            {activities.length === 0 ? (
+              <div className="px-5 py-8 text-center text-[12px]" style={{ color: THEME.textSoft }}>
+                No team activity has been recorded yet.
+              </div>
+            ) : activities.map((activity) => (
               <div key={activity.id} className="flex items-start gap-3 border-b px-3 py-2.25" style={{ borderColor: THEME.border }}>
                 <div
                   className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full border text-[12px] font-bold"

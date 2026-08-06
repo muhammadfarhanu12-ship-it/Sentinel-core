@@ -1454,6 +1454,7 @@ async def invite_team_member_record(
         "invite_link": f"{settings.FRONTEND_URL.rstrip('/')}/invite/{secrets.token_urlsafe(12)}" if generate_invite_link else None,
         "created_at": utcnow(),
         "updated_at": utcnow(),
+        "expires_at": utcnow() + timedelta(days=7),
     }
 
     collection = collection_from_request(request, "team")
@@ -1478,24 +1479,78 @@ async def update_team_member_role_record(
     current_user: dict[str, Any],
     *,
     member_id: int,
-    role: str,
+    role: str | None = None,
+    status: str | None = None,
 ) -> dict[str, Any] | None:
     workspace_id = workspace_id_for(current_user)
     updated_at = utcnow()
     collection = collection_from_request(request, "team")
     document: dict[str, Any] | None = None
+    updates: dict[str, Any] = {"updated_at": updated_at}
+
+    if role is not None:
+        updates["role"] = role.strip().upper()
+    if status is not None:
+        updates["status"] = status.strip().upper()
 
     if collection is not None:
         await collection.update_one(
             {"workspace_id": workspace_id, "id": member_id},
-            {"$set": {"role": role.strip().upper(), "updated_at": updated_at}},
+            {"$set": updates},
         )
         document = await collection.find_one({"workspace_id": workspace_id, "id": member_id})
     else:
         for item in _fallback_store["team"]:
             if item.get("workspace_id") == workspace_id and int(item.get("id") or 0) == member_id:
-                item["role"] = role.strip().upper()
-                item["updated_at"] = updated_at
+                item.update(updates)
+                document = item
+                break
+
+    if document is None:
+        return None
+
+    action = "TEAM_MEMBER_ROLE_UPDATED" if role is not None else "TEAM_MEMBER_STATUS_UPDATED"
+    await record_audit_event(
+        request,
+        current_user=current_user,
+        action=action,
+        resource="team",
+        severity="WARNING",
+        metadata={"member_id": member_id, "role": document.get("role"), "status": document.get("status")},
+    )
+    return public_document(document, exclude={"workspace_id", "user_id"})
+
+
+async def resend_team_invite_record(
+    request: Request,
+    current_user: dict[str, Any],
+    *,
+    member_id: int,
+) -> dict[str, Any] | None:
+    workspace_id = workspace_id_for(current_user)
+    updated_at = utcnow()
+    updates = {
+        "invite_link": f"{settings.FRONTEND_URL.rstrip('/')}/invite/{secrets.token_urlsafe(12)}",
+        "updated_at": updated_at,
+        "expires_at": updated_at + timedelta(days=7),
+    }
+    collection = collection_from_request(request, "team")
+    document: dict[str, Any] | None = None
+
+    if collection is not None:
+        await collection.update_one(
+            {"workspace_id": workspace_id, "id": member_id, "status": "PENDING"},
+            {"$set": updates},
+        )
+        document = await collection.find_one({"workspace_id": workspace_id, "id": member_id, "status": "PENDING"})
+    else:
+        for item in _fallback_store["team"]:
+            if (
+                item.get("workspace_id") == workspace_id
+                and int(item.get("id") or 0) == member_id
+                and str(item.get("status") or "").upper() == "PENDING"
+            ):
+                item.update(updates)
                 document = item
                 break
 
@@ -1505,12 +1560,46 @@ async def update_team_member_role_record(
     await record_audit_event(
         request,
         current_user=current_user,
-        action="TEAM_MEMBER_ROLE_UPDATED",
+        action="TEAM_INVITE_RESENT",
         resource="team",
-        severity="WARNING",
-        metadata={"member_id": member_id, "role": document.get("role")},
+        severity="INFO",
+        metadata={"member_id": member_id, "email": document.get("email"), "role": document.get("role")},
     )
     return public_document(document, exclude={"workspace_id", "user_id"})
+
+
+async def revoke_team_invite_record(request: Request, current_user: dict[str, Any], *, invite_id: int) -> bool:
+    workspace_id = workspace_id_for(current_user)
+    collection = collection_from_request(request, "team")
+    document: dict[str, Any] | None = None
+
+    if collection is not None:
+        document = await collection.find_one({"workspace_id": workspace_id, "id": invite_id, "status": "PENDING"})
+        if document is None:
+            return False
+        await collection.delete_one({"workspace_id": workspace_id, "id": invite_id, "status": "PENDING"})
+    else:
+        for index, item in enumerate(_fallback_store["team"]):
+            if (
+                item.get("workspace_id") == workspace_id
+                and int(item.get("id") or 0) == invite_id
+                and str(item.get("status") or "").upper() == "PENDING"
+            ):
+                document = item
+                del _fallback_store["team"][index]
+                break
+        if document is None:
+            return False
+
+    await record_audit_event(
+        request,
+        current_user=current_user,
+        action="TEAM_INVITE_REVOKED",
+        resource="team",
+        severity="WARNING",
+        metadata={"member_id": invite_id, "email": document.get("email"), "role": document.get("role")},
+    )
+    return True
 
 
 async def remove_team_member_record(request: Request, current_user: dict[str, Any], *, member_id: int) -> bool:
@@ -2431,7 +2520,7 @@ async def persist_scan_result(
                 request,
                 current_user,
                 title=f"{status.title()} {log_doc['threat_type'].replace('_', ' ')}",
-                message=f"Sentinel {status.lower()} request {request_id}.",
+                message=f"Mefyx Gateway {status.lower()} request {request_id}.",
                 notification_type="REMEDIATION",
                 persist_audit=False,
             )

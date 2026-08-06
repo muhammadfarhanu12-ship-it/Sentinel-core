@@ -74,7 +74,7 @@ export default function ApiKeys() {
       <Card className="bg-slate-900/40 border-white/5">
         <CardHeader>
           <CardTitle>Active Keys</CardTitle>
-          <CardDescription>Use these keys to authenticate your requests to the Sentinel Gateway.</CardDescription>
+          <CardDescription>Use these keys to authenticate your requests to the Mefyx Gateway.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -163,7 +163,7 @@ export default function ApiKeys() {
         isOpen={!!keyToRevoke}
         onClose={() => setKeyToRevoke(null)}
         title="Revoke API Key"
-        description="Are you sure you want to revoke this API key? Any applications using this key will immediately lose access to the Sentinel Gateway."
+        description="Are you sure you want to revoke this API key? Any applications using this key will immediately lose access to the Mefyx Gateway."
       >
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <Button variant="outline" onClick={() => setKeyToRevoke(null)}>Cancel</Button>
