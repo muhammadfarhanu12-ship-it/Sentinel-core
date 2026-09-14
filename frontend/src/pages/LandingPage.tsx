@@ -32,7 +32,7 @@ export default function LandingPage() {
             <a href="#features" className="hover:text-white transition-colors">Features</a>
             <a href="#how-it-works" className="hover:text-white transition-colors">How it Works</a>
             <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
-            <a href="#docs" className="hover:text-white transition-colors">Documentation</a>
+            <Link to="/docs" className="hover:text-white transition-colors">Documentation</Link>
           </div>
           <div className="flex items-center space-x-4">
             <Link to="/signin" className="text-sm font-medium text-slate-300 hover:text-white transition-colors">Sign In</Link>
