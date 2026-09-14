@@ -90,6 +90,7 @@ export default function LandingPage() {
                   <div className="w-3 h-3 rounded-full bg-red-500/80" />
                   <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
                   <div className="w-3 h-3 rounded-full bg-green-500/80" />
+                  <span className="ml-2 text-xs text-slate-500">Sample dashboard preview</span>
                 </div>
                 <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="bg-slate-950/50 border border-white/5 rounded-lg p-4">
@@ -97,8 +98,8 @@ export default function LandingPage() {
                       <span className="text-sm text-slate-400">Threats Blocked</span>
                       <Shield className="w-4 h-4 text-blocked" />
                     </div>
-                    <div className="text-3xl font-bold">14,205</div>
-                    <div className="text-xs text-blocked mt-1">+12% this week</div>
+                    <div className="text-3xl font-bold">Example</div>
+                    <div className="text-xs text-slate-500 mt-1">Illustrative sample data</div>
                   </div>
                   <div className="bg-slate-950/50 border border-white/5 rounded-lg p-4">
                     <div className="flex justify-between items-center mb-2">
@@ -313,8 +314,8 @@ export default function LandingPage() {
                 <div className="text-indigo-300 font-medium">Added Scan Latency</div>
               </div>
               <div>
-                <div className="text-4xl md:text-5xl font-bold text-white mb-2">250M+</div>
-                <div className="text-indigo-300 font-medium">Prompts Protected</div>
+                <div className="text-4xl md:text-5xl font-bold text-white mb-2">1 line</div>
+                <div className="text-indigo-300 font-medium">Of code to integrate</div>
               </div>
             </div>
           </div>
@@ -399,7 +400,7 @@ export default function LandingPage() {
           <div className="max-w-4xl mx-auto px-6 relative z-10 text-center">
             <h2 className="text-4xl md:text-5xl font-bold mb-6">Secure Your AI Before It's Too Late</h2>
             <p className="text-xl text-slate-300 mb-10">
-              Join thousands of developers building safe, secure, and reliable AI applications with Mefyx.
+              Start building safe, secure, and reliable AI applications with Mefyx.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4">
               <Link to="/signup" className="w-full sm:w-auto bg-indigo-500 hover:bg-indigo-600 text-white px-8 py-4 rounded-lg font-medium transition-all shadow-[0_0_20px_rgba(99,102,241,0.4)] hover:shadow-[0_0_30px_rgba(99,102,241,0.6)]">
@@ -431,25 +432,25 @@ export default function LandingPage() {
             <ul className="space-y-2 text-sm text-slate-500">
               <li><a href="#features" className="hover:text-indigo-400 transition-colors">Features</a></li>
               <li><a href="#pricing" className="hover:text-indigo-400 transition-colors">Pricing</a></li>
-              <li><a href="#" className="hover:text-indigo-400 transition-colors">Changelog</a></li>
             </ul>
           </div>
           
           <div>
             <h4 className="font-semibold text-slate-200 mb-4">Resources</h4>
             <ul className="space-y-2 text-sm text-slate-500">
-              <li><a href="#" className="hover:text-indigo-400 transition-colors">Documentation</a></li>
-              <li><a href="#" className="hover:text-indigo-400 transition-colors">API Reference</a></li>
-              <li><a href="#" className="hover:text-indigo-400 transition-colors">Security Blog</a></li>
+              <li><Link to="/docs" className="hover:text-indigo-400 transition-colors">Documentation</Link></li>
+              <li><Link to="/docs" className="hover:text-indigo-400 transition-colors">API Reference</Link></li>
+              <li><Link to="/blog" className="hover:text-indigo-400 transition-colors">Security Blog</Link></li>
             </ul>
           </div>
           
           <div>
             <h4 className="font-semibold text-slate-200 mb-4">Company</h4>
             <ul className="space-y-2 text-sm text-slate-500">
-              <li><a href="#" className="hover:text-indigo-400 transition-colors">Privacy Policy</a></li>
-              <li><a href="#" className="hover:text-indigo-400 transition-colors">Terms of Service</a></li>
-              <li><a href="#" className="hover:text-indigo-400 transition-colors">Contact</a></li>
+              <li><Link to="/privacy" className="hover:text-indigo-400 transition-colors">Privacy Policy</Link></li>
+              <li><Link to="/terms" className="hover:text-indigo-400 transition-colors">Terms of Service</Link></li>
+              <li><Link to="/contact" className="hover:text-indigo-400 transition-colors">Contact</Link></li>
+              <li><a href="mailto:support@mefyx.com" className="hover:text-indigo-400 transition-colors">support@mefyx.com</a></li>
             </ul>
           </div>
         </div>

@@ -33,6 +33,11 @@ export default function Contact() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="rounded-xl border border-white/10 bg-slate-900/50 p-5">
                 <Mail className="w-6 h-6 text-indigo-300 mb-3" />
+                <h2 className="font-semibold mb-1">Customer Support</h2>
+                <a href="mailto:support@mefyx.com" className="text-sm text-slate-400 hover:text-indigo-300 transition-colors">support@mefyx.com</a>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-slate-900/50 p-5">
+                <Mail className="w-6 h-6 text-indigo-300 mb-3" />
                 <h2 className="font-semibold mb-1">Business Email</h2>
                 <a href="mailto:sales@mefyx.com" className="text-sm text-slate-400 hover:text-indigo-300 transition-colors">sales@mefyx.com</a>
               </div>

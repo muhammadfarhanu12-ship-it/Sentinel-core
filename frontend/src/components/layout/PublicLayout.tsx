@@ -74,6 +74,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
               <li><Link to="/terms" className={footerLinkClass}>Terms of Service</Link></li>
               <li><Link to="/refunds" className={footerLinkClass}>Refund Policy</Link></li>
               <li><Link to="/contact" className={footerLinkClass}>Contact</Link></li>
+              <li><a href="mailto:support@mefyx.com" className={footerLinkClass}>support@mefyx.com</a></li>
             </ul>
           </div>
         </div>

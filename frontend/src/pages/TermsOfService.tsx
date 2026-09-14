@@ -81,7 +81,7 @@ export default function TermsOfService({ canonicalPath = '/terms' }: TermsOfServ
           <article className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 p-6">
             <h2 className="text-xl font-semibold mb-3">Contact</h2>
             <p className="text-sm text-slate-400 leading-relaxed">
-              For contract, legal, or terms-related questions, contact Mefyx at <a href="mailto:legal@mefyx.com" className="text-indigo-300 hover:text-indigo-200 transition-colors">legal@mefyx.com</a> or through the contact options available on the Mefyx website.
+              For contract, legal, or terms-related questions, contact Mefyx at <a href="mailto:legal@mefyx.com" className="text-indigo-300 hover:text-indigo-200 transition-colors">legal@mefyx.com</a>. For general account or product support, reach us at <a href="mailto:support@mefyx.com" className="text-indigo-300 hover:text-indigo-200 transition-colors">support@mefyx.com</a>, or through the contact options available on the Mefyx website.
             </p>
           </article>
         </div>
