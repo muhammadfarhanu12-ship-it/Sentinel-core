@@ -29,9 +29,9 @@ export default function LandingPage() {
             <span className="text-xl font-bold tracking-tight">Mefyx</span>
           </div>
           <div className="hidden md:flex items-center space-x-8 text-sm text-slate-300">
-            <a href="#features" className="hover:text-white transition-colors">Features</a>
+            <Link to="/features" className="hover:text-white transition-colors">Features</Link>
             <a href="#how-it-works" className="hover:text-white transition-colors">How it Works</a>
-            <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
+            <Link to="/pricing" className="hover:text-white transition-colors">Pricing</Link>
             <Link to="/docs" className="hover:text-white transition-colors">Documentation</Link>
           </div>
           <div className="flex items-center space-x-4">
@@ -430,8 +430,8 @@ export default function LandingPage() {
           <div>
             <h4 className="font-semibold text-slate-200 mb-4">Product</h4>
             <ul className="space-y-2 text-sm text-slate-500">
-              <li><a href="#features" className="hover:text-indigo-400 transition-colors">Features</a></li>
-              <li><a href="#pricing" className="hover:text-indigo-400 transition-colors">Pricing</a></li>
+              <li><Link to="/features" className="hover:text-indigo-400 transition-colors">Features</Link></li>
+              <li><Link to="/pricing" className="hover:text-indigo-400 transition-colors">Pricing</Link></li>
             </ul>
           </div>
           

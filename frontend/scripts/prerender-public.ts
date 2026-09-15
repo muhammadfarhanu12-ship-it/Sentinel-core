@@ -152,6 +152,8 @@ function writeNoindexShells(html: string) {
 const indexHtml = fs.readFileSync(indexPath, 'utf-8');
 const prerenderedHtml = setLandingRoot(withLandingHead(indexHtml));
 
+// Static hosts need a separate SPA fallback without the homepage snapshot.
+fs.writeFileSync(path.join(distDir, 'spa.html'), stripLandingRoot(indexHtml), 'utf-8');
 fs.writeFileSync(indexPath, prerenderedHtml, 'utf-8');
 writeNoindexShells(prerenderedHtml);
 
