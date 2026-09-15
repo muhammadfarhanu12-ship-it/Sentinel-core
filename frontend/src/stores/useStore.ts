@@ -262,7 +262,9 @@ function connectRealtimeChannel(
 
   socket.onmessage = (event) => {
     try {
-      onPayload(JSON.parse(String(event.data)));
+      const payload = JSON.parse(String(event.data));
+      if (payload?.type === "ping") return;
+      onPayload(payload);
     } catch (error) {
       console.warn(`Failed to parse realtime ${channel} payload:`, error);
     }

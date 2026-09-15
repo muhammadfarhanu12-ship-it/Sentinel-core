@@ -3,6 +3,11 @@ import { buildBackendUrl, parseApiErrorMessage } from './api';
 
 type JsonValue = any;
 
+type FetchBehavior = {
+  // Pages with a local retry state can preserve the session during an outage.
+  redirectOnNetworkError?: boolean;
+};
+
 let refreshInFlight: Promise<string | null> | null = null;
 
 type RedirectReason =
@@ -124,7 +129,7 @@ function createSyntheticTimeoutResponse(): Response {
   );
 }
 
-export async function authedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+export async function authedFetch(input: RequestInfo | URL, init?: RequestInit, behavior: FetchBehavior = {}): Promise<Response> {
   let accessToken = getAccessToken();
   const refreshToken = getRefreshToken();
 
@@ -150,7 +155,7 @@ export async function authedFetch(input: RequestInfo | URL, init?: RequestInit):
     if (error instanceof DOMException && error.name === 'AbortError') {
       return createSyntheticTimeoutResponse();
     }
-    clearSessionAndRedirect('backend-connection-lost');
+    if (behavior.redirectOnNetworkError !== false) clearSessionAndRedirect('backend-connection-lost');
     return createSyntheticErrorResponse(503, 'Backend connection lost.');
   }
   if (res.status !== 401) return res;
@@ -173,7 +178,7 @@ export async function authedFetch(input: RequestInfo | URL, init?: RequestInit):
     if (error instanceof DOMException && error.name === 'AbortError') {
       return createSyntheticTimeoutResponse();
     }
-    clearSessionAndRedirect('backend-connection-lost');
+    if (behavior.redirectOnNetworkError !== false) clearSessionAndRedirect('backend-connection-lost');
     return createSyntheticErrorResponse(503, 'Backend connection lost.');
   }
   if (res.status === 401) {
@@ -182,8 +187,8 @@ export async function authedFetch(input: RequestInfo | URL, init?: RequestInit):
   return res;
 }
 
-export async function authedFetchJson<T = JsonValue>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
-  const res = await authedFetch(input, init);
+export async function authedFetchJson<T = JsonValue>(input: RequestInfo | URL, init?: RequestInit, behavior: FetchBehavior = {}): Promise<T> {
+  const res = await authedFetch(input, init, behavior);
   const payload = await res.json().catch(() => null);
   if (!res.ok) {
     const message = parseApiErrorMessage(payload, `Request failed with status ${res.status}`);
