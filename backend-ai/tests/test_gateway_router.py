@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
+from app.core.config import settings
 from app.main import app
 from app.middleware import auth_middleware
 from app.schemas.gateway_schema import GatewayChatRequest, GatewayUsage
@@ -71,7 +74,9 @@ def test_gateway_missing_provider_key_returns_safe_error(client, monkeypatch):
     assert "GEMINI_API_KEY" not in str(payload)
 
 
-def test_gateway_capabilities_exposes_only_executable_enabled_providers(client):
+def test_gateway_capabilities_exposes_only_executable_enabled_providers(client, monkeypatch):
+    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr(settings, "XAI_API_KEY", "")
     response = client.get("/api/v1/gateway/capabilities")
 
     assert response.status_code == 200
@@ -82,8 +87,13 @@ def test_gateway_capabilities_exposes_only_executable_enabled_providers(client):
     assert providers["gemini"]["implemented"] is True
     assert isinstance(providers["openai"]["configured"], bool)
     assert providers["openai"]["configuration_status"] in {"configured", "missing_provider_key"}
-    assert providers["anthropic"]["enabled"] is False
-    assert providers["anthropic"]["disabled_reason"] == "Coming soon"
+    for provider in ("anthropic", "xai"):
+        assert providers[provider]["implemented"] is True
+        assert providers[provider]["configured"] is False
+        assert providers[provider]["enabled"] is False
+        assert providers[provider]["disabled_reason"] == "Provider key missing"
+        assert providers[provider]["models"]
+        assert all(not model["executable"] for model in providers[provider]["models"])
     assert providers["local_custom"]["enabled"] is False
     assert providers["local_custom"]["disabled_reason"] == "Enterprise connector required"
     assert payload["data"]["providers"] == payload["data"]["supported_providers"]
@@ -91,6 +101,72 @@ def test_gateway_capabilities_exposes_only_executable_enabled_providers(client):
     assert payload["data"]["plan_limits"]["max_prompt_chars"] > 0
     assert payload["data"]["plan_limits"]["requests_per_minute"] > 0
     assert "API_KEY" not in str(payload["data"])
+
+
+@pytest.mark.parametrize("provider,key_name,model", [
+    ("anthropic", "ANTHROPIC_API_KEY", "claude-sonnet-5"),
+    ("xai", "XAI_API_KEY", "grok-4.6"),
+])
+def test_gateway_new_providers_become_executable_with_configured_keys(client, monkeypatch, provider, key_name, model):
+    monkeypatch.setattr(settings, key_name, "test-provider-secret")
+    response = client.get("/api/v1/gateway/capabilities")
+    assert response.status_code == 200
+    providers = {item["id"]: item for item in response.json()["data"]["supported_providers"]}
+    selected = providers[provider]
+    assert selected["configured"] is True
+    assert selected["enabled"] is True
+    assert selected["configuration_status"] == "configured"
+    assert next(item for item in selected["models"] if item["id"] == model)["executable"] is True
+    assert "test-provider-secret" not in response.text
+
+
+@pytest.mark.parametrize("provider,key_name,model", [
+    ("anthropic", "ANTHROPIC_API_KEY", "claude-sonnet-5"),
+    ("xai", "XAI_API_KEY", "grok-4.6"),
+])
+def test_gateway_new_providers_reject_missing_keys_safely(client, monkeypatch, provider, key_name, model):
+    _allow_scan(monkeypatch)
+    monkeypatch.setattr(settings, key_name, "")
+    response = client.post("/api/v1/gateway/chat", json={
+        "provider": provider, "model": model,
+        "messages": [{"role": "user", "content": "Hello"}],
+    })
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "provider_not_configured"
+    assert key_name not in response.text
+
+
+@pytest.mark.parametrize("provider,model", [
+    ("anthropic", "claude-sonnet-5"),
+    ("xai", "grok-4.6"),
+])
+def test_gateway_new_provider_request_reaches_adapter(client, monkeypatch, provider, model):
+    _allow_scan(monkeypatch)
+    calls = []
+
+    class FakeProvider:
+        async def generate(self, **kwargs):
+            calls.append(kwargs)
+            return ProviderResponse(
+                provider=provider, model=kwargs["model"], content="Hello.",
+                usage=GatewayUsage(input_tokens=4, output_tokens=2, total_tokens=6, estimated=False),
+                raw_metadata={},
+            )
+
+    def resolve_provider(name):
+        assert name == provider
+        return FakeProvider()
+
+    monkeypatch.setattr("app.routers.gateway_router.get_provider", resolve_provider)
+    response = client.post("/api/v1/gateway/chat", json={
+        "provider": provider, "model": model,
+        "messages": [{"role": "user", "content": "Hello"}],
+    })
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["provider"] == provider
+    assert response.json()["data"]["model"] == model
+    assert response.json()["data"]["usage"]["total_tokens"] == 6
+    assert calls[0]["model"] == model
 
 
 def test_gateway_capabilities_locks_models_by_active_plan(client):

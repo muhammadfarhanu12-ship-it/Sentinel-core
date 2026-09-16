@@ -1,12 +1,18 @@
 from pydantic import AliasChoices, BaseModel, Field, HttpUrl, field_validator
 
-ALLOWED_PROVIDERS = {"openai", "gemini", "anthropic", "local"}
+from app.core.tier import TIER_LIMITS
+
+ALLOWED_PROVIDERS = {
+    provider for limits in TIER_LIMITS.values() for provider in limits.allowed_models
+}
 ALLOWED_SECURITY_TIERS = {"FREE", "PRO", "BUSINESS"}
 ALLOWED_MODELS_BY_PROVIDER: dict[str, set[str]] = {
-    "openai": {"gpt-4o-mini", "gpt-4o", "gpt-4.1"},
-    "gemini": {"gemini-1.5-flash", "gemini-1.5-pro"},
-    "anthropic": set(),
-    "local": {"local"},
+    provider: {
+        model
+        for limits in TIER_LIMITS.values()
+        for model in limits.allowed_models.get(provider, frozenset())
+    }
+    for provider in ALLOWED_PROVIDERS
 }
 
 

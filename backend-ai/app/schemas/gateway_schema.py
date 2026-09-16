@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 GatewayRole = Literal["system", "user", "assistant"]
-GatewayProvider = Literal["gemini", "openai"]
+GatewayProvider = Literal["gemini", "openai", "anthropic", "xai"]
 JsonPrimitive = str | int | float | bool | None
 
 

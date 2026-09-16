@@ -29,10 +29,11 @@ router = APIRouter(tags=["gateway"])
 IMPLEMENTED_GATEWAY_PROVIDERS: dict[str, dict[str, str]] = {
     "openai": {"label": "OpenAI"},
     "gemini": {"label": "Google Gemini"},
+    "anthropic": {"label": "Anthropic / Claude"},
+    "xai": {"label": "xAI / Grok"},
 }
 
 COMING_SOON_GATEWAY_PROVIDERS: list[dict[str, str]] = [
-    {"id": "anthropic", "label": "Anthropic / Claude", "status": "coming_soon", "reason": "Coming soon", "disabled_reason": "Coming soon"},
     {
         "id": "local_custom",
         "label": "Local / Custom",
@@ -50,6 +51,10 @@ def _provider_configured(provider_id: str) -> bool:
         return bool(str(settings.OPENAI_API_KEY or "").strip())
     if provider_id == "gemini":
         return bool(str(settings.GEMINI_API_KEY or "").strip())
+    if provider_id == "anthropic":
+        return bool(str(settings.ANTHROPIC_API_KEY or "").strip())
+    if provider_id == "xai":
+        return bool(str(settings.XAI_API_KEY or "").strip())
     return False
 
 

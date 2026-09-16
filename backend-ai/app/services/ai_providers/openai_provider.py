@@ -39,10 +39,13 @@ class OpenAIProvider(AIProvider):
             "model": model,
             "messages": [{"role": message.role, "content": message.content} for message in messages],
         }
-        if temperature is not None:
+        # Reasoning models count thinking and visible output in this limit.
+        # Keep their default reasoning mode and omit unsupported sampling controls.
+        uses_reasoning_parameters = model.startswith(("gpt-5", "gpt-6", "o1", "o3", "o4")) or model == "chat-latest"
+        if temperature is not None and not uses_reasoning_parameters:
             payload["temperature"] = temperature
         if max_tokens is not None:
-            payload["max_tokens"] = max_tokens
+            payload["max_completion_tokens" if uses_reasoning_parameters else "max_tokens"] = max_tokens
 
         try:
             async with httpx.AsyncClient(timeout=float(getattr(settings, "AI_PROVIDER_TIMEOUT_SECONDS", 30.0))) as client:

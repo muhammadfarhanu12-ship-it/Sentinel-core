@@ -109,6 +109,8 @@ class Settings:
 
         self.GEMINI_API_KEY: str | None = _env_str("GEMINI_API_KEY")
         self.OPENAI_API_KEY: str | None = _env_str("OPENAI_API_KEY")
+        self.ANTHROPIC_API_KEY: str | None = _env_str("ANTHROPIC_API_KEY")
+        self.XAI_API_KEY: str | None = _env_str("XAI_API_KEY")
         self.AI_PROVIDER: str | None = _env_str("AI_PROVIDER", "gemini")
         self.FALLBACK_AI_PROVIDER: str | None = _env_str("FALLBACK_AI_PROVIDER", "openai")
         self.AI_PROVIDER_TIMEOUT_SECONDS: float = _env_float("AI_PROVIDER_TIMEOUT_SECONDS", 30.0)

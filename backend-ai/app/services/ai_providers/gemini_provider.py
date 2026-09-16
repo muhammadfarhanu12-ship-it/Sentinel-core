@@ -51,7 +51,9 @@ class GeminiProvider(AIProvider):
         }
         if system_parts:
             payload["systemInstruction"] = {"parts": system_parts}
-        if temperature is not None:
+        # Gemini 3 reasoning is optimized for its default sampling settings.
+        # https://ai.google.dev/gemini-api/docs/whats-new-gemini-3.5
+        if temperature is not None and not model.startswith(("gemini-3-", "gemini-3.")):
             payload["generationConfig"]["temperature"] = temperature
         if max_tokens is not None:
             payload["generationConfig"]["maxOutputTokens"] = max_tokens
@@ -87,7 +89,9 @@ class GeminiProvider(AIProvider):
         content = ""
         for candidate in body.get("candidates") or []:
             parts = ((candidate.get("content") or {}).get("parts") or [])
-            content = "".join(str(part.get("text") or "") for part in parts).strip()
+            content = "".join(
+                str(part.get("text") or "") for part in parts if not part.get("thought")
+            ).strip()
             if content:
                 break
 
