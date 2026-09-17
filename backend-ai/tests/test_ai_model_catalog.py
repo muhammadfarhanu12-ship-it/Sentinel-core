@@ -20,6 +20,8 @@ def test_catalog_models_are_accepted_by_both_request_schemas_and_have_an_adapter
 
 
 @pytest.mark.parametrize("provider,model,minimum_plan", [
+    ("openai", "gpt-5.6-luna", "PRO"),
+    ("openai", "gpt-6-astra", "BUSINESS"),
     ("gemini", "gemini-3.5-flash-lite", "FREE"),
     ("gemini", "gemini-3.8-flash", "PRO"),
     ("gemini", "gemini-3.1-pro-preview", "BUSINESS"),
