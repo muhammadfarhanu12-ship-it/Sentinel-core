@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
-from app.core.tier import TIER_LIMITS, normalize_tier, require_scan_entitlement, tier_limits_for
+from app.core.tier import RECOMMENDED_MODELS, TIER_LIMITS, normalize_tier, require_scan_entitlement, tier_limits_for
 from app.middleware.auth_middleware import get_current_user
 from app.middleware.rate_limiter import check_rate_limit
 from app.schemas.api_schema import fail, ok
@@ -144,6 +144,7 @@ async def gateway_capabilities(current_user: dict = Depends(get_current_user)):
                 {
                     "id": model,
                     "label": model,
+                    "recommended": model in RECOMMENDED_MODELS.get(provider_id, frozenset()),
                     "required_plan": _minimum_tier_for_model(provider_id, model),
                     "allowed_by_plan": model_allowed_by_plan,
                     "enabled": bool(key_configured and model_allowed_by_plan),

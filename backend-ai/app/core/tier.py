@@ -92,6 +92,37 @@ GEMINI_PRO_MODELS = GEMINI_FREE_MODELS | frozenset({
 GEMINI_BUSINESS_MODELS = GEMINI_PRO_MODELS | frozenset({"gemini-3.1-pro-preview"})
 
 
+# Presentation metadata only: models outside these sets remain supported with
+# recommended=False. Subscription entitlements are defined separately below.
+# Current general-purpose choices verified against the official catalogs on
+# 2026-09-17; each provider keeps both capable and lower-cost options visible.
+RECOMMENDED_MODELS: dict[str, frozenset[str]] = {
+    # https://developers.openai.com/api/docs/models
+    "openai": frozenset({
+        "gpt-6-astra",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+    }),
+    # https://ai.google.dev/gemini-api/docs/models
+    "gemini": frozenset({
+        "gemini-3.8-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-pro-preview",
+    }),
+    # https://platform.claude.com/docs/en/models/overview
+    "anthropic": frozenset({
+        "claude-fable-5-1",
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-haiku-4-5-20251001",
+    }),
+    # https://docs.x.ai/developers/models/grok-4.6
+    # https://docs.x.ai/developers/models/grok-4.3
+    "xai": frozenset({"grok-4.6", "grok-4.3"}),
+}
+
+
 @dataclass(frozen=True)
 class TierLimits:
     name: str

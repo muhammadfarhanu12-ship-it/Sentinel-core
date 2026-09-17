@@ -21,6 +21,7 @@ import {
   buildAuditPacket,
   buildExecutionTrace,
   buildGatewayChatPayload,
+  buildPlaygroundModelSelection,
   buildPlaygroundReadiness,
   buildRunHistoryItem,
   buildSecurityScanPayload,
@@ -66,6 +67,7 @@ type Scenario = {
 type GatewayModelCapability = {
   id: string;
   label: string;
+  recommended: boolean;
   required_plan?: string | null;
   allowed_by_plan: boolean;
   enabled: boolean;
@@ -443,6 +445,39 @@ function JsonView({ value }: { value: unknown }) {
   );
 }
 
+function CapabilityModelRow({ model }: { model: GatewayModelCapability }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-[7px] border border-white/[0.07] bg-[#0D1117] px-3 py-2 text-xs">
+      <span className="font-mono text-[#D1D9EE]">{model.id}</span>
+      <span className={model.enabled ? 'text-[#10B981]' : 'text-[#F59E0B]'}>
+        {model.enabled ? 'Executable' : model.disabled_reason || 'Unavailable'}
+      </span>
+    </div>
+  );
+}
+
+function CapabilityModelList({ models }: { models: GatewayModelCapability[] }) {
+  const recommended = models.filter((item) => item.recommended === true);
+  const older = models.filter((item) => item.recommended !== true);
+  return (
+    <>
+      {recommended.map((item) => <CapabilityModelRow key={item.id} model={item} />)}
+      {older.length > 0 ? (
+        <details className="group/older border-t border-white/[0.07] pt-2">
+          <summary className="cursor-pointer text-xs font-semibold text-[#6B7A99] hover:text-[#D1D9EE]">
+            <span className="group-open/older:hidden">Show older models</span>
+            <span className="hidden group-open/older:inline">Hide older models</span>
+            {' '}({older.length})
+          </summary>
+          <div className="mt-2 space-y-2">
+            {older.map((item) => <CapabilityModelRow key={item.id} model={item} />)}
+          </div>
+        </details>
+      ) : null}
+    </>
+  );
+}
+
 export default function Playground() {
   const firstScenario = SCENARIOS[0];
   const [mode, setMode] = useState<ExecutionMode>('gateway');
@@ -456,7 +491,8 @@ export default function Playground() {
   const [toolArgsText, setToolArgsText] = useState(JSON.stringify(firstScenario.toolArgs, null, 2));
   const [securityProfile, setSecurityProfile] = useState('financial_guardrail');
   const [provider, setProvider] = useState('gemini');
-  const [model, setModel] = useState('gemini-1.5-flash');
+  const [selectedModelId, setModel] = useState('');
+  const [showAllModels, setShowAllModels] = useState(false);
   const [capabilities, setCapabilities] = useState<GatewayCapabilities | null>(null);
   const [capabilitiesFallback, setCapabilitiesFallback] = useState(false);
   const [loadingCapabilities, setLoadingCapabilities] = useState(true);
@@ -475,11 +511,11 @@ export default function Playground() {
     () => providerOptions.find((item) => item.id === provider) || providerOptions[0] || null,
     [providerOptions, provider],
   );
-  const modelOptions = useMemo(() => selectedProvider?.models || [], [selectedProvider]);
-  const selectedModel = useMemo(
-    () => modelOptions.find((item) => item.id === model) || modelOptions[0] || null,
-    [modelOptions, model],
+  const { options: modelOptions, selected: selectedModel } = useMemo(
+    () => buildPlaygroundModelSelection(selectedProvider?.models || [], selectedModelId, showAllModels),
+    [selectedProvider, selectedModelId, showAllModels],
   );
+  const model = selectedModel?.id || '';
 
   const activePlan = capabilities?.active_plan || 'UNKNOWN';
   const maxPromptChars = capabilities?.plan_limits.max_prompt_chars || 4000;
@@ -528,10 +564,10 @@ export default function Playground() {
     if (selectedProvider.id !== provider) {
       setProvider(selectedProvider.id);
     }
-    if (!selectedProvider.models.some((item) => item.id === model)) {
-      setModel(selectedProvider.models[0]?.id || '');
+    if (selectedModelId !== model) {
+      setModel(model);
     }
-  }, [selectedProvider, provider, model]);
+  }, [selectedProvider, provider, selectedModelId, model]);
 
   function loadScenario(item: Scenario): void {
     setScenarioId(item.id);
@@ -716,20 +752,35 @@ export default function Playground() {
                     ))}
                   </select>
                 </FieldShell>
-                <FieldShell label="Model">
-                  <select
-                    value={model}
-                    onChange={(event: ChangeEvent<HTMLSelectElement>) => setModel(event.target.value)}
-                    className="w-full rounded-[7px] border border-white/13 bg-[#161D2E] px-3 py-2 text-sm outline-none focus:border-[#6366F1]/50"
-                    disabled={loadingCapabilities || modelOptions.length === 0}
-                  >
-                    {modelOptions.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </FieldShell>
+                <div className="space-y-2">
+                  <FieldShell label="Model">
+                    <select
+                      value={model}
+                      onChange={(event: ChangeEvent<HTMLSelectElement>) => setModel(event.target.value)}
+                      className="w-full rounded-[7px] border border-white/13 bg-[#161D2E] px-3 py-2 text-sm outline-none focus:border-[#6366F1]/50"
+                      disabled={loadingCapabilities || modelOptions.length === 0}
+                    >
+                      {modelOptions.length === 0 ? <option value="">{loadingCapabilities ? 'Loading models...' : 'No models available'}</option> : null}
+                      {modelOptions.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </FieldShell>
+                  <label className="flex cursor-pointer items-center gap-2 text-xs text-[#6B7A99]">
+                    <input
+                      type="checkbox"
+                      checked={showAllModels}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) => setShowAllModels(event.target.checked)}
+                      className="h-3.5 w-3.5 accent-[#6366F1]"
+                    />
+                    Show all models
+                  </label>
+                  {!loadingCapabilities && !showAllModels && selectedProvider?.models.length && modelOptions.length === 0 ? (
+                    <p className="text-xs text-[#6B7A99]">No recommended models are listed. Enable Show all models to choose one.</p>
+                  ) : null}
+                </div>
                 <FieldShell label="Security Profile">
                   <div className="grid grid-cols-2 gap-2">
                     {securityProfiles.map((item) => (
@@ -769,14 +820,7 @@ export default function Playground() {
                       </MiniBadge>
                     </div>
                     <div className="mt-3 space-y-2">
-                      {item.models.length ? item.models.map((entry) => (
-                        <div key={entry.id} className="flex items-center justify-between gap-3 rounded-[7px] border border-white/[0.07] bg-[#0D1117] px-3 py-2 text-xs">
-                          <span className="font-mono text-[#D1D9EE]">{entry.id}</span>
-                          <span className={entry.enabled ? 'text-[#10B981]' : 'text-[#F59E0B]'}>
-                            {entry.enabled ? 'Executable' : entry.disabled_reason || 'Unavailable'}
-                          </span>
-                        </div>
-                      )) : (
+                      {item.models.length ? <CapabilityModelList models={item.models} /> : (
                         <div className="rounded-[7px] border border-white/[0.07] bg-[#0D1117] px-3 py-2 text-xs text-[#6B7A99]">
                           No executable models. {item.disabled_reason || 'This provider is not implemented yet.'}
                         </div>

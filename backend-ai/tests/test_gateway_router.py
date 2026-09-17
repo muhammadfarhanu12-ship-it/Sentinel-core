@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 
 from app.core.config import settings
+from app.core.tier import RECOMMENDED_MODELS, TIER_LIMITS
 from app.main import app
 from app.middleware import auth_middleware
 from app.schemas.gateway_schema import GatewayChatRequest, GatewayUsage
@@ -197,6 +198,47 @@ def test_gateway_capabilities_locks_models_by_active_plan(client):
     assert openai_models["gpt-4o"]["required_plan"] == "PRO"
     assert gemini_models["gemini-1.5-flash"]["allowed_by_plan"] is True
     assert "financial_guardrail" in data["allowed_security_profiles"]
+
+
+@pytest.mark.parametrize("plan", ["FREE", "PRO", "BUSINESS"])
+@pytest.mark.parametrize("configured", [False, True])
+def test_gateway_recommendations_preserve_full_catalog_and_plan_gating(client, monkeypatch, plan, configured):
+    async def current_user():
+        return {"id": "catalog-user", "tier": plan}
+
+    app.dependency_overrides[auth_middleware.get_current_user] = current_user
+    for key_name in ("OPENAI_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "XAI_API_KEY"):
+        monkeypatch.setattr(settings, key_name, "test-key" if configured else "")
+
+    response = client.get("/api/v1/gateway/capabilities")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["active_plan"] == plan
+    for provider in data["supported_providers"]:
+        if not provider["implemented"]:
+            continue
+        provider_id = provider["id"]
+        catalog = TIER_LIMITS["BUSINESS"].allowed_models[provider_id]
+        allowed = TIER_LIMITS[plan].allowed_models.get(provider_id, frozenset())
+        assert {model["id"] for model in provider["models"]} == catalog
+        assert data["guardrails"]["allowed_models"].get(provider_id, []) == sorted(allowed)
+        for model in provider["models"]:
+            model_id = model["id"]
+            required_plan = next(
+                tier for tier, limits in TIER_LIMITS.items()
+                if model_id in limits.allowed_models.get(provider_id, frozenset())
+            )
+            assert isinstance(model["recommended"], bool)
+            assert model["recommended"] is (model_id in RECOMMENDED_MODELS[provider_id])
+            assert model["required_plan"] == required_plan
+            assert model["allowed_by_plan"] is (model_id in allowed)
+            assert model["enabled"] is (configured and model_id in allowed)
+            assert model["executable"] is model["enabled"]
+            expected_reason = (
+                f"{required_plan} required" if model_id not in allowed
+                else None if configured else "Provider key missing"
+            )
+            assert model["reason"] == model["disabled_reason"] == expected_reason
 
 
 def test_gateway_chat_request_preserves_json_metadata_objects():

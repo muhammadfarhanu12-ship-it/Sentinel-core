@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from app.core.tier import TIER_LIMITS, require_scan_entitlement
+from app.core.tier import RECOMMENDED_MODELS, TIER_LIMITS, require_scan_entitlement
 from app.schemas.gateway_schema import GatewayChatRequest
 from app.schemas.scan_schema import ScanRequest
 from app.services.ai_providers import get_provider
@@ -52,3 +52,14 @@ def test_higher_tiers_retain_lower_tier_model_access():
     for lower, higher in (("FREE", "PRO"), ("PRO", "BUSINESS")):
         for provider, models in TIER_LIMITS[lower].allowed_models.items():
             assert models <= TIER_LIMITS[higher].allowed_models.get(provider, frozenset())
+
+
+@pytest.mark.parametrize("provider", ["openai", "gemini", "anthropic", "xai"])
+def test_recommended_models_are_supported_and_cover_each_available_plan(provider):
+    recommended = RECOMMENDED_MODELS[provider]
+    assert recommended
+    assert recommended < TIER_LIMITS["BUSINESS"].allowed_models[provider]
+    for limits in TIER_LIMITS.values():
+        allowed = limits.allowed_models.get(provider, frozenset())
+        if allowed:
+            assert recommended & allowed, f"{provider} needs a recommended option on {limits.name}"

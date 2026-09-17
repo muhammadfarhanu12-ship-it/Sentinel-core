@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   buildAuditPacket,
   buildGatewayChatPayload,
+  buildPlaygroundModelSelection,
   buildExecutionTrace,
   buildPlaygroundReadiness,
   buildRunHistoryItem,
@@ -13,6 +14,49 @@ import {
   redactForDisplay,
   toScanOperation,
 } from '../lib/playgroundGateway';
+
+const modelChoices = [
+  { id: 'legacy', recommended: false, enabled: true, allowed_by_plan: true },
+  { id: 'premium', recommended: true, enabled: false, allowed_by_plan: false },
+  { id: 'current', recommended: true, enabled: true, allowed_by_plan: true },
+];
+
+test('model selection defaults to an executable recommended model without changing plan permissions', () => {
+  const selection = buildPlaygroundModelSelection(modelChoices, '', false);
+  assert.deepEqual(selection.options.map((item) => item.id), ['premium', 'current']);
+  assert.equal(selection.selected?.id, 'current');
+  assert.equal(selection.options[0].enabled, false);
+  assert.equal(selection.options[0].allowed_by_plan, false);
+  assert.deepEqual(modelChoices.map((item) => item.id), ['legacy', 'premium', 'current']);
+});
+
+test('showing all models preserves a selected legacy model and hiding them resets the request model', () => {
+  const expanded = buildPlaygroundModelSelection(modelChoices, 'legacy', true);
+  assert.deepEqual(expanded.options.map((item) => item.id), ['premium', 'current', 'legacy']);
+  assert.equal(expanded.selected?.id, 'legacy');
+  const collapsed = buildPlaygroundModelSelection(modelChoices, expanded.selected!.id, false);
+  assert.equal(collapsed.selected?.id, 'current');
+});
+
+test('switching provider chooses a model from that provider while retaining a visible explicit choice', () => {
+  const newProvider = [{ id: 'other-current', recommended: true, enabled: true, allowed_by_plan: true }];
+  assert.equal(buildPlaygroundModelSelection(newProvider, 'current', false).selected?.id, 'other-current');
+  assert.equal(buildPlaygroundModelSelection(modelChoices, 'premium', false).selected?.id, 'premium');
+});
+
+test('missing provider keys still prefer a recommended model permitted by the plan', () => {
+  const unconfigured = modelChoices.map((item) => ({ ...item, enabled: false }));
+  const selection = buildPlaygroundModelSelection(unconfigured, '', false);
+  assert.equal(selection.selected?.id, 'current');
+  assert.equal(selection.selected?.enabled, false);
+});
+
+test('no recommendations or missing metadata produces an empty choice recoverable with Show all models', () => {
+  const unmarked = [{ id: 'unmarked', enabled: true, allowed_by_plan: true }];
+  assert.deepEqual(buildPlaygroundModelSelection(unmarked, '', false), { options: [], selected: null });
+  assert.equal(buildPlaygroundModelSelection(unmarked, '', true).selected?.id, 'unmarked');
+  assert.deepEqual(buildPlaygroundModelSelection([], 'legacy', true), { options: [], selected: null });
+});
 
 test('buildGatewayChatPayload returns a gateway request object, not a JSON string', () => {
   const payload = buildGatewayChatPayload({

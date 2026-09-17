@@ -1,5 +1,30 @@
 import { normalizeRiskLevel, normalizeRiskScore, normalizeVerdict } from './riskScore';
 
+type PlaygroundModelOption = {
+  id: string;
+  recommended?: boolean;
+  enabled: boolean;
+  allowed_by_plan: boolean;
+};
+
+export function buildPlaygroundModelSelection<T extends PlaygroundModelOption>(
+  models: readonly T[],
+  selectedId: string,
+  showAllModels: boolean,
+): { options: T[]; selected: T | null } {
+  const options = models
+    .filter((item) => showAllModels || item.recommended === true)
+    .sort((left, right) => Number(right.recommended === true) - Number(left.recommended === true));
+  const selected = options.find((item) => item.id === selectedId)
+    || options.find((item) => item.recommended === true && item.enabled)
+    || options.find((item) => item.recommended === true && item.allowed_by_plan)
+    || options.find((item) => item.recommended === true)
+    || options.find((item) => item.enabled)
+    || options[0]
+    || null;
+  return { options, selected };
+}
+
 const SENSITIVE_KEY_PATTERNS = [
   'token',
   'secret',
