@@ -505,7 +505,7 @@ export default function AuditLogs() {
           ) : (
             <>
               <div className="hidden overflow-x-auto xl:block">
-                <table className="min-w-[1180px] table-fixed divide-y divide-white/10">
+                <table className="min-w-295 table-fixed divide-y divide-white/10">
                   <thead className="bg-slate-950/70">
                     <tr className="text-left text-xs font-semibold uppercase text-slate-500">
                       <th className="w-[23%] px-5 py-3">Event</th>
@@ -658,7 +658,7 @@ export default function AuditLogs() {
                   <CalendarRange className="h-4 w-4 text-amber-300" />
                   Prompt Preview
                 </div>
-                <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-300">{selectedLog.prompt_preview}</p>
+                <p className="whitespace-pre-wrap wrap-break-word text-sm leading-6 text-slate-300">{selectedLog.prompt_preview}</p>
               </section>
             ) : null}
 
