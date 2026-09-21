@@ -25,7 +25,7 @@ declare namespace React {
   }
 
   interface Attributes {
-    key?: Key;
+    key?: Key | null;
   }
 
   interface RefObject<T> {
@@ -98,6 +98,8 @@ declare module 'react-dom/client' {
 }
 
 declare namespace JSX {
+  interface IntrinsicAttributes extends React.Attributes {}
+
   interface IntrinsicElements {
     [elemName: string]: any;
   }

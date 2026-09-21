@@ -32,12 +32,12 @@ def test_semantic_jailbreak_detector_catches_roleplay_pattern():
 
 
 def test_output_leak_scanner_masks_sensitive_values():
-    stripe_like_prefix = "sk_" + "live_"
-    output = f"token={stripe_like_prefix}unit_test_placeholder_123456789 and jwt=eyJabc.defghi.jklmnop"
+    secret_key_prefix = "sk_" + "live_"
+    output = f"token={secret_key_prefix}unit_test_placeholder_123456789 and jwt=eyJabc.defghi.jklmnop"
     redacted, findings, action = scan_output_for_leaks(output)
     assert findings
     assert redacted != output
-    assert stripe_like_prefix not in redacted
+    assert secret_key_prefix not in redacted
     assert "*" in redacted
     assert action.value in {"REDACT", "BLOCK"}
 

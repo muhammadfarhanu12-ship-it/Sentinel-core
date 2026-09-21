@@ -1,29 +1,75 @@
 import { useStore } from '../stores/useStore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { Check, Zap, Shield, Users, Activity } from 'lucide-react';
+import { Check, Zap, Shield, Activity } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useEffect, useState } from 'react';
-import { authedFetch, authedFetchJson } from '../services/authenticatedFetch';
+import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { authedFetchJson } from '../services/authenticatedFetch';
+
+type Subscription = {
+  tier: string;
+  monthly_limit: number;
+  status: string;
+  creem_customer_id?: string | null;
+  cancel_at_period_end?: boolean;
+  current_period_end?: string | null;
+};
+
+type CheckoutResponse = {
+  checkout_url?: string;
+  checkout_id?: string;
+  message?: string;
+};
 
 export default function Billing() {
   const { analytics } = useStore();
-  const [subscription, setSubscription] = useState<{ tier: string; monthly_limit: number; status: string } | null>(null);
+  const [searchParams] = useSearchParams();
+  const returnedFromCheckout = searchParams.get('checkout') === 'success';
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const periodEnd = subscription?.current_period_end ? new Date(subscription.current_period_end) : null;
+  const periodEndLabel = periodEnd && Number.isFinite(periodEnd.getTime()) ? periodEnd.toLocaleDateString() : null;
 
-  const loadSubscription = async () => {
+  const loadSubscription = useCallback(async () => {
+    setIsRefreshing(true);
     try {
-      const data = await authedFetchJson<{ tier: string; monthly_limit: number; status: string }>('/api/v1/billing/subscription');
+      const data = await authedFetchJson<Subscription>('/api/v1/billing/subscription', undefined, { redirectOnNetworkError: false });
       setSubscription(data);
-    } catch (err: any) {
-      setError(String(err?.message || 'Failed to load subscription'));
+      return data;
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load subscription');
+      return null;
+    } finally {
+      setIsRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadSubscription();
-  }, []);
+    let disposed = false;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    let refreshes = 0;
+
+    const refresh = async () => {
+      const data = await loadSubscription();
+      // Payment confirmation can arrive after the customer returns from checkout.
+      // Only the server subscription response determines the active plan.
+      if (!disposed && data && returnedFromCheckout && refreshes < 6) {
+        refreshes += 1;
+        refreshTimer = setTimeout(refresh, 5000);
+      }
+    };
+
+    void refresh();
+    return () => {
+      disposed = true;
+      clearTimeout(refreshTimer);
+    };
+  }, [loadSubscription, returnedFromCheckout]);
 
   const plans = [
     {
@@ -37,7 +83,7 @@ export default function Billing() {
         'Community support',
         '1 API Key'
       ],
-      cta: 'Current Plan',
+      cta: 'Switch to Free',
       popular: false,
       icon: Activity
     },
@@ -53,7 +99,7 @@ export default function Billing() {
         'Email support',
         '5 API Keys'
       ],
-      cta: 'Upgrade to Pro',
+      cta: 'Choose Pro',
       popular: true,
       icon: Zap
     },
@@ -69,7 +115,7 @@ export default function Billing() {
         'Priority 24/7 support',
         'Unlimited API Keys'
       ],
-      cta: 'Contact Sales',
+      cta: 'Choose Business',
       popular: false,
       icon: Shield
     }
@@ -88,11 +134,64 @@ export default function Billing() {
         </p>
       </div>
 
+      {(returnedFromCheckout || message) && (
+        <div role="status" className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-4 py-3 text-sm text-indigo-200">
+          {message || 'You have returned from checkout. Your current plan is shown below; payment confirmation may take a moment.'}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-300">
+        <p>
+          {subscription ? `Current plan: ${subscription.tier}` : isRefreshing ? 'Loading your subscription...' : 'Subscription status is unavailable.'}
+        </p>
+        <div className="flex flex-wrap gap-3">
+          {subscription?.creem_customer_id && (
+            <Button
+              variant="outline"
+              disabled={isOpeningPortal || isLoading}
+              onClick={async () => {
+                setError(null);
+                setIsOpeningPortal(true);
+                try {
+                  const data = await authedFetchJson<{ customer_portal_url: string }>('/api/v1/billing/customer-portal', {
+                    method: 'POST',
+                  }, { redirectOnNetworkError: false });
+                  if (!data?.customer_portal_url) throw new Error('The billing portal link was not returned. Please try again.');
+                  window.location.assign(data.customer_portal_url);
+                } catch (err: unknown) {
+                  setError(err instanceof Error ? err.message : 'Unable to open the billing portal');
+                } finally {
+                  setIsOpeningPortal(false);
+                }
+              }}
+            >
+              {isOpeningPortal ? 'Opening billing...' : 'Manage billing'}
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            disabled={isRefreshing || isLoading || isOpeningPortal}
+            onClick={() => {
+              setError(null);
+              void loadSubscription();
+            }}
+          >
+            {isRefreshing ? 'Refreshing...' : 'Refresh status'}
+          </Button>
+        </div>
+      </div>
+
+      {subscription?.cancel_at_period_end && (
+        <p role="status" className="text-sm text-amber-200">
+          Your subscription will not renew. Paid access continues {periodEndLabel ? `until ${periodEndLabel}` : 'until the end of the current billing period'}, then your account switches to Free.
+        </p>
+      )}
+
       {analytics && (
         <Card className="bg-slate-900/40 border-white/5 mb-12">
           <CardHeader>
             <CardTitle>Current Usage</CardTitle>
-            <CardDescription>You are currently on the {subscription?.tier || 'FREE'} plan.</CardDescription>
+            <CardDescription>{subscription ? `You are currently on the ${subscription.tier} plan.` : 'Checking your current plan.'}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -113,7 +212,7 @@ export default function Billing() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {plans.map((plan, index) => (
+        {plans.map((plan) => (
           <Card 
             key={plan.name} 
             className={`relative flex flex-col ${plan.popular ? 'border-indigo-500/50 shadow-lg shadow-indigo-500/10 bg-slate-900/80' : 'border-white/5 bg-slate-900/40'}`}
@@ -150,39 +249,35 @@ export default function Billing() {
               <Button 
                 className="w-full" 
                 variant={plan.popular ? 'default' : 'outline'}
-                disabled={isLoading || (subscription?.tier || 'FREE') === plan.name}
+                disabled={isLoading || isOpeningPortal || !subscription || subscription.tier === plan.name || (plan.name === 'FREE' && subscription.cancel_at_period_end)}
                 onClick={async () => {
-                  if ((subscription?.tier || 'FREE') === plan.name) return;
+                  if (!subscription || subscription.tier === plan.name) return;
                   setError(null);
+                  setMessage(null);
                   setIsLoading(true);
                   try {
-                    const res = await authedFetch('/api/v1/billing/create-checkout-session', {
+                    const data = await authedFetchJson<CheckoutResponse>('/api/v1/billing/create-checkout-session', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ plan_name: plan.name }),
-                    });
-                    const payload = await res.json().catch(() => null);
-                    const data = payload?.data ?? payload;
-                    if (!res.ok) {
-                      const msg =
-                        (payload && ((payload.error && payload.error.message) || payload.detail || payload.message)) ||
-                        'Checkout failed';
-                      setError(String(msg));
-                      return;
-                    }
+                    }, { redirectOnNetworkError: false });
                     if (data?.checkout_url) {
-                      window.location.href = String(data.checkout_url);
+                      window.location.assign(data.checkout_url);
                       return;
                     }
+                    if (plan.name !== 'FREE') {
+                      throw new Error(data?.message || 'The checkout link was not returned. Please try again.');
+                    }
+                    setMessage(data?.message || 'Your plan change has been requested.');
                     await loadSubscription();
-                  } catch (err: any) {
-                    setError(String(err?.message || 'Checkout failed'));
+                  } catch (err: unknown) {
+                    setError(err instanceof Error ? err.message : 'Checkout failed');
                   } finally {
                     setIsLoading(false);
                   }
                 }}
               >
-                {(subscription?.tier || 'FREE') === plan.name ? 'Current Plan' : isLoading ? 'Working...' : plan.cta}
+                {subscription?.tier === plan.name ? 'Current Plan' : plan.name === 'FREE' && subscription?.cancel_at_period_end ? 'Cancellation scheduled' : isLoading ? 'Working...' : plan.cta}
               </Button>
             </CardFooter>
           </Card>
@@ -190,7 +285,7 @@ export default function Billing() {
       </div>
 
       {error && (
-        <div className="mt-8 text-center text-sm text-red-300 bg-red-900/20 border border-red-900/40 rounded-lg px-4 py-3">
+        <div role="alert" className="mt-8 text-center text-sm text-red-300 bg-red-900/20 border border-red-900/40 rounded-lg px-4 py-3">
           {error}
         </div>
       )}
@@ -198,7 +293,7 @@ export default function Billing() {
       <div className="mt-16 text-center">
         <p className="text-sm text-slate-500 flex items-center justify-center space-x-2">
           <Shield className="w-4 h-4" />
-          <span>Stripe checkout is required for paid plan activation in production.</span>
+          <span>Secure checkout is required for paid plan activation. Plans activate after payment confirmation.</span>
         </p>
       </div>
     </motion.div>

@@ -82,7 +82,7 @@ Admin:
 - `VITE_API_URL`
 - `VITE_FRONTEND_APP_ORIGIN`
 
-Optional production integrations include `GEMINI_API_KEY`, `OPENAI_API_KEY`, SMTP variables, Stripe variables, Sentry, OAuth client credentials, and remediation webhook URLs.
+Optional production integrations include `GEMINI_API_KEY`, `OPENAI_API_KEY`, SMTP variables, Creem billing, Sentry, OAuth client credentials, and remediation webhook URLs. Paid checkout requires `CREEM_API_KEY`, `CREEM_WEBHOOK_SECRET`, `CREEM_PRODUCT_ID_PRO`, and `CREEM_PRODUCT_ID_BUSINESS`. `CREEM_TEST_MODE` defaults to `true`; configure matching credentials and products for the selected environment. See [Creem billing deployment](docs/CREEM_BILLING.md).
 
 ## Tier Behavior
 
@@ -96,7 +96,7 @@ Plan limits are enforced by the backend, not by frontend state.
 
 `POST /api/v1/scan` and `POST /api/v1/gateway/chat` derive the active plan from the authenticated user/API key context. A client cannot unlock a stronger security tier, model, prompt size, rate limit, API-key count, or monthly quota by editing request JSON or frontend state.
 
-Billing/payment status: Stripe checkout is wired as the production payment boundary. If Stripe is not configured, paid-plan checkout returns `payment_not_configured` and does not mutate the user's subscription. Free-plan/local compatibility remains available for development.
+Billing/payment status: Creem provides hosted checkout and a customer billing portal. Creating a checkout or returning to the dashboard does not grant paid access. Only a verified successful-payment webhook can activate a paid tier. If Creem is not configured, paid checkout returns `payment_not_configured` without changing the subscription. Register `POST /api/v1/billing/webhooks/creem` on the public backend and follow the [deployment guide](docs/CREEM_BILLING.md) before collecting payments.
 
 ## AI Gateway Runtime Lifecycle
 
@@ -193,6 +193,10 @@ Recommended REST namespace: `/api/v1`.
 - `GET /api/v1/reports/threat-counts`: daily/weekly report series.
 - `GET /api/v1/reports/remediations`: remediation/audit records.
 - `GET /api/v1/analytics`, `/usage`, `/billing`, `/team`, `/settings`, `/audit-logs`: dashboard data.
+- `GET /api/v1/billing/subscription`: current subscription and Creem billing status.
+- `POST /api/v1/billing/create-checkout-session`: create hosted checkout, or request scheduled cancellation for a switch to Free.
+- `POST /api/v1/billing/customer-portal`: create an authenticated customer's billing portal link.
+- `POST /api/v1/billing/webhooks/creem`: receive Creem events verified using the raw-body signature.
 - `GET /api/v1/admin/*`: admin portal APIs.
 
 Legacy `/api/*` compatibility routes are retained where implemented.
@@ -219,7 +223,8 @@ Runtime fallback stores in dashboard services are development/degraded-mode help
 ## Known Limitations
 
 - Distributed rate limiting should use Redis or a managed counter store before horizontally scaling beyond one backend instance; the current limiter is process-local.
-- Stripe checkout/session creation is intentionally non-mutating until Stripe credentials are configured.
+- Creem checkout requires merchant-side products, credentials, and webhook registration. Automated billing checks use mocked provider responses; a real Creem test checkout and webhook delivery must be verified before going live.
+- A provider timeout can leave checkout creation unresolved. The account keeps a pending checkout hold to prevent duplicate subscriptions; missing checkout IDs require reconciliation against the Creem dashboard. See [billing troubleshooting](docs/CREEM_BILLING.md#troubleshooting).
 - Provider pricing is currently zero unless a pricing table is added; token counts are estimated when providers do not return exact usage.
 - `python-jose` currently emits `datetime.utcnow()` deprecation warnings internally under Python 3.13; this is dependency-owned.
 

@@ -156,10 +156,11 @@ class Settings:
         self.HSTS_INCLUDE_SUBDOMAINS: bool = _env_bool("HSTS_INCLUDE_SUBDOMAINS", True)
         self.HSTS_PRELOAD: bool = _env_bool("HSTS_PRELOAD", True)
 
-        self.STRIPE_SECRET_KEY: str | None = _env_str("STRIPE_SECRET_KEY")
-        self.STRIPE_WEBHOOK_SECRET: str | None = _env_str("STRIPE_WEBHOOK_SECRET")
-        self.STRIPE_PRICE_PRO: str | None = _env_str("STRIPE_PRICE_PRO")
-        self.STRIPE_PRICE_BUSINESS: str | None = _env_str("STRIPE_PRICE_BUSINESS")
+        self.CREEM_API_KEY: str | None = _env_str("CREEM_API_KEY")
+        self.CREEM_WEBHOOK_SECRET: str | None = _env_str("CREEM_WEBHOOK_SECRET")
+        self.CREEM_PRODUCT_ID_PRO: str | None = _env_str("CREEM_PRODUCT_ID_PRO")
+        self.CREEM_PRODUCT_ID_BUSINESS: str | None = _env_str("CREEM_PRODUCT_ID_BUSINESS")
+        self.CREEM_TEST_MODE: bool = _env_bool("CREEM_TEST_MODE", True)
 
         self.REMEDIATION_ENABLED: bool = _env_bool("REMEDIATION_ENABLED", True)
         self.REMEDIATION_THREAT_SCORE_THRESHOLD: float = _env_float("REMEDIATION_THREAT_SCORE_THRESHOLD", 0.9)

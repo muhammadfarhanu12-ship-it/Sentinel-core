@@ -1823,76 +1823,46 @@ async def list_audit_logs(
 
 
 async def get_subscription(request: Request, current_user: dict[str, Any]) -> dict[str, Any]:
+    from app.services.creem_service import payment_configured
+
     user_id = user_id_for(current_user)
-    tier = tier_for(current_user)
     default_subscription = {
-        "tier": tier,
+        "tier": tier_for(current_user),
         "monthly_limit": monthly_limit_for(current_user),
         "status": "active",
-        "billing_provider": "stripe" if settings.STRIPE_SECRET_KEY else "placeholder",
-        "payment_collection": "configured" if settings.STRIPE_SECRET_KEY else "not_configured",
         "updated_at": utcnow(),
     }
-
-    collection = collection_from_request(request, "billing")
-    if collection is not None:
-        document = await collection.find_one({"user_id": user_id})
-        if document is None:
-            await collection.insert_one({"user_id": user_id, **default_subscription})
-            document = {"user_id": user_id, **default_subscription}
-        return public_document(document, exclude={"user_id"})
-
-    document = _fallback_store["billing"].setdefault(user_id, default_subscription)
-    for key, value in default_subscription.items():
-        document.setdefault(key, value)
-    return public_document(document)
+    # Webhooks atomically store entitlements and billing state on the user.
+    # Auth reloads this document, so a delayed projection cannot show an old plan.
+    document = current_user.get("creem_billing")
+    if not document:
+        collection = collection_from_request(request, "billing")
+        if collection is not None:
+            document = await collection.find_one({"user_id": user_id})
+        else:
+            document = _fallback_store["billing"].get(user_id)
+    return public_document({
+        **default_subscription, **(document or {}),
+        "tier": tier_for(current_user),
+        "monthly_limit": monthly_limit_for(current_user),
+        "billing_provider": "creem",
+        "payment_collection": "configured" if payment_configured() else "not_configured",
+    }, exclude={"user_id", "event_key", "last_event_id", "paid_tier", "paid_period_end", "payment_confirmed"})
 
 
 async def create_checkout_session(request: Request, current_user: dict[str, Any], *, plan_name: str) -> dict[str, Any]:
-    user_id = user_id_for(current_user)
-    tier = str(plan_name or tier_for(current_user)).strip().upper() or "FREE"
-    resolved_tier = tier if tier in PLAN_LIMITS else tier_for(current_user)
-    if resolved_tier != "FREE" and not settings.STRIPE_SECRET_KEY:
-        await record_audit_event(
-            request,
-            current_user=current_user,
-            action="CHECKOUT_REQUESTED",
-            resource="billing",
-            severity="INFO",
-            new_value={"requested_tier": resolved_tier, "payment_collection": "not_configured"},
-        )
-        return {
-            "tier": tier_for(current_user),
-            "requested_tier": resolved_tier,
-            "monthly_limit": monthly_limit_for(current_user),
-            "status": "payment_not_configured",
-            "payment_collection": "not_configured",
-            "message": "Stripe billing is not configured. No subscription change was applied.",
-        }
-    document = {
-        "tier": resolved_tier,
-        "monthly_limit": PLAN_LIMITS[resolved_tier],
-        "status": "active",
-        "billing_provider": "stripe" if settings.STRIPE_SECRET_KEY else "placeholder",
-        "payment_collection": "configured" if settings.STRIPE_SECRET_KEY else "not_configured",
-        "updated_at": utcnow(),
-    }
+    from app.services.creem_service import create_checkout_session as create_creem_checkout
 
-    collection = collection_from_request(request, "billing")
-    if collection is not None:
-        await collection.update_one({"user_id": user_id}, {"$set": {"user_id": user_id, **document}}, upsert=True)
-    else:
-        _fallback_store["billing"][user_id] = {"user_id": user_id, **document}
-
+    result = await create_creem_checkout(request, current_user, plan_name=plan_name)
     await record_audit_event(
         request,
         current_user=current_user,
-        action="SUBSCRIPTION_UPDATED",
+        action="CHECKOUT_REQUESTED",
         resource="billing",
         severity="INFO",
-        new_value={"tier": resolved_tier, "monthly_limit": PLAN_LIMITS[resolved_tier]},
+        new_value={"requested_tier": plan_name.strip().upper(), "status": result.get("status")},
     )
-    return public_document(document)
+    return result
 
 
 async def load_workspace_logs(request: Request, current_user: dict[str, Any], *, max_items: int = 5_000) -> list[dict[str, Any]]:

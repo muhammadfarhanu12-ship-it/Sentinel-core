@@ -35,7 +35,9 @@ class BillingSubscription(BaseModel):
     user_id: str | int
     plan_name: str = "FREE"
     status: BillingStatusEnum = BillingStatusEnum.ACTIVE
-    stripe_subscription_id: str | None = None
+    creem_subscription_id: str | None = None
+    creem_customer_id: str | None = None
+    creem_product_id: str | None = None
     current_period_start: datetime | None = None
     current_period_end: datetime | None = None
     cancel_at_period_end: bool = False
@@ -52,7 +54,7 @@ class BillingInvoice(BaseModel):
     amount: Decimal = Decimal("0.00")
     currency: str = "USD"
     status: InvoiceStatusEnum = InvoiceStatusEnum.OPEN
-    stripe_invoice_id: str | None = None
+    creem_transaction_id: str | None = None
     hosted_invoice_url: str | None = None
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
