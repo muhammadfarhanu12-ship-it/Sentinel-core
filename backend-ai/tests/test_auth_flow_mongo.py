@@ -200,7 +200,7 @@ def auth_client(monkeypatch: pytest.MonkeyPatch):
             app.state.mongodb_client = None
         return None
 
-    async def fake_ping_mongo() -> None:
+    async def fake_ping_mongo(**_kwargs) -> None:
         return None
 
     limiter._events.clear()
@@ -212,9 +212,10 @@ def auth_client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(auth_service, "users_collection", users_collection)
     monkeypatch.setattr(admin_user_service, "users_collection", users_collection)
     monkeypatch.setattr(session_service, "auth_sessions_collection", sessions_collection)
-    monkeypatch.setattr(main_module, "connect_to_mongo", fake_connect_to_mongo)
+    monkeypatch.setattr(main_module, "start_mongo_connection_background", fake_connect_to_mongo)
     monkeypatch.setattr(main_module, "close_mongo_connection", fake_close_mongo_connection)
     monkeypatch.setattr(main_module, "ping_mongo", fake_ping_mongo)
+    monkeypatch.setattr(main_module, "wait_for_mongo_ready", fake_ping_mongo)
 
     with TestClient(app) as client:
         yield client, users_collection, sessions_collection
@@ -646,7 +647,7 @@ def test_normal_user_cannot_access_admin_routes(auth_client, monkeypatch: pytest
 
     assert missing_token_response.status_code == 401
     assert user_token_response.status_code == 403
-    assert user_token_response.json()["error"]["message"] == "Admin access required"
+    assert user_token_response.json()["error"]["message"] == "This account does not have admin panel access."
 
 
 def test_admin_user_can_access_admin_routes(auth_client):
@@ -852,7 +853,7 @@ def test_rbac_admin_routes_reject_normal_user_with_403(auth_client, monkeypatch:
         response = client.get("/api/v1/admin/stats", headers={"Authorization": f"Bearer {access_token}"})
 
         assert response.status_code == 403
-        assert response.json()["error"]["message"] == "Admin access required"
+        assert response.json()["error"]["message"] == "This account does not have admin panel access."
     finally:
         _clear_admin_service_override()
 
@@ -908,7 +909,7 @@ def test_token_role_tampering_does_not_bypass_admin_check(auth_client, monkeypat
     )
 
     assert response.status_code == 403
-    assert response.json()["error"]["message"] == "Admin access required"
+    assert response.json()["error"]["message"] == "This account does not have admin panel access."
 
 
 def test_verify_email_is_idempotent_for_the_same_token(auth_client, monkeypatch: pytest.MonkeyPatch):
@@ -1094,7 +1095,7 @@ def test_refresh_rotates_session_and_logout_revokes_refresh_token(auth_client, m
 
 
 def test_health_reports_degraded_status_when_database_is_unavailable(monkeypatch: pytest.MonkeyPatch):
-    async def fake_connect_to_mongo() -> None:
+    async def fake_connect_to_mongo(*, app=None) -> None:
         raise RuntimeError("Mongo unavailable")
 
     async def fake_close_mongo_connection() -> None:
@@ -1105,7 +1106,7 @@ def test_health_reports_degraded_status_when_database_is_unavailable(monkeypatch
 
     limiter._events.clear()
     monkeypatch.setattr(settings, "SMTP_VERIFY_ON_STARTUP", False, raising=False)
-    monkeypatch.setattr(main_module, "connect_to_mongo", fake_connect_to_mongo)
+    monkeypatch.setattr(main_module, "start_mongo_connection_background", fake_connect_to_mongo)
     monkeypatch.setattr(main_module, "close_mongo_connection", fake_close_mongo_connection)
     monkeypatch.setattr(main_module, "ping_mongo", fake_ping_mongo)
 

@@ -25,6 +25,8 @@ import {
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
+import { RemediationActionBadge } from '../components/reports/RemediationActionBadge';
+import { normalizeRemediationActions, remediationActionTrace, type RemediationAction } from '../lib/remediationActions';
 import { cn } from '../lib/utils';
 import { authedFetch, authedFetchJson, HttpError } from '../services/authenticatedFetch';
 
@@ -32,7 +34,7 @@ type Granularity = 'daily' | 'weekly' | 'monthly';
 type Lookback = '7d' | '30d' | '90d';
 type OutcomeKey = 'blocked' | 'redacted' | 'clean';
 type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-type RemediationStatus = 'ALL' | 'QUARANTINED' | 'ALERTED' | 'RESOLVED';
+type RemediationStatus = 'ALL' | 'QUARANTINED' | 'ALERTED' | 'RESOLVED' | 'REVIEW_REQUIRED' | 'RECORDED';
 type ThreatTypeFilter = 'ALL' | 'DATA_EXFILTRATION' | 'PROMPT_INJECTION' | 'DATA_LEAK' | 'ENCODING_OBFUSCATION';
 type ScoreRange = 'ALL' | '90-100' | '70-89' | '40-69' | '0-39';
 type ExportFormat = 'csv' | 'json';
@@ -61,11 +63,6 @@ type ComplianceMetrics = {
   };
 };
 
-type EvidenceAction = {
-  type: string;
-  complete: boolean;
-};
-
 type ExecutionTraceItem = {
   time: string;
   level: TraceLevel;
@@ -81,8 +78,7 @@ type RemediationEvent = {
   status: Exclude<RemediationStatus, 'ALL'>;
   timestamp: string;
   apiKey: string | null;
-  actions: EvidenceAction[];
-  actionsComplete: boolean;
+  actions: RemediationAction[];
   complianceTags: string[];
   executionTrace: ExecutionTraceItem[];
 };
@@ -143,6 +139,8 @@ const STATUS_STYLES: Record<Exclude<RemediationStatus, 'ALL'>, string> = {
   QUARANTINED: 'border-red-500/30 bg-red-500/10 text-red-200',
   ALERTED: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
   RESOLVED: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
+  REVIEW_REQUIRED: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
+  RECORDED: 'border-slate-500/30 bg-slate-500/10 text-slate-300',
 };
 
 const GRANULARITY_OPTIONS: Array<{ value: Granularity; label: string }> = [
@@ -162,6 +160,8 @@ const STATUS_FILTERS: Array<{ value: RemediationStatus; label: string }> = [
   { value: 'QUARANTINED', label: 'Quarantined' },
   { value: 'ALERTED', label: 'Alerted' },
   { value: 'RESOLVED', label: 'Resolved' },
+  { value: 'REVIEW_REQUIRED', label: 'Needs Review' },
+  { value: 'RECORDED', label: 'Recorded' },
 ];
 
 const THREAT_TYPE_FILTERS: Array<{ value: ThreatTypeFilter; label: string }> = [
@@ -483,26 +483,14 @@ function normalizeThreatType(value: unknown): Exclude<ThreatTypeFilter, 'ALL'> {
   return 'PROMPT_INJECTION';
 }
 
-function normalizeStatus(value: unknown, actions: EvidenceAction[], score: number): Exclude<RemediationStatus, 'ALL'> {
+function normalizeStatus(value: unknown, actions: RemediationAction[], score: number): Exclude<RemediationStatus, 'ALL'> {
   const status = asString(value).toUpperCase();
-  if (status === 'QUARANTINED' || status === 'ALERTED' || status === 'RESOLVED') return status;
-  if (actions.some((action) => action.type.includes('QUARANTINE') && action.complete)) return 'QUARANTINED';
-  if (score < 40 && actions.every((action) => action.complete)) return 'RESOLVED';
-  return 'ALERTED';
-}
-
-function normalizeActions(value: unknown): EvidenceAction[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((item) => {
-    if (typeof item === 'string') return { type: item.toUpperCase(), complete: true };
-    if (!isRecord(item)) return { type: 'ACTION_RECORDED', complete: true };
-    const type = asString(item.type ?? item.name ?? 'ACTION_RECORDED').toUpperCase();
-    const status = asString(item.status ?? item.state ?? 'SUCCESS').toUpperCase();
-    return {
-      type,
-      complete: !['FAILED', 'ERROR', 'SKIPPED'].includes(status),
-    };
-  });
+  if (status === 'QUARANTINED' || status === 'ALERTED' || status === 'RESOLVED' || status === 'REVIEW_REQUIRED' || status === 'RECORDED') return status;
+  if (actions.some((action) => action.type.includes('QUARANTINE') && action.status === 'SUCCESS')) return 'QUARANTINED';
+  if (actions.some((action) => action.status === 'FAILED' || action.status === 'UNKNOWN')) return 'REVIEW_REQUIRED';
+  if (score < 40 && actions.length > 0 && actions.every((action) => action.status === 'SUCCESS')) return 'RESOLVED';
+  if (actions.some((action) => action.type.startsWith('ALERT_') && action.status === 'SUCCESS')) return 'ALERTED';
+  return 'RECORDED';
 }
 
 function deriveComplianceTags(threatType: Exclude<ThreatTypeFilter, 'ALL'>): string[] {
@@ -517,12 +505,11 @@ function normalizeStringList(value: unknown): string[] {
   return value.map((item) => asString(item)).filter(Boolean);
 }
 
-function buildTrace(event: Pick<RemediationEvent, 'timestamp' | 'actions' | 'actionsComplete' | 'threatType'>): ExecutionTraceItem[] {
+function buildTrace(event: Pick<RemediationEvent, 'timestamp' | 'actions' | 'threatType'>): ExecutionTraceItem[] {
   const startedAt = event.timestamp || new Date().toISOString();
   const actionTrace = event.actions.map((action) => ({
     time: startedAt,
-    level: action.complete ? ('ok' as const) : ('warn' as const),
-    message: `${actionLabel(action.type)} ${action.complete ? 'completed' : 'requires review'}`,
+    ...remediationActionTrace(action),
   }));
 
   return [
@@ -532,11 +519,6 @@ function buildTrace(event: Pick<RemediationEvent, 'timestamp' | 'actions' | 'act
       message: `${compactLabel(event.threatType)} evidence captured for reporting`,
     },
     ...actionTrace,
-    {
-      time: startedAt,
-      level: event.actionsComplete ? 'ok' : 'warn',
-      message: event.actionsComplete ? 'All automated evidence actions completed' : 'One or more evidence actions need review',
-    },
   ];
 }
 
@@ -559,7 +541,7 @@ function normalizeTrace(value: unknown, fallback: RemediationEvent): ExecutionTr
 
 function normalizeRemediationEvent(raw: unknown, index = 0): RemediationEvent {
   const record = isRecord(raw) ? raw : {};
-  const rawActions = normalizeActions(record.actions);
+  const rawActions = normalizeRemediationActions(record.actions);
   const score = normalizeScore(record.score ?? record.threat_score ?? record.risk_score);
   const severity = normalizeSeverity(record.severity ?? record.risk_level, score);
   const threatType = normalizeThreatType(record.threatType ?? record.threat_type ?? record.type);
@@ -576,7 +558,6 @@ function normalizeRemediationEvent(raw: unknown, index = 0): RemediationEvent {
     timestamp,
     apiKey: apiKeyValue === null || apiKeyValue === undefined || apiKeyValue === '' ? null : String(apiKeyValue),
     actions: rawActions,
-    actionsComplete: rawActions.length > 0 ? rawActions.every((action) => action.complete) : Boolean(record.actionsComplete ?? record.actions_complete ?? false),
     complianceTags: normalizeStringList(record.complianceTags ?? record.compliance_tags),
     executionTrace: [],
   };
@@ -677,21 +658,6 @@ function normalizeSchedules(raw: unknown): ReportSchedule[] {
   if (Array.isArray(raw)) return raw.map((item, index) => normalizeSchedule(item, index));
   if (isRecord(raw) && Array.isArray(raw.schedules)) return raw.schedules.map((item, index) => normalizeSchedule(item, index));
   return [];
-}
-
-function actionLabel(value: string): string {
-  const action = value.toUpperCase();
-  if (action.includes('QUARANTINE')) return 'Quarantined';
-  if (action.includes('EMAIL')) return 'Email sent';
-  if (action.includes('WEBHOOK')) return 'Webhook sent';
-  return compactLabel(action);
-}
-
-function actionClassName(action: EvidenceAction): string {
-  if (!action.complete) return 'border-red-400/30 bg-red-500/10 text-red-200';
-  if (action.type.includes('QUARANTINE')) return 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200';
-  if (action.type.includes('EMAIL')) return 'border-sky-400/30 bg-sky-500/10 text-sky-200';
-  return 'border-indigo-400/30 bg-indigo-500/10 text-indigo-200';
 }
 
 function scoreClassName(score: number): string {
@@ -1467,7 +1433,7 @@ export default function Reports() {
                               <div className="mt-1 truncate text-xs text-slate-500">log {event.logId}</div>
                             </div>
                             <div>
-                              <Badge className={cn('border', STATUS_STYLES[event.status])}>{event.status}</Badge>
+                              <Badge className={cn('border', STATUS_STYLES[event.status])}>{compactLabel(event.status)}</Badge>
                             </div>
                             <div>
                               <Badge className={cn('border', severityBadgeClassName(event.severity))}>{compactLabel(event.threatType)}</Badge>
@@ -1476,15 +1442,12 @@ export default function Reports() {
                             <div className={cn('font-mono font-semibold', scoreClassName(event.score))}>{event.score}</div>
                             <div className="flex flex-wrap gap-2 pr-3">
                               {event.actions.length ? (
-                                event.actions.slice(0, 2).map((action, index) => (
-                                  <span key={`${event.id}-${action.type}-${index}`} className={cn('rounded-full border px-2.5 py-1 text-xs font-semibold', actionClassName(action))}>
-                                    {actionLabel(action.type)}
-                                  </span>
+                                event.actions.map((action, index) => (
+                                  <RemediationActionBadge key={`${event.id}-${action.type}-${index}`} action={action} />
                                 ))
                               ) : (
                                 <span className="rounded-full border border-slate-700 bg-slate-950 px-2.5 py-1 text-xs font-semibold text-slate-400">Evidence logged</span>
                               )}
-                              {event.actions.length > 2 ? <span className="text-xs text-slate-500">+{event.actions.length - 2}</span> : null}
                             </div>
                             <div className="truncate pr-3 font-mono text-xs text-slate-400">{event.apiKey ?? '[anonymous]'}</div>
                             <div className="text-xs text-slate-400">{formatDateTime(event.timestamp)}</div>
@@ -1501,6 +1464,14 @@ export default function Reports() {
                               ) : (
                                 <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
                                   <div>
+                                    <div className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Action Outcomes</div>
+                                    <div className="mb-5 space-y-3">
+                                      {detail.actions.length ? detail.actions.map((action, index) => (
+                                        <div key={`${event.id}-action-${index}`}>
+                                          <RemediationActionBadge action={action} showDetails />
+                                        </div>
+                                      )) : <div className="text-sm text-slate-400">No action outcomes recorded.</div>}
+                                    </div>
                                     <div className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Execution Trace</div>
                                     <div className="space-y-3">
                                       {detail.executionTrace.map((trace, index) => (

@@ -185,7 +185,7 @@ TIER_LIMITS: dict[str, TierLimits] = {
             "anthropic": ANTHROPIC_BUSINESS_MODELS,
             "xai": XAI_BUSINESS_MODELS,
         },
-        features=frozenset({"enterprise_policy", "tool_interception", "mfa_2fa", "human_review", "long_retention"}),
+        features=frozenset({"enterprise_policy", "tool_interception", "mfa_2fa", "human_review", "long_retention", "email_alerts"}),
     ),
 }
 

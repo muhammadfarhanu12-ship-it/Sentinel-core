@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import csv
 import hashlib
 import io
@@ -20,6 +21,7 @@ from app.db.mongo import get_database, get_database_from_request, mongo_connecti
 from app.routers.log_ws import schedule_broadcast
 from app.routers.notification_ws import schedule_notification
 from app.security.redaction_engine import redact_sensitive_data
+from app.services.notification_service import send_alert_email
 from app.utils.api_key_generator import generate_api_key
 
 logger = logging.getLogger(__name__)
@@ -1968,6 +1970,27 @@ async def get_threat_counts(
     )
 
 
+def remediation_actions_for_report(document: dict[str, Any]) -> list[dict[str, Any]]:
+    """Expose legacy delivery claims as unverified without rewriting audit records."""
+    actions = []
+    for value in document.get("actions") or []:
+        action = dict(value) if isinstance(value, dict) else {"type": str(value)}
+        action_status = normalize_upper_token(action.get("status"))
+        if action_status not in {"SUCCESS", "FAILED", "SKIPPED", "UNKNOWN"}:
+            action_status = "UNKNOWN"
+        if (
+            document.get("actions_version") != 1
+            and action.get("type") in {"ALERT_EMAIL", "ALERT_WEBHOOK"}
+            and action_status == "SUCCESS"
+        ):
+            action_status = "UNKNOWN"
+            action["reason"] = "LEGACY_UNVERIFIED"
+            action["details"] = "This legacy record has no verified delivery outcome."
+        action["status"] = action_status
+        actions.append(action)
+    return actions
+
+
 async def list_remediations(
     request: Request,
     current_user: dict[str, Any],
@@ -2003,7 +2026,13 @@ async def list_remediations(
         documents.sort(key=lambda item: ensure_datetime(item.get("created_at")), reverse=True)
         documents = documents[offset: offset + limit]
 
-    return [public_document(item, exclude={"workspace_id", "kind"}) for item in documents]
+    return [
+        public_document(
+            {**item, "actions": remediation_actions_for_report(item)},
+            exclude={"workspace_id", "kind"},
+        )
+        for item in documents
+    ]
 
 
 def render_threat_counts_csv(payload: dict[str, Any]) -> str:
@@ -2437,6 +2466,57 @@ async def persist_scan_result(
     schedule_broadcast(public_log, user_id=user_id)
 
     if status in {"BLOCKED", "REDACTED"}:
+        user_settings = await ensure_user_settings(request, current_user)
+        email_to = str(current_user.get("email") or "").strip().lower()
+        email_action = {"type": "ALERT_EMAIL", "status": "SKIPPED"}
+        if "email_alerts" not in tier_limits_for(tier_for(current_user)).features:
+            email_action.update(
+                reason="TIER_NOT_ELIGIBLE",
+                details="Email alerts are not included in the account's plan.",
+            )
+        elif not bool(user_settings.get("email_alerts", True)):
+            email_action.update(reason="USER_DISABLED", details="Email alerts are disabled in user settings.")
+        elif not settings.REMEDIATION_EMAIL_ENABLED:
+            email_action.update(reason="DELIVERY_DISABLED", details="Email alerts are disabled by the server configuration.")
+        else:
+            try:
+                # SMTP is synchronous; wait for its outcome without blocking the event loop.
+                await asyncio.to_thread(
+                    send_alert_email,
+                    to_addrs=[email_to] if email_to else [],
+                    subject=f"Mefyx security alert: {status} {threat_type}",
+                    body=(
+                        f"Mefyx Gateway {status.lower()} a request.\n"
+                        f"Threat type: {threat_type}\n"
+                        f"Threat score: {threat_score:.2f}\n"
+                        f"Request ID: {request_id}\n"
+                        f"Provider: {provider}\n"
+                        f"Model: {model}\n"
+                    ),
+                )
+            except Exception as exc:
+                logger.warning("Remediation email failed for request %s (%s)", request_id, type(exc).__name__)
+                email_action.update(
+                    status="FAILED",
+                    reason="EMAIL_DELIVERY_FAILED",
+                    details="Email delivery failed. Check the server email configuration and delivery logs.",
+                )
+            else:
+                email_action.update(status="SUCCESS", details="The SMTP server accepted the alert for delivery.")
+
+        actions = []
+        if status == "BLOCKED":
+            actions.append({"type": "QUARANTINE_REQUEST", "status": "SUCCESS"})
+        actions.append(email_action)
+        if requires_2fa:
+            verification = _dict_or_empty(tool_interception.get("verification"))
+            bypassed_2fa = verification.get("method") in {"disabled", "demo_bypass_restricted"}
+            actions.append({
+                "type": "FORCE_2FA_VERIFICATION",
+                "status": "SKIPPED" if bypassed_2fa else "SUCCESS",
+                "details": "2FA enforcement was bypassed by configuration." if bypassed_2fa else "2FA verification was required by the security control.",
+            })
+
         remediation_doc = {
             "id": await next_numeric_id(request, namespace="reports", collection_name="reports", fallback_items=_fallback_store["reports"]),
             "kind": "remediation",
@@ -2450,29 +2530,10 @@ async def persist_scan_result(
             "request_id": request_id,
             "threat_type": log_doc["threat_type"],
             "threat_score": log_doc["threat_score"],
-            "actions": [
-                {
-                    "type": "QUARANTINE_REQUEST" if status == "BLOCKED" else "ALERT_EMAIL",
-                    "status": "SUCCESS",
-                },
-                {
-                    "type": "ALERT_EMAIL" if status == "BLOCKED" else "ALERT_WEBHOOK",
-                    "status": "SUCCESS",
-                },
-                *(
-                    [
-                        {
-                            "type": "FORCE_2FA_VERIFICATION",
-                            "status": "SUCCESS" if requires_2fa else "SKIPPED",
-                        }
-                    ]
-                    if requires_2fa
-                    else []
-                ),
-            ],
-            "email_to": email_for(current_user),
-            "webhook_urls": settings.remediation_webhook_urls_list,
-            "error": None,
+            "actions": actions,
+            "actions_version": 1,
+            "email_to": email_to or None,
+            "error": email_action.get("details") if email_action["status"] == "FAILED" else None,
         }
         reports_collection = collection_from_request(request, "reports")
         if reports_collection is not None:
@@ -2484,7 +2545,6 @@ async def persist_scan_result(
         else:
             _fallback_store["reports"].append(remediation_doc)
 
-        user_settings = await ensure_user_settings(request, current_user)
         if bool(user_settings.get("in_app_alerts", True)):
             await create_notification_record(
                 request,

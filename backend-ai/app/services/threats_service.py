@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import logging
 import re
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
@@ -24,9 +25,12 @@ from app.services.dashboard_service import (
     parse_optional_int,
     public_document,
     record_audit_event,
+    remediation_actions_for_report,
     utcnow,
     workspace_id_for,
 )
+
+logger = logging.getLogger(__name__)
 
 THREAT_TYPES = {
     "DATA_EXFILTRATION",
@@ -205,12 +209,71 @@ def _log_id_from_threat_id(threat_id: str) -> str:
     return raw[4:] if raw.startswith("thr_") else raw
 
 
-def _actions_for(document: dict[str, Any]) -> list[str]:
-    actions: list[str] = []
-    if normalize_log_status(document.get("status")) == "BLOCKED" or bool(document.get("is_quarantined")):
-        actions.append("QUARANTINE_REQUEST")
-    actions.append("ALERT_EMAIL")
-    return list(dict.fromkeys(actions))
+def _actions_for(
+    document: dict[str, Any],
+    remediation_actions: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    actions = [dict(action) for action in (remediation_actions or [])]
+    blocked = normalize_log_status(document.get("status")) == "BLOCKED" or bool(document.get("is_quarantined"))
+    if blocked and not any(action.get("type") == "QUARANTINE_REQUEST" for action in actions):
+        actions.insert(0, {"type": "QUARANTINE_REQUEST", "status": "SUCCESS"})
+    return actions
+
+
+async def _load_remediation_actions(
+    request: Request,
+    current_user: dict[str, Any],
+    documents: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    """Join recorded action outcomes in one workspace-scoped query."""
+    if not documents:
+        return {}
+    workspace_id = workspace_id_for(current_user)
+    log_ids = {_log_public_id(document) for document in documents}
+    candidates: list[Any] = list(log_ids)
+    for log_id in log_ids:
+        numeric_id = parse_optional_int(log_id)
+        if numeric_id is not None:
+            candidates.append(numeric_id)
+        if ObjectId.is_valid(log_id):
+            candidates.append(ObjectId(log_id))
+
+    reports: list[dict[str, Any]] = []
+    collection = collection_from_request(request, "reports")
+    if collection is not None:
+        try:
+            reports = await list_collection_documents(
+                request,
+                collection_name="reports",
+                filter_query={
+                    "workspace_id": workspace_id,
+                    "kind": "remediation",
+                    "security_log_id": {"$in": candidates},
+                },
+                sort=[("created_at", -1), ("id", -1)],
+                limit=max(len(documents), 5_000),
+            )
+        except Exception as exc:
+            logger.warning("Failed to load threat remediation outcomes; using fallback records: %s", exc)
+
+    # A scan log can be in Mongo while its remediation insert used the fallback.
+    reports.extend(_fallback_store["reports"])
+    matching_reports = [
+        report for report in reports
+        if report.get("workspace_id") == workspace_id
+        and report.get("kind") == "remediation"
+        and str(report.get("security_log_id")) in log_ids
+    ]
+    matching_reports.sort(
+        key=lambda report: ensure_datetime(report.get("created_at") or report.get("timestamp")),
+        reverse=True,
+    )
+    actions_by_log: dict[str, list[dict[str, Any]]] = {}
+    for report in matching_reports:
+        log_id = str(report["security_log_id"])
+        if log_id not in actions_by_log:
+            actions_by_log[log_id] = remediation_actions_for_report(report)
+    return actions_by_log
 
 
 def _execution_trace_for(document: dict[str, Any], event: dict[str, Any]) -> list[dict[str, str]]:
@@ -246,12 +309,17 @@ def _execution_trace_for(document: dict[str, Any], event: dict[str, Any]) -> lis
     elif source_status == "REDACTED":
         trace.append({"time": timestamp, "level": "warn", "message": "Sensitive content was redacted before delivery."})
 
-    if event["actionsComplete"]:
+    if event["status"] in {"RESOLVED", "FALSE_POSITIVE"}:
         trace.append({"time": timestamp, "level": "ok", "message": "Incident workflow has been completed."})
     return trace
 
 
-def _to_threat_event(document: dict[str, Any], *, include_detail: bool = False) -> dict[str, Any]:
+def _to_threat_event(
+    document: dict[str, Any],
+    *,
+    include_detail: bool = False,
+    remediation_actions: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     log_id = _log_public_id(document)
     timestamp = ensure_datetime(document.get("timestamp") or document.get("created_at"))
     score = normalize_score_100(document.get("risk_score"), document.get("threat_score"))
@@ -262,6 +330,7 @@ def _to_threat_event(document: dict[str, Any], *, include_detail: bool = False) 
         document.get("matched_policies"),
         security_enforcement.get("policy_matches"),
     )
+    actions = _actions_for(document, remediation_actions)
     event = {
         "id": _threat_id_for_log_id(log_id),
         "logId": log_id,
@@ -275,8 +344,8 @@ def _to_threat_event(document: dict[str, Any], *, include_detail: bool = False) 
         "model": str(document.get("model") or "unknown"),
         "latency": f"{int(document.get('latency_ms') or 0)}ms",
         "policies": policies,
-        "actions": _actions_for(document),
-        "actionsComplete": status in {"RESOLVED", "FALSE_POSITIVE"},
+        "actions": actions,
+        "actionsComplete": bool(actions) and all(action.get("status") in {"SUCCESS", "SKIPPED"} for action in actions),
         "prompt": _extract_prompt_preview(document),
     }
     if include_detail:
@@ -394,7 +463,11 @@ async def list_threat_events(
     page_size: int,
 ) -> dict[str, Any]:
     documents = await _load_threat_documents(request, current_user)
-    events = [_to_threat_event(document) for document in documents if _has_threat_marker(document)]
+    actions_by_log = await _load_remediation_actions(request, current_user, documents)
+    events = [
+        _to_threat_event(document, remediation_actions=actions_by_log.get(_log_public_id(document)))
+        for document in documents if _has_threat_marker(document)
+    ]
     filtered = _filter_events(
         events,
         severity=severity,
@@ -415,11 +488,20 @@ async def list_threat_events(
     }
 
 
+def _was_quarantined(event: dict[str, Any]) -> bool:
+    return any(
+        isinstance(action, dict)
+        and action.get("type") == "QUARANTINE_REQUEST"
+        and action.get("status") == "SUCCESS"
+        for action in (event.get("actions") or [])
+    )
+
+
 def _stats_for_events(events: list[dict[str, Any]]) -> dict[str, float]:
     total = len(events)
     return {
         "totalThreats": total,
-        "blocked": sum(1 for event in events if "QUARANTINE_REQUEST" in (event.get("actions") or [])),
+        "blocked": sum(1 for event in events if _was_quarantined(event)),
         "critical": sum(1 for event in events if event.get("severity") == "CRITICAL"),
         "highSeverity": sum(1 for event in events if event.get("severity") == "HIGH"),
         "avgRiskScore": round(sum(float(event.get("score") or 0) for event in events) / total, 2) if total else 0,
@@ -455,7 +537,7 @@ async def get_threat_stats(request: Request, current_user: dict[str, Any], *, ti
     for event in current_events:
         index = _bucket_index(ensure_datetime(event.get("ts")), current_start, current_end, bucket_count)
         sparklines["totalThreats"][index] += 1
-        if "QUARANTINE_REQUEST" in (event.get("actions") or []):
+        if _was_quarantined(event):
             sparklines["blocked"][index] += 1
         if event.get("severity") == "CRITICAL":
             sparklines["critical"][index] += 1
@@ -557,7 +639,12 @@ async def _find_threat_document(request: Request, current_user: dict[str, Any], 
 
 async def get_threat_event(request: Request, current_user: dict[str, Any], *, threat_id: str) -> dict[str, Any]:
     document = await _find_threat_document(request, current_user, threat_id)
-    return _to_threat_event(public_document(document), include_detail=True)
+    actions_by_log = await _load_remediation_actions(request, current_user, [document])
+    return _to_threat_event(
+        public_document(document),
+        include_detail=True,
+        remediation_actions=actions_by_log.get(_log_public_id(document)),
+    )
 
 
 async def update_threat_status(
@@ -601,7 +688,12 @@ async def update_threat_status(
         severity="INFO",
         new_value={"threat_id": _threat_id_for_log_id(log_id), "status": next_status},
     )
-    return _to_threat_event(public_document(document), include_detail=True)
+    actions_by_log = await _load_remediation_actions(request, current_user, [document])
+    return _to_threat_event(
+        public_document(document),
+        include_detail=True,
+        remediation_actions=actions_by_log.get(_log_public_id(document)),
+    )
 
 
 async def bulk_update_threats(

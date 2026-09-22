@@ -704,7 +704,7 @@ export default function Settings() {
             <SectionHeading
               icon={Webhook}
               title="Integration & Webhooks"
-              description="Route threat events into downstream responders and operator channels without leaving the workspace."
+              description="Webhook and platform delivery are not available yet. These preferences are saved only in this browser and do not send alerts."
             />
 
             <div className="mt-8 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -723,7 +723,7 @@ export default function Settings() {
                     className={cn(inputClassName, 'mt-2')}
                     placeholder="https://soc.example.com/sentinel/hooks"
                   />
-                  <div className="mt-3 text-sm text-slate-400">Threat payloads are forwarded as JSON for downstream SOAR or SIEM workflows.</div>
+                  <div className="mt-3 text-sm text-slate-400">Draft destination only. Threat payloads are not forwarded to this URL.</div>
                 </div>
 
                 <div className="rounded-3xl border border-white/8 bg-slate-950/60 p-5">
@@ -746,7 +746,7 @@ export default function Settings() {
                       <span className="ml-2">{showWebhookSecret ? 'Hide' : 'Reveal'}</span>
                     </Button>
                   </div>
-                  <div className="mt-3 text-sm text-slate-400">Used to sign outgoing webhook deliveries for receiver-side verification.</div>
+                  <div className="mt-3 text-sm text-slate-400">Draft value only. Webhook signing and delivery are not active.</div>
                 </div>
               </div>
 
@@ -754,10 +754,10 @@ export default function Settings() {
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className={mutedLabelClassName}>Platform sync</div>
-                    <div className="mt-2 text-sm text-slate-400">Instant alert fan-out for your on-call stack.</div>
+                    <div className="mt-2 text-sm text-slate-400">Draft preferences for future integrations.</div>
                   </div>
-                  <Badge variant={activeIntegrations ? 'clean' : 'outline'}>
-                    {activeIntegrations} route{activeIntegrations === 1 ? '' : 's'} armed
+                  <Badge variant="outline">
+                    {activeIntegrations} draft preference{activeIntegrations === 1 ? '' : 's'}
                   </Badge>
                 </div>
 

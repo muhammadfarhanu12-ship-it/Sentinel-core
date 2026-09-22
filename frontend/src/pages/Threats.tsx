@@ -24,6 +24,8 @@ import {
 
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { RemediationActionBadge } from '../components/reports/RemediationActionBadge';
+import { normalizeRemediationActions, type RemediationAction } from '../lib/remediationActions';
 import { cn } from '../lib/utils';
 import { authedFetch, authedFetchJson } from '../services/authenticatedFetch';
 
@@ -54,7 +56,7 @@ type ThreatEvent = {
   model: string;
   latency: string;
   policies: string[];
-  actions: Array<'QUARANTINE_REQUEST' | 'ALERT_EMAIL'>;
+  actions: RemediationAction[];
   actionsComplete: boolean;
   prompt: string;
   executionTrace?: Array<{ time: string; level: 'info' | 'ok' | 'warn' | 'error'; message: string }>;
@@ -303,7 +305,7 @@ export default function Threats() {
     setError(null);
     try {
       const body = await authedFetchJson<ThreatListResponse>(`/api/v1/threats?${listQuery}`);
-      setThreatsResponse(body);
+      setThreatsResponse({ ...body, threats: body.threats.map((event) => ({ ...event, actions: normalizeRemediationActions(event.actions) })) });
       setSelectedIds((current) => new Set([...current].filter((id) => body.threats.some((event) => event.id === id))));
     } catch (err: any) {
       setError(err?.message || 'Failed to load threat events.');
@@ -331,7 +333,7 @@ export default function Threats() {
       if (detailCache[id]) return;
       try {
         const detail = await authedFetchJson<ThreatEvent>(`/api/v1/threats/${encodeURIComponent(id)}`);
-        setDetailCache((current) => ({ ...current, [id]: detail }));
+        setDetailCache((current) => ({ ...current, [id]: { ...detail, actions: normalizeRemediationActions(detail.actions) } }));
       } catch (err: any) {
         setError(err?.message || 'Failed to load threat detail.');
       }
@@ -358,7 +360,7 @@ export default function Threats() {
       current
         ? {
             ...current,
-            threats: current.threats.map((event) => (event.id === id ? { ...event, status: nextStatus, actionsComplete: nextStatus !== 'INVESTIGATING' } : event)),
+            threats: current.threats.map((event) => (event.id === id ? { ...event, status: nextStatus } : event)),
           }
         : current,
     );
@@ -367,6 +369,7 @@ export default function Threats() {
         method: 'PATCH',
         body: JSON.stringify({ status: nextStatus }),
       });
+      updated.actions = normalizeRemediationActions(updated.actions);
       setThreatsResponse((current) =>
         current ? { ...current, threats: current.threats.map((event) => (event.id === id ? { ...event, ...updated } : event)) } : current,
       );
@@ -391,7 +394,7 @@ export default function Threats() {
           ? {
               ...current,
               threats: current.threats.map((event) =>
-                targetIds.includes(event.id) ? { ...event, status: nextStatus, actionsComplete: nextStatus === 'RESOLVED' } : event,
+                targetIds.includes(event.id) ? { ...event, status: nextStatus } : event,
               ),
             }
           : current,
@@ -823,6 +826,16 @@ export default function Threats() {
                                       <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Prompt Preview</div>
                                       <div className="mt-2 rounded-md border border-white/10 bg-slate-950/70 p-3 font-mono text-xs leading-5 text-slate-300">
                                         {detail.prompt || 'No prompt preview available.'}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Action Outcomes</div>
+                                      <div className="mt-2 space-y-3">
+                                        {detail.actions.length ? detail.actions.map((action, index) => (
+                                          <div key={`${detail.id}-action-${index}`}>
+                                            <RemediationActionBadge action={action} showDetails />
+                                          </div>
+                                        )) : <div className="text-xs text-slate-400">No action outcomes recorded.</div>}
                                       </div>
                                     </div>
                                     <div>

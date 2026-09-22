@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 from fastapi import Depends, HTTPException, status
@@ -41,6 +42,14 @@ from app.utils.token_generator import create_access_token
 from app.middleware.auth_middleware import decode_token
 
 oauth2_test_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+
+
+@pytest.fixture(autouse=True)
+def mock_remediation_email(monkeypatch):
+    """Scan tests must never contact a configured SMTP server."""
+    sender = Mock(return_value=None)
+    monkeypatch.setattr("app.services.dashboard_service.send_alert_email", sender)
+    return sender
 
 
 class FieldRef:
@@ -429,15 +438,16 @@ def client(db_session: FakeSession, monkeypatch: pytest.MonkeyPatch):
     async def noop_close_mongo_connection(*args: Any, **kwargs: Any):
         return None
 
-    async def ok_ping_mongo():
+    async def ok_ping_mongo(**_kwargs: Any):
         return None
 
     async def noop_bootstrap_admin_system():
         return None
 
-    monkeypatch.setattr(main_module, "connect_to_mongo", noop_connect_to_mongo)
+    monkeypatch.setattr(main_module, "start_mongo_connection_background", noop_connect_to_mongo)
     monkeypatch.setattr(main_module, "close_mongo_connection", noop_close_mongo_connection)
     monkeypatch.setattr(main_module, "ping_mongo", ok_ping_mongo)
+    monkeypatch.setattr(main_module, "wait_for_mongo_ready", ok_ping_mongo)
     monkeypatch.setattr(main_module, "bootstrap_admin_system", noop_bootstrap_admin_system)
 
     async def override_user():

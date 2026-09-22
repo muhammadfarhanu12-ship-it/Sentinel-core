@@ -23,31 +23,33 @@ The running backend never uses `.env.example` as runtime config. Local developme
 
 When a threat is detected (e.g. `status=BLOCKED`, `threat_score≈0.99`), Mefyx Gateway automatically:
 
-- Quarantines the API key (sets `api_keys.status=QUARANTINED`)
-- Marks the triggering request/event as quarantined (`security_logs.is_quarantined=1`)
-- Writes an audit entry to `remediation_logs`
-- Sends an alert email (SMTP) and optional webhook callbacks (if configured)
+- Records blocked/redacted requests in `logs` and their remediation outcomes in `reports`.
+- Records request quarantine for blocked requests and 2FA enforcement when required.
+- Sends a threat alert to the account email for PRO/BUSINESS users with `email_alerts` enabled, provided server email alerts are enabled.
+- Records email `SUCCESS` only after the SMTP server accepts the message, `FAILED` on delivery errors, or `SKIPPED` with the reason when disabled or unavailable on the plan. SMTP acceptance does not confirm inbox delivery.
+
+Reports and Threats display each action's actual outcome. Legacy email/webhook success claims without delivery evidence are exposed as `UNKNOWN` (Unverified); stored historical records are preserved.
+
+Customer webhook delivery is not implemented. `REMEDIATION_WEBHOOK_URLS` is deployment-global legacy configuration, and the Settings page's webhook fields are browser-local preferences that are not sent to the backend. Scan remediation does not call those URLs or record a webhook action.
 
 ### Config
 
 Set these in `.env` as needed:
 
-- `REMEDIATION_ENABLED=true`
-- `REMEDIATION_THREAT_SCORE_THRESHOLD=0.9`
 - `REMEDIATION_EMAIL_ENABLED=true`
-- `REMEDIATION_EMAIL_FROM=sentinel@localhost`
-- `REMEDIATION_EMAIL_TO=secops@example.com` (optional; falls back to the user email)
+- `REMEDIATION_EMAIL_FROM=alerts@example.com` (aliases: `FROM_EMAIL`, `EMAIL_FROM`)
 - `SMTP_HOST=smtp.example.com` (required to actually send email)
 - `SMTP_PORT=587`
-- `SMTP_USERNAME=...`
-- `SMTP_PASSWORD=...`
-- `SMTP_USE_TLS=true`
-- `REMEDIATION_WEBHOOK_URLS=https://example.com/webhook,https://example2.com/hook` (optional)
-- `REMEDIATION_WEBHOOK_TIMEOUT_SECONDS=3`
+- `SMTP_USERNAME=...` (alias: `SMTP_USER`)
+- `SMTP_PASSWORD=...` (alias: `SMTP_PASS`)
+- `SMTP_USE_TLS=true` (STARTTLS; default)
+- `SMTP_USE_SSL=false` (for implicit TLS, set this to `true`, set `SMTP_USE_TLS=false`, and use your provider's implicit TLS port)
+- `SMTP_TIMEOUT=10` (seconds)
+
+The sender uses Python's `smtplib` with SMTP authentication; no provider-specific API key is required. Configure credentials for your SMTP provider. `REMEDIATION_EMAIL_TO` is a legacy setting and is not used for account threat alerts. Missing SMTP configuration records a failed attempt without interrupting scan recording.
 
 ### API (v1)
 
-- `GET /api/v1/remediation/logs` lists remediation events for the authenticated user.
 - `GET /api/v1/reports/threat-counts` returns daily/weekly compliance metrics.
 - `GET /api/v1/reports/remediations` returns remediation/audit events.
 - `GET /api/v1/reports/*/export?format=csv|json` exports CSV/JSON reports.

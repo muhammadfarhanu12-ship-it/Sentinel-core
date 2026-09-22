@@ -61,13 +61,16 @@ export type RemediationActionType =
   | 'QUARANTINE_API_KEY'
   | 'QUARANTINE_REQUEST'
   | 'ALERT_EMAIL'
-  | 'ALERT_WEBHOOK';
+  | 'ALERT_WEBHOOK'
+  | 'FORCE_2FA_VERIFICATION';
 
-export type RemediationActionStatus = 'SUCCESS' | 'FAILED' | 'SKIPPED';
+export type RemediationActionStatus = 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'UNKNOWN';
 
 export interface RemediationAction {
   type: RemediationActionType | string;
-  status: RemediationActionStatus | string;
+  status: RemediationActionStatus;
+  details?: string | null;
+  reason?: string | null;
   detail?: string | null;
   metadata?: Record<string, unknown> | null;
 }
