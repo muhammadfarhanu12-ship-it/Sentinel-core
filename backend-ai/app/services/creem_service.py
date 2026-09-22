@@ -133,7 +133,14 @@ async def create_checkout_session(request: Request, current_user: dict, *, plan_
     pending_id = user.get("creem_checkout_request_id")
     if pending_id:
         pending = await checkouts.find_one({"_id": pending_id})
-        if pending and pending.get("checkout_id"):
+        if pending and pending.get("mode") != _mode():
+            # The pending checkout was created under a different mode (test vs
+            # live) and can never be found via the current mode's API. Treat it
+            # as stale rather than querying the wrong environment.
+            await users.update_one({"_id": user["_id"], "creem_checkout_request_id": pending_id},
+                                   {"$unset": {"creem_checkout_request_id": ""}})
+            pending_id = None
+        elif pending and pending.get("checkout_id"):
             remote = await _api("GET", "checkouts", params={"checkout_id": pending["checkout_id"]})
             if remote.get("status") == "expired":
                 await users.update_one({"_id": user["_id"], "creem_checkout_request_id": pending_id},
