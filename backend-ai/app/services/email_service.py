@@ -148,7 +148,14 @@ def verify_smtp_connection() -> None:
     )
 
 
-def send_email(*, to: str | Iterable[str], subject: str, html: str, text: str | None = None) -> EmailSendResult:
+def send_email(
+    *,
+    to: str | Iterable[str],
+    subject: str,
+    html: str,
+    text: str | None = None,
+    reply_to: str | None = None,
+) -> EmailSendResult:
     recipients = [to] if isinstance(to, str) else [item for item in to if item]
     if not recipients:
         return EmailSendResult(success=False, error="At least one recipient email address is required")
@@ -158,6 +165,7 @@ def send_email(*, to: str | Iterable[str], subject: str, html: str, text: str | 
         sanitized_from = _reject_header_injection(str(settings.REMEDIATION_EMAIL_FROM), "from")
         sanitized_subject = _reject_header_injection(subject, "subject")
         sanitized_recipients = [_reject_header_injection(recipient, "to") for recipient in recipients]
+        sanitized_reply_to = _reject_header_injection(reply_to, "reply-to") if reply_to is not None else None
     except (EmailConfigurationError, EmailDeliveryError) as exc:
         logger.warning("Email configuration or header validation failed: %s", exc)
         return EmailSendResult(success=False, error=str(exc))
@@ -167,6 +175,8 @@ def send_email(*, to: str | Iterable[str], subject: str, html: str, text: str | 
         message["From"] = sanitized_from
         message["To"] = ", ".join(sanitized_recipients)
         message["Subject"] = sanitized_subject
+        if sanitized_reply_to:
+            message["Reply-To"] = sanitized_reply_to
         message["Message-ID"] = make_msgid(domain="sentinel.local")
         message.set_content(text or "This email requires an HTML-capable mail client.")
         message.add_alternative(html, subtype="html")

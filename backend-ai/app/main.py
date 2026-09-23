@@ -35,6 +35,7 @@ from app.routers.analytics_router import router as analytics_router
 from app.routers.audit_logs_router import router as audit_logs_router
 from app.routers.billing_router import router as billing_router
 from app.routers.brain_router import router as brain_router
+from app.routers.contact_router import router as contact_router
 from app.routers.email_router import router as email_router
 from app.routers.gateway_router import router as gateway_router
 from app.routers.keys_router import router as keys_router
@@ -339,6 +340,7 @@ api_v1 = APIRouter(prefix="/api/v1")
 api_v1.include_router(auth_router)
 api_v1.include_router(admin_v1_router)
 api_v1.include_router(email_router)
+api_v1.include_router(contact_router)
 api_v1.include_router(user_router)
 
 api_legacy = APIRouter(prefix="/api", include_in_schema=False)

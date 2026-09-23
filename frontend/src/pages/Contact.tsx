@@ -1,14 +1,46 @@
-import { ArrowRight, Building2, Mail, MapPin, MessageSquare, Shield } from 'lucide-react';
-import type { FormEvent } from 'react';
+import { ArrowRight, Building2, LoaderCircle, Mail, MapPin, MessageSquare, Shield } from 'lucide-react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { SEO } from '../components/SEO';
 import { PublicLayout } from '../components/layout/PublicLayout';
-
-function handleContactSubmit(event: FormEvent<HTMLFormElement>) {
-  event.preventDefault();
-}
+import { submitContact } from '../services/contact';
 
 export default function Contact() {
+  const submissionInFlight = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  async function handleContactSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (submissionInFlight.current) return;
+
+    const form = event.target;
+    const data = new FormData(form);
+    submissionInFlight.current = true;
+    setIsSubmitting(true);
+    setFeedback(null);
+
+    try {
+      await submitContact({
+        firstName: String(data.get('firstName') || ''),
+        lastName: String(data.get('lastName') || ''),
+        email: String(data.get('email') || ''),
+        company: String(data.get('company') || ''),
+        message: String(data.get('message') || ''),
+      });
+      form.reset();
+      setFeedback({ type: 'success', message: "Thanks, we'll get back to you shortly" });
+    } catch (error) {
+      setFeedback({
+        type: 'error',
+        message: error instanceof Error ? error.message : "We couldn't send your message. Please try again or email support@mefyx.com.",
+      });
+    } finally {
+      submissionInFlight.current = false;
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <PublicLayout>
       <SEO
@@ -62,34 +94,42 @@ export default function Contact() {
           <form
             className="rounded-xl border border-white/10 bg-slate-900/60 p-6 md:p-8 h-fit"
             aria-label="Contact Mefyx"
+            aria-busy={isSubmitting}
             onSubmit={handleContactSubmit}
           >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <label className="block text-sm font-medium text-slate-200">
-                First name
-                <input className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950/70 px-3 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60" name="firstName" type="text" autoComplete="given-name" required />
+            <fieldset disabled={isSubmitting} className="min-w-0">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <label className="block text-sm font-medium text-slate-200">
+                  First name
+                  <input className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950/70 px-3 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60" name="firstName" type="text" autoComplete="given-name" maxLength={100} required />
+                </label>
+                <label className="block text-sm font-medium text-slate-200">
+                  Last name
+                  <input className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950/70 px-3 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60" name="lastName" type="text" autoComplete="family-name" maxLength={100} required />
+                </label>
+              </div>
+              <label className="block text-sm font-medium text-slate-200 mt-5">
+                Work email
+                <input className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950/70 px-3 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60" name="email" type="email" autoComplete="email" placeholder="name@company.com" maxLength={254} required />
               </label>
-              <label className="block text-sm font-medium text-slate-200">
-                Last name
-                <input className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950/70 px-3 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60" name="lastName" type="text" autoComplete="family-name" required />
+              <label className="block text-sm font-medium text-slate-200 mt-5">
+                Company
+                <input className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950/70 px-3 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60" name="company" type="text" autoComplete="organization" maxLength={200} />
               </label>
-            </div>
-            <label className="block text-sm font-medium text-slate-200 mt-5">
-              Work email
-              <input className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950/70 px-3 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60" name="email" type="email" autoComplete="email" placeholder="name@company.com" required />
-            </label>
-            <label className="block text-sm font-medium text-slate-200 mt-5">
-              Company
-              <input className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950/70 px-3 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60" name="company" type="text" autoComplete="organization" />
-            </label>
-            <label className="block text-sm font-medium text-slate-200 mt-5">
-              Message
-              <textarea className="mt-2 min-h-36 w-full rounded-lg border border-white/10 bg-slate-950/70 px-3 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60" name="message" placeholder="Tell us about your AI security needs" required />
-            </label>
-            <button type="submit" className="mt-6 w-full inline-flex items-center justify-center space-x-2 bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium transition-all shadow-[0_0_20px_rgba(99,102,241,0.35)]">
-              <span>Contact Sales</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+              <label className="block text-sm font-medium text-slate-200 mt-5">
+                Message
+                <textarea className="mt-2 min-h-36 w-full rounded-lg border border-white/10 bg-slate-950/70 px-3 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60" name="message" placeholder="Tell us about your AI security needs" maxLength={5000} required />
+              </label>
+              <button type="submit" disabled={isSubmitting} className="mt-6 w-full inline-flex items-center justify-center space-x-2 bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium transition-all shadow-[0_0_20px_rgba(99,102,241,0.35)] disabled:opacity-60 disabled:cursor-wait">
+                <span>{isSubmitting ? 'Sending...' : 'Contact Sales'}</span>
+                {isSubmitting ? <LoaderCircle className="w-4 h-4 animate-spin" aria-hidden="true" /> : <ArrowRight className="w-4 h-4" aria-hidden="true" />}
+              </button>
+            </fieldset>
+            {feedback && (
+              <p role={feedback.type === 'success' ? 'status' : 'alert'} className={`mt-4 text-sm ${feedback.type === 'success' ? 'text-emerald-300' : 'text-red-300'}`}>
+                {feedback.message}
+              </p>
+            )}
           </form>
         </div>
       </section>

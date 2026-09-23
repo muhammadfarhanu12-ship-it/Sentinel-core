@@ -19,6 +19,14 @@ The running backend never uses `.env.example` as runtime config. Local developme
 - Realtime clients connect directly to `/ws/logs?token=...` and `/ws/notifications?token=...` on the backend origin.
 - `/health`, `/api/v1/health`, and the hidden legacy `/api/health` route return `503` with a degraded status when MongoDB is unavailable instead of preventing FastAPI from starting.
 
+## Contact form
+
+`POST /api/v1/contact` is public and accepts JSON with `firstName`, `lastName`, `email`, optional `company`, and `message`. Names must be 1-100 characters each, email must be valid and at most 254 characters, company at most 200 characters, and message 1-5000 characters. Surrounding whitespace is trimmed.
+
+The endpoint uses the existing rate limiter with a separate `contact:ip` scope: five attempts per IP in a rolling 15-minute window, including validation and delivery failures. Excess attempts receive HTTP 429 with `Retry-After`. Like the auth limiter, counters are in memory per server process and reset on restart. Behind a reverse proxy, configure the ASGI server to resolve client IPs only from trusted proxies; the endpoint does not trust raw forwarded headers itself.
+
+Messages use the existing SMTP settings below, go to `support@mefyx.com`, and set `Reply-To` to the visitor's email. HTTP 200 means SMTP accepted the message; configuration or delivery failure returns HTTP 502 with a retry/support message. No database or login is required. Install the updated requirements, including `email-validator`, when deploying.
+
 ## Automated remediation
 
 When a threat is detected (e.g. `status=BLOCKED`, `threat_score≈0.99`), Mefyx Gateway automatically:

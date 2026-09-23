@@ -3,6 +3,7 @@ uvicorn[standard]
 motor
 pymongo[srv]
 pydantic
+email-validator
 python-dotenv
 python-jose
 passlib

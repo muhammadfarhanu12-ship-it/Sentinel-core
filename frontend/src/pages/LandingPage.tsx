@@ -237,7 +237,7 @@ export default function LandingPage() {
                 { icon: Shield, title: 'Injection Guard', desc: 'Real-time scanning of every incoming prompt for malicious intent.', benefit: 'Prevents jailbreaks and system overrides.' },
                 { icon: Lock, title: 'Privacy Shield', desc: 'Automatically detects and masks PII before it leaves your network.', benefit: 'Ensures HIPAA and GDPR compliance for AI.' },
                 { icon: Layers, title: 'Universal SDK', desc: 'One-line integration for OpenAI, Anthropic, and local LLMs.', benefit: 'No vendor lock-in; switch models securely.' },
-                { icon: Activity, title: 'Autonomous SOC', desc: 'AI agent that isolates servers and blocks IPs with 95% confidence.', benefit: 'Reduces time-to-remediate from hours to seconds.' },
+                { icon: Key, title: 'Policy Enforcement', desc: 'Applies security policies to allow, block, or require review of risky requests.', benefit: 'Returns policy matches and enforcement decisions.' },
               ].map((feature, i) => (
                 <div key={i} className="group p-6 rounded-xl bg-slate-950/50 border border-white/5 hover:border-indigo-500/30 hover:bg-slate-900/80 transition-all duration-300">
                   <div className="flex items-start space-x-4">
