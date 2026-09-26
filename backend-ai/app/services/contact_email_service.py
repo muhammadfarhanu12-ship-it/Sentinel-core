@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import asyncio
 from html import escape
 
-from app.services.email_service import EmailSendResult, send_email
+from app.services.email_service import EmailSendResult, send_email, send_email_async
 
 
-def send_contact_email(
+def _contact_email_content(
     *, first_name: str, last_name: str, email: str, message: str, company: str | None = None
-) -> EmailSendResult:
+) -> dict[str, str]:
     name = f"{first_name} {last_name}"
     text = (
         "New contact form submission\n\n"
@@ -17,23 +16,30 @@ def send_contact_email(
         f"Company: {company or 'Not provided'}\n\n"
         f"Message:\n{message}\n"
     )
+    return {
+        "to": "support@mefyx.com",
+        "subject": "New contact form submission",
+        "reply_to": email,
+        "text": text,
+        "html": f'<html lang="en"><body><pre style="white-space:pre-wrap">{escape(text)}</pre></body></html>',
+    }
+
+
+def send_contact_email(
+    *, first_name: str, last_name: str, email: str, message: str, company: str | None = None
+) -> EmailSendResult:
     return send_email(
-        to="support@mefyx.com",
-        subject="New contact form submission",
-        reply_to=email,
-        text=text,
-        html=f'<html lang="en"><body><pre style="white-space:pre-wrap">{escape(text)}</pre></body></html>',
+        **_contact_email_content(
+            first_name=first_name, last_name=last_name, email=email, message=message, company=company
+        )
     )
 
 
 async def send_contact_email_async(
     *, first_name: str, last_name: str, email: str, message: str, company: str | None = None
 ) -> EmailSendResult:
-    return await asyncio.to_thread(
-        send_contact_email,
-        first_name=first_name,
-        last_name=last_name,
-        email=email,
-        company=company,
-        message=message,
+    return await send_email_async(
+        **_contact_email_content(
+            first_name=first_name, last_name=last_name, email=email, message=message, company=company
+        )
     )

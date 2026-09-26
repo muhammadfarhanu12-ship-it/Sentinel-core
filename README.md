@@ -82,7 +82,7 @@ Admin:
 - `VITE_API_URL`
 - `VITE_FRONTEND_APP_ORIGIN`
 
-Optional production integrations include `GEMINI_API_KEY`, `OPENAI_API_KEY`, SMTP variables, Creem billing, Sentry, OAuth client credentials, and remediation webhook URLs. Paid checkout requires `CREEM_API_KEY`, `CREEM_WEBHOOK_SECRET`, `CREEM_PRODUCT_ID_PRO`, and `CREEM_PRODUCT_ID_BUSINESS`. `CREEM_TEST_MODE` defaults to `true`; configure matching credentials and products for the selected environment. See [Creem billing deployment](docs/CREEM_BILLING.md).
+Optional production integrations include `GEMINI_API_KEY`, `OPENAI_API_KEY`, Resend email, Creem billing, Sentry, OAuth client credentials, and remediation webhook URLs. Email delivery requires `RESEND_API_KEY` and a verified sending domain; `EMAIL_FROM_ADDRESS` defaults to `Mefyx <noreply@mefyx.com>`. See [email deployment and DNS setup](backend-ai/README.md#email-delivery-and-render-deployment). Paid checkout requires `CREEM_API_KEY`, `CREEM_WEBHOOK_SECRET`, `CREEM_PRODUCT_ID_PRO`, and `CREEM_PRODUCT_ID_BUSINESS`. `CREEM_TEST_MODE` defaults to `true`; configure matching credentials and products for the selected environment. See [Creem billing deployment](docs/CREEM_BILLING.md).
 
 ## Tier Behavior
 
@@ -183,7 +183,7 @@ Provider env vars:
 
 Recommended REST namespace: `/api/v1`.
 
-- `GET /api/v1/health`: service, database, SMTP, and security startup status.
+- `GET /api/v1/health`: service, database, email configuration, and security startup status.
 - `POST /api/v1/auth/signup`, `/login`, `/refresh`, `/logout`: user auth flow.
 - `GET /api/v1/auth/me`: current authenticated user.
 - `POST /api/v1/scan`: prompt and request security scan.

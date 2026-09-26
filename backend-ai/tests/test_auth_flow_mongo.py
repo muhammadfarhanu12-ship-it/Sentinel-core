@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import json
 import os
 from datetime import timedelta
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from bson import ObjectId
 from fastapi.testclient import TestClient
@@ -20,12 +22,6 @@ os.environ.setdefault("ADMIN_BOOTSTRAP_EMAIL", "admin@example.com")
 os.environ.setdefault("ADMIN_BOOTSTRAP_PASSWORD", "TestAdminPass123")
 os.environ.setdefault("MONGO_URI", "mongodb://localhost:27017/sentinel-auth-tests")
 os.environ.setdefault("MONGO_DB_NAME", "sentinel_auth_tests")
-os.environ.setdefault("SMTP_HOST", "smtp.test")
-os.environ.setdefault("SMTP_PORT", "587")
-os.environ.setdefault("SMTP_USER", "tester@example.com")
-os.environ.setdefault("SMTP_PASS", "password-placeholder")
-os.environ.setdefault("FROM_EMAIL", "Sentinel Test <tester@example.com>")
-os.environ.setdefault("SMTP_VERIFY_ON_STARTUP", "false")
 os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
 
 import app.database as database_module
@@ -204,7 +200,6 @@ def auth_client(monkeypatch: pytest.MonkeyPatch):
         return None
 
     limiter._events.clear()
-    monkeypatch.setattr(settings, "SMTP_VERIFY_ON_STARTUP", False, raising=False)
     monkeypatch.setattr(database_module, "users_collection", users_collection)
     monkeypatch.setattr(database_module, "user_collection", users_collection)
     monkeypatch.setattr(database_module, "auth_sessions_collection", sessions_collection)
@@ -456,6 +451,61 @@ def test_signup_sends_verification_email(auth_client, monkeypatch: pytest.Monkey
     assert stored_user["verification_token_hash"]
     assert stored_user["verify_token_hash"] == stored_user["verification_token_hash"]
     assert stored_user["verify_token_expires_at"] == stored_user["verification_token_expiry"]
+
+
+def test_signup_resend_rejection_returns_recoverable_error(auth_client, resend_transport):
+    client, collection, _ = auth_client
+    resend_transport.response = httpx.Response(
+        403, json={"name": "validation_error", "message": "Sending domain is not verified"},
+    )
+
+    response = _signup(client, "resend.signup@example.com")
+
+    assert response.status_code == 502, response.text
+    assert response.json()["success"] is False
+    assert response.json()["error"]["message"]
+    assert len(resend_transport.requests) == 1
+    request = resend_transport.requests[0]
+    assert str(request.url) == "https://api.resend.com/emails"
+    assert json.loads(request.content)["to"] == ["resend.signup@example.com"]
+    stored_user = next(row for row in collection._documents.values() if row["email"] == "resend.signup@example.com")
+    assert stored_user["is_verified"] is False
+
+    resend_transport.response = httpx.Response(200, json={"id": "signup-retry"})
+    retry = _signup(client, "resend.signup@example.com")
+    assert retry.status_code == 201, retry.text
+    assert retry.json()["success"] is True
+
+
+@pytest.mark.parametrize("endpoint", ["resend-verification", "forgot-password"])
+def test_auth_email_resend_rejection_returns_recoverable_error(auth_client, resend_transport, endpoint):
+    client, collection, _ = auth_client
+    email = f"resend.{endpoint}@example.com"
+    signup_response = _signup(client, email)
+    assert signup_response.status_code == 201, signup_response.text
+    if endpoint == "forgot-password":
+        # Password reset is only available after email verification.
+        asyncio.run(collection.update_one({"email": email}, {"$set": {"is_verified": True}}))
+
+    resend_transport.requests.clear()
+    resend_transport.response = httpx.Response(
+        429, json={"name": "rate_limit_exceeded", "message": "Too many requests"},
+    )
+
+    response = client.post(f"/api/auth/{endpoint}", json={"email": email})
+
+    assert response.status_code == 502, response.text
+    assert response.json()["success"] is False
+    assert response.json()["error"]["message"]
+    assert len(resend_transport.requests) == 1
+    assert json.loads(resend_transport.requests[0].content)["to"] == [email]
+
+    resend_transport.response = httpx.Response(200, json={"id": "auth-retry"})
+    # Resending verification has a one-attempt cooldown, including failed sends.
+    limiter._events.clear()
+    retry = client.post(f"/api/auth/{endpoint}", json={"email": email})
+    assert retry.status_code == 200, retry.text
+    assert retry.json()["success"] is True
 
 
 def test_signup_rejects_role_assignment_from_client(auth_client):
@@ -1105,7 +1155,6 @@ def test_health_reports_degraded_status_when_database_is_unavailable(monkeypatch
         raise RuntimeError("Mongo unavailable")
 
     limiter._events.clear()
-    monkeypatch.setattr(settings, "SMTP_VERIFY_ON_STARTUP", False, raising=False)
     monkeypatch.setattr(main_module, "start_mongo_connection_background", fake_connect_to_mongo)
     monkeypatch.setattr(main_module, "close_mongo_connection", fake_close_mongo_connection)
     monkeypatch.setattr(main_module, "ping_mongo", fake_ping_mongo)

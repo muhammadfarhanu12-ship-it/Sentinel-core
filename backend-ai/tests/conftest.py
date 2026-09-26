@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock
 
+import httpx
 import pytest
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -46,10 +48,35 @@ oauth2_test_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_er
 
 @pytest.fixture(autouse=True)
 def mock_remediation_email(monkeypatch):
-    """Scan tests must never contact a configured SMTP server."""
+    """Scan tests must never contact a configured email provider."""
     sender = Mock(return_value=None)
     monkeypatch.setattr("app.services.dashboard_service.send_alert_email", sender)
     return sender
+
+
+@pytest.fixture
+def resend_transport(monkeypatch):
+    """Exercise the email service with HTTP responses and no external traffic."""
+    from app.services import email_service
+
+    state = SimpleNamespace(
+        requests=[],
+        response=httpx.Response(200, json={"id": "email-test-id"}),
+    )
+
+    def handle_request(request):
+        state.requests.append(request)
+        return state.response
+
+    transport = httpx.MockTransport(handle_request)
+    monkeypatch.setattr(settings, "RESEND_API_KEY", "re_test_only")
+    monkeypatch.setattr(settings, "EMAIL_FROM_ADDRESS", "Mefyx <noreply@mefyx.com>")
+    # Patch the service's clients without replacing the clients used by ASGI tests.
+    client_module = SimpleNamespace(**vars(httpx))
+    client_module.Client = lambda **kwargs: httpx.Client(transport=transport, **kwargs)
+    client_module.AsyncClient = lambda **kwargs: httpx.AsyncClient(transport=transport, **kwargs)
+    monkeypatch.setattr(email_service, "httpx", client_module)
+    return state
 
 
 class FieldRef:

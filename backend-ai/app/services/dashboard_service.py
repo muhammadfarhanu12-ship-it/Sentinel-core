@@ -2480,7 +2480,7 @@ async def persist_scan_result(
             email_action.update(reason="DELIVERY_DISABLED", details="Email alerts are disabled by the server configuration.")
         else:
             try:
-                # SMTP is synchronous; wait for its outcome without blocking the event loop.
+                # The alert sender is synchronous; wait without blocking the event loop.
                 await asyncio.to_thread(
                     send_alert_email,
                     to_addrs=[email_to] if email_to else [],
@@ -2502,7 +2502,7 @@ async def persist_scan_result(
                     details="Email delivery failed. Check the server email configuration and delivery logs.",
                 )
             else:
-                email_action.update(status="SUCCESS", details="The SMTP server accepted the alert for delivery.")
+                email_action.update(status="SUCCESS", details="The email provider accepted the alert for delivery.")
 
         actions = []
         if status == "BLOCKED":

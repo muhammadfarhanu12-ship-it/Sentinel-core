@@ -205,7 +205,7 @@ def test_ineligible_or_disabled_email_is_skipped(remediation_context, status, ti
 @pytest.mark.parametrize("status", ["BLOCKED", "REDACTED"])
 def test_failed_email_preserves_scan_report_audit_and_notification(remediation_context, status):
     context = remediation_context
-    context.sender.side_effect = RuntimeError("SMTP unavailable")
+    context.sender.side_effect = RuntimeError("Resend unavailable")
 
     public_log = context.persist(status=status)
 
@@ -269,9 +269,9 @@ def test_server_delivery_switch_records_skipped(remediation_context, monkeypatch
     assert_scan_evidence_persisted(context, public_log)
 
 
-def test_alert_helper_reports_missing_smtp_configuration_as_failed(remediation_context, monkeypatch):
+def test_alert_helper_reports_missing_resend_configuration_as_failed(remediation_context, monkeypatch):
     context = remediation_context
-    transport = Mock(return_value=EmailSendResult(success=False, error="SMTP_HOST is not configured"))
+    transport = Mock(return_value=EmailSendResult(success=False, error="RESEND_API_KEY is not configured"))
     monkeypatch.setattr(notification_service, "send_email", transport)
     monkeypatch.setattr(dashboard_service, "send_alert_email", notification_service.send_alert_email)
 

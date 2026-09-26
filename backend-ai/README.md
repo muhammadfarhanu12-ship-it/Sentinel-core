@@ -25,7 +25,33 @@ The running backend never uses `.env.example` as runtime config. Local developme
 
 The endpoint uses the existing rate limiter with a separate `contact:ip` scope: five attempts per IP in a rolling 15-minute window, including validation and delivery failures. Excess attempts receive HTTP 429 with `Retry-After`. Like the auth limiter, counters are in memory per server process and reset on restart. Behind a reverse proxy, configure the ASGI server to resolve client IPs only from trusted proxies; the endpoint does not trust raw forwarded headers itself.
 
-Messages use the existing SMTP settings below, go to `support@mefyx.com`, and set `Reply-To` to the visitor's email. HTTP 200 means SMTP accepted the message; configuration or delivery failure returns HTTP 502 with a retry/support message. No database or login is required. Install the updated requirements, including `email-validator`, when deploying.
+Messages use the Resend settings below, go to `support@mefyx.com`, and set `Reply-To` to the visitor's email. HTTP 200 means Resend accepted the message; configuration or delivery failure returns HTTP 502 with a retry/support message. No database or login is required. Install the updated requirements, including `email-validator`, when deploying.
+
+## Email delivery and Render deployment
+
+All email uses Resend's HTTPS API at `https://api.resend.com/emails`, including signup verification, password reset, contact submissions, admin login alerts, and account threat alerts.
+
+1. Create an account at [Resend](https://resend.com), then add `mefyx.com` under Domains.
+2. In Hostinger's DNS zone for `mefyx.com`, add the sending records displayed by Resend. The dashboard's exact host names and values are authoritative, including any custom return-path subdomain or region. For the default `send` return-path subdomain, the records are:
+
+   | Type | Host/name | Value | Priority |
+   | --- | --- | --- | --- |
+   | TXT | `resend._domainkey` | The DKIM public key shown in the Resend dashboard | — |
+   | TXT | `send` | `v=spf1 include:amazonses.com ~all` (use the dashboard's exact value) | — |
+   | MX | `send` | The dashboard's region-specific `feedback-smtp.<region>.amazonses.com` target | `10` |
+
+   Use TTL `3600` unless the dashboard specifies otherwise. The `send` MX record supports bounce handling; preserve the root domain's existing MX records so `support@mefyx.com` continues receiving mail. Resend inbound receiving does not need to be enabled. An optional DMARC TXT record at `_dmarc` can start with `v=DMARC1; p=none;` if no DMARC record already exists; preserve or update an existing policy instead of adding a second record. See [Resend's Hostinger DNS guide](https://resend.com/docs/knowledge-base/hostinger).
+3. Click Verify in Resend and wait for the domain's sending records to verify. Generate a Resend API key with permission to send from `mefyx.com`.
+4. Set these environment variables in Render, then deploy:
+
+   ```dotenv
+   RESEND_API_KEY=<your Resend API key>
+   EMAIL_FROM_ADDRESS="Mefyx <noreply@mefyx.com>"
+   ```
+
+   In Render's environment editor, enter the sender value without surrounding quotes: `Mefyx <noreply@mefyx.com>`. `EMAIL_FROM_ADDRESS` defaults to this value when omitted. Store the key only in backend environment configuration.
+5. After deployment, delete all old `SMTP_*` variables from Render, including any aliases (`SMTP_USER`, `SMTP_PASS`, `SMTP_TLS`, `SMTP_SECURE`, `SMTP_SSL`). Also remove the obsolete sender variables `REMEDIATION_EMAIL_FROM`, `REMEDIATION_EMAIL_FROM_NAME`, `FROM_EMAIL`, and `EMAIL_FROM`; the backend now uses `EMAIL_FROM_ADDRESS` exclusively.
+6. Confirm signup verification, password reset, and contact form delivery with the verified domain. The health response exposes `email_configured`, which checks that the API key and sender are present; it does not perform a delivery test or verify the domain. Resend acceptance does not guarantee inbox delivery.
 
 ## Automated remediation
 
@@ -34,7 +60,7 @@ When a threat is detected (e.g. `status=BLOCKED`, `threat_score≈0.99`), Mefyx 
 - Records blocked/redacted requests in `logs` and their remediation outcomes in `reports`.
 - Records request quarantine for blocked requests and 2FA enforcement when required.
 - Sends a threat alert to the account email for PRO/BUSINESS users with `email_alerts` enabled, provided server email alerts are enabled.
-- Records email `SUCCESS` only after the SMTP server accepts the message, `FAILED` on delivery errors, or `SKIPPED` with the reason when disabled or unavailable on the plan. SMTP acceptance does not confirm inbox delivery.
+- Records email `SUCCESS` only after Resend accepts the message, `FAILED` on delivery errors, or `SKIPPED` with the reason when disabled or unavailable on the plan. Resend acceptance does not confirm inbox delivery.
 
 Reports and Threats display each action's actual outcome. Legacy email/webhook success claims without delivery evidence are exposed as `UNKNOWN` (Unverified); stored historical records are preserved.
 
@@ -45,16 +71,10 @@ Customer webhook delivery is not implemented. `REMEDIATION_WEBHOOK_URLS` is depl
 Set these in `.env` as needed:
 
 - `REMEDIATION_EMAIL_ENABLED=true`
-- `REMEDIATION_EMAIL_FROM=alerts@example.com` (aliases: `FROM_EMAIL`, `EMAIL_FROM`)
-- `SMTP_HOST=smtp.example.com` (required to actually send email)
-- `SMTP_PORT=587`
-- `SMTP_USERNAME=...` (alias: `SMTP_USER`)
-- `SMTP_PASSWORD=...` (alias: `SMTP_PASS`)
-- `SMTP_USE_TLS=true` (STARTTLS; default)
-- `SMTP_USE_SSL=false` (for implicit TLS, set this to `true`, set `SMTP_USE_TLS=false`, and use your provider's implicit TLS port)
-- `SMTP_TIMEOUT=10` (seconds)
+- `RESEND_API_KEY=...` (required to send email)
+- `EMAIL_FROM_ADDRESS="Mefyx <noreply@mefyx.com>"` (must use a verified sending domain)
 
-The sender uses Python's `smtplib` with SMTP authentication; no provider-specific API key is required. Configure credentials for your SMTP provider. `REMEDIATION_EMAIL_TO` is a legacy setting and is not used for account threat alerts. Missing SMTP configuration records a failed attempt without interrupting scan recording.
+`REMEDIATION_EMAIL_TO` is a legacy setting and is not used for account threat alerts. Missing Resend configuration records a failed attempt without interrupting scan recording.
 
 ### API (v1)
 

@@ -195,18 +195,10 @@ class Settings:
         self.SENTINEL_2FA_STATIC_CODE: str | None = _env_str("SENTINEL_2FA_STATIC_CODE")
         self.SENTINEL_2FA_ALLOW_DEMO_BYPASS: bool = _env_bool("SENTINEL_2FA_ALLOW_DEMO_BYPASS", False)
 
+        self.RESEND_API_KEY: str | None = _env_str("RESEND_API_KEY")
+        self.EMAIL_FROM_ADDRESS: str = _env_str("EMAIL_FROM_ADDRESS", "Mefyx <noreply@mefyx.com>") or "Mefyx <noreply@mefyx.com>"
         self.REMEDIATION_EMAIL_ENABLED: bool = _env_bool("REMEDIATION_EMAIL_ENABLED", True)
-        self.REMEDIATION_EMAIL_FROM: str | None = _env_str("REMEDIATION_EMAIL_FROM", aliases=("FROM_EMAIL", "EMAIL_FROM"))
-        self.REMEDIATION_EMAIL_FROM_NAME: str = _env_str("REMEDIATION_EMAIL_FROM_NAME", "Mefyx Gateway Alerts") or "Mefyx Gateway Alerts"
         self.REMEDIATION_EMAIL_TO: str | None = _env_str("REMEDIATION_EMAIL_TO")
-        self.SMTP_HOST: str | None = _env_str("SMTP_HOST")
-        self.SMTP_PORT: int | None = _env_int("SMTP_PORT", 0) or None
-        self.SMTP_USERNAME: str | None = _env_str("SMTP_USERNAME", aliases=("SMTP_USER",))
-        self.SMTP_PASSWORD: str | None = _env_str("SMTP_PASSWORD", aliases=("SMTP_PASS",))
-        self.SMTP_USE_TLS: bool = _env_bool("SMTP_USE_TLS", True, aliases=("SMTP_TLS",))
-        self.SMTP_USE_SSL: bool = _env_bool("SMTP_USE_SSL", False, aliases=("SMTP_SECURE", "SMTP_SSL"))
-        self.SMTP_TIMEOUT: int = _env_int("SMTP_TIMEOUT", 10)
-        self.SMTP_VERIFY_ON_STARTUP: bool = _env_bool("SMTP_VERIFY_ON_STARTUP", False)
 
         self.REMEDIATION_WEBHOOK_URLS: str = _env_str("REMEDIATION_WEBHOOK_URLS", "") or ""
         self.REMEDIATION_WEBHOOK_TIMEOUT_SECONDS: float = _env_float("REMEDIATION_WEBHOOK_TIMEOUT_SECONDS", 3.0)
@@ -283,29 +275,6 @@ class Settings:
         if not api_key_prefix.endswith("_"):
             raise ValueError("API_KEY_PREFIX must end with '_'")
 
-        email_required = {
-            "SMTP_HOST": self.SMTP_HOST,
-            "SMTP_PORT": self.SMTP_PORT,
-            "SMTP_USER": self.SMTP_USERNAME,
-            "SMTP_PASS": self.SMTP_PASSWORD,
-            "FROM_EMAIL": self.REMEDIATION_EMAIL_FROM,
-        }
-        populated = [
-            name
-            for name, value in email_required.items()
-            if value is not None and (not isinstance(value, str) or value.strip())
-        ]
-        if populated and len(populated) != len(email_required):
-            missing_email = [name for name, value in email_required.items() if name not in populated]
-            raise ValueError("Missing required email environment variables: " + ", ".join(missing_email))
-
-        if self.SMTP_PORT is not None:
-            smtp_port = int(self.SMTP_PORT)
-            if smtp_port <= 0 or smtp_port > 65535:
-                raise ValueError("SMTP_PORT must be a valid TCP port number")
-        if self.SMTP_USE_TLS and self.SMTP_USE_SSL:
-            raise ValueError("Configure either SMTP_USE_TLS or SMTP_USE_SSL, not both")
-
         if int(self.SENTINEL_RISK_THRESHOLD) < 1 or int(self.SENTINEL_RISK_THRESHOLD) > 100:
             raise ValueError("SENTINEL_RISK_THRESHOLD must be between 1 and 100")
         if int(self.SENTINEL_MAX_DECODE_DEPTH) < 1 or int(self.SENTINEL_MAX_DECODE_DEPTH) > 8:
@@ -376,13 +345,6 @@ class Settings:
         if not raw:
             return []
         return [domain.strip() for domain in raw.split(",") if domain.strip()]
-
-    @property
-    def smtp_timeout_seconds(self) -> float:
-        raw_timeout = int(self.SMTP_TIMEOUT or 10)
-        if raw_timeout > 120:
-            return max(raw_timeout / 1000.0, 5.0)
-        return max(float(raw_timeout), 5.0)
 
     @property
     def is_production(self) -> bool:

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.config import settings
 from app.main import app
 from app.middleware import rate_limiter
 from app.routers import contact_router
@@ -85,13 +85,35 @@ def test_contact_requires_identity_and_message(contact_client, field):
 
 def test_contact_delivery_failure_is_not_reported_as_success(contact_client):
     client, sender = contact_client
-    sender.return_value = EmailSendResult(success=False, error="SMTP credentials are invalid")
+    sender.return_value = EmailSendResult(success=False, error="Resend API key is invalid")
     response = client.post("/api/v1/contact", json=PAYLOAD)
 
     assert response.status_code == 502
     assert response.json()["success"] is False
     assert "support@mefyx.com" in response.json()["error"]["message"]
-    assert "SMTP credentials" not in response.text
+    assert "Resend API key" not in response.text
+
+
+def test_contact_resend_rejection_returns_recoverable_error(contact_client, resend_transport, monkeypatch):
+    client, _ = contact_client
+    monkeypatch.setattr(contact_router, "send_contact_email_async", contact_email_service.send_contact_email_async)
+    resend_transport.response = httpx.Response(
+        403, json={"name": "validation_error", "message": "Sending domain is not verified"},
+    )
+
+    response = client.post("/api/v1/contact", json=PAYLOAD)
+
+    assert response.status_code == 502, response.text
+    assert response.json()["success"] is False
+    assert "support@mefyx.com" in response.json()["error"]["message"]
+    assert "Sending domain is not verified" not in response.text
+    assert len(resend_transport.requests) == 1
+    request = resend_transport.requests[0]
+    assert str(request.url) == "https://api.resend.com/emails"
+    assert json.loads(request.content)["reply_to"] == "ada@example.com"
+
+    resend_transport.response = httpx.Response(200, json={"id": "contact-retry"})
+    assert client.post("/api/v1/contact", json=PAYLOAD).status_code == 200
 
 
 def test_contact_limits_attempts_for_fifteen_minutes_and_ignores_spoofed_headers(contact_client, monkeypatch):
@@ -120,7 +142,7 @@ def test_contact_limits_attempts_for_fifteen_minutes_and_ignores_spoofed_headers
 @pytest.mark.parametrize("invalid", [False, True])
 def test_contact_failed_attempts_also_consume_rate_limit(contact_client, invalid):
     client, sender = contact_client
-    sender.return_value = EmailSendResult(success=False, error="SMTP unavailable")
+    sender.return_value = EmailSendResult(success=False, error="Resend unavailable")
     payload = {**PAYLOAD, "message": " "} if invalid else PAYLOAD
     for _ in range(5):
         assert client.post("/api/v1/contact", json=payload).status_code == (422 if invalid else 502)
@@ -128,32 +150,26 @@ def test_contact_failed_attempts_also_consume_rate_limit(contact_client, invalid
     assert sender.await_count == (0 if invalid else 5)
 
 
-@pytest.fixture
-def smtp_server(monkeypatch):
-    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.example.com")
-    monkeypatch.setattr(settings, "SMTP_PORT", 587)
-    monkeypatch.setattr(settings, "SMTP_USERNAME", "mailer@example.com")
-    monkeypatch.setattr(settings, "SMTP_PASSWORD", "test-only")
-    monkeypatch.setattr(settings, "REMEDIATION_EMAIL_FROM", "Mefyx <mailer@example.com>")
-    connection = MagicMock()
-    monkeypatch.setattr(email_service, "_open_smtp_connection", connection)
-    return connection.return_value.__enter__.return_value
-
-
-def test_contact_email_uses_support_recipient_reply_to_and_escaped_content(smtp_server):
+def test_contact_email_uses_support_recipient_reply_to_and_escaped_content(resend_transport):
     result = asyncio.run(contact_email_service.send_contact_email_async(
         first_name="Ada <script>", last_name="Lovelace", email="ada@example.com",
         company="Engines & Co.", message="First line\n<script>alert('test')</script>",
     ))
 
     assert result.success is True
-    message = smtp_server.send_message.call_args.args[0]
-    assert str(message["From"]) == "Mefyx <mailer@example.com>"
-    assert str(message["To"]) == "support@mefyx.com"
-    assert str(message["Reply-To"]) == "ada@example.com"
-    assert str(message["Subject"]) == "New contact form submission"
-    plain = message.get_body(preferencelist=("plain",)).get_content()
-    html = message.get_body(preferencelist=("html",)).get_content()
+    assert result.message_id == "email-test-id"
+    assert len(resend_transport.requests) == 1
+    request = resend_transport.requests[0]
+    assert request.method == "POST"
+    assert str(request.url) == "https://api.resend.com/emails"
+    assert request.headers["Authorization"] == "Bearer re_test_only"
+    message = json.loads(request.content)
+    assert message["from"] == "Mefyx <noreply@mefyx.com>"
+    assert message["to"] == ["support@mefyx.com"]
+    assert message["reply_to"] == "ada@example.com"
+    assert message["subject"] == "New contact form submission"
+    plain = message["text"]
+    html = message["html"]
     assert "Name: Ada <script> Lovelace" in plain
     assert "Email: ada@example.com" in plain
     assert "Company: Engines & Co." in plain
@@ -163,20 +179,21 @@ def test_contact_email_uses_support_recipient_reply_to_and_escaped_content(smtp_
     assert "Engines &amp; Co." in html
 
 
-def test_reply_to_header_injection_is_rejected(smtp_server):
+def test_reply_to_header_injection_is_rejected(resend_transport):
     result = email_service.send_email(
         to="support@mefyx.com", subject="Contact", html="<p>Hi</p>",
         reply_to="ada@example.com\r\nBcc: spam@example.com",
     )
 
     assert result.success is False
-    smtp_server.send_message.assert_not_called()
+    assert resend_transport.requests == []
 
 
-def test_existing_email_callers_do_not_gain_reply_to(smtp_server):
+def test_existing_email_callers_do_not_gain_reply_to(resend_transport):
     result = email_service.send_verification_email(recipient_email="ada@example.com", token="test-token")
 
     assert result.success is True
-    message = smtp_server.send_message.call_args.args[0]
-    assert str(message["To"]) == "ada@example.com"
-    assert message["Reply-To"] is None
+    assert len(resend_transport.requests) == 1
+    message = json.loads(resend_transport.requests[0].content)
+    assert message["to"] == ["ada@example.com"]
+    assert "reply_to" not in message

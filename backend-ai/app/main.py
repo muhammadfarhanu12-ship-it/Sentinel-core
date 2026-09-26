@@ -55,7 +55,6 @@ from app.schemas.api_schema import fail
 from app.security.security_enforcement_layer import SecurityEnforcementInput
 from app.security.sentinel_core import process_request as process_sentinel_request
 from app.security.startup import initialize_security_stack
-from app.services.email_service import verify_smtp_connection
 from app.services.security_service import scan_prompt
 from app.services.sentinel_core import build_sentinel_verdict
 from app.services.threat_detection import ThreatDetectionService
@@ -121,7 +120,6 @@ async def lifespan(app: FastAPI):
     app.state.mongodb_client = None
     app.state.database = None
     app.state.mongo_startup_error = None
-    app.state.smtp_startup_error = None
     app.state.admin_startup_error = None
     app.state.security_startup_error = None
     app.state.security_startup_status = None
@@ -142,13 +140,6 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         app.state.admin_startup_error = str(exc)
         logger.exception("Admin startup bootstrap failed; continuing without dedicated admin plane")
-
-    if settings.SMTP_VERIFY_ON_STARTUP:
-        try:
-            verify_smtp_connection()
-        except Exception as exc:
-            app.state.smtp_startup_error = str(exc)
-            logger.exception("SMTP startup verification failed; continuing in degraded mode")
 
     try:
         security_startup_status = initialize_security_stack()
@@ -441,13 +432,10 @@ async def analyze(payload: SecurityRequest) -> dict[str, object]:
     return verdict
 
 
-def _smtp_is_configured() -> bool:
+def _email_is_configured() -> bool:
     required_values = [
-        settings.SMTP_HOST,
-        settings.SMTP_PORT,
-        settings.SMTP_USERNAME,
-        settings.SMTP_PASSWORD,
-        settings.REMEDIATION_EMAIL_FROM,
+        settings.RESEND_API_KEY,
+        settings.EMAIL_FROM_ADDRESS,
     ]
     return all(value is not None and str(value).strip() for value in required_values)
 
@@ -498,9 +486,7 @@ async def health(response: Response) -> dict[str, object]:
         "mongo_ready": bool(mongo_status.get("ready")),
         "mongo_last_checked_at": mongo_status.get("last_checked_at"),
         "mongo_last_connected_at": mongo_status.get("last_connected_at"),
-        "smtp_configured": _smtp_is_configured(),
-        "smtp_verify_on_startup": settings.SMTP_VERIFY_ON_STARTUP,
-        "smtp_startup_error": getattr(app.state, "smtp_startup_error", None),
+        "email_configured": _email_is_configured(),
         "mongo_startup_error": _summarize_dependency_error(getattr(app.state, "mongo_startup_error", None)),
         "security_startup_error": getattr(app.state, "security_startup_error", None),
         "security_startup_status": getattr(app.state, "security_startup_status", None),
