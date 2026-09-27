@@ -27,7 +27,7 @@ export default function Billing() {
   const [searchParams] = useSearchParams();
   const returnedFromCheckout = searchParams.get('checkout') === 'success';
   const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -148,7 +148,7 @@ export default function Billing() {
           {subscription?.creem_customer_id && (
             <Button
               variant="outline"
-              disabled={isOpeningPortal || isLoading}
+              disabled={isOpeningPortal || loadingPlan !== null}
               onClick={async () => {
                 setError(null);
                 setIsOpeningPortal(true);
@@ -170,7 +170,7 @@ export default function Billing() {
           )}
           <Button
             variant="outline"
-            disabled={isRefreshing || isLoading || isOpeningPortal}
+            disabled={isRefreshing || loadingPlan !== null || isOpeningPortal}
             onClick={() => {
               setError(null);
               void loadSubscription();
@@ -249,12 +249,12 @@ export default function Billing() {
               <Button 
                 className="w-full" 
                 variant={plan.popular ? 'default' : 'outline'}
-                disabled={isLoading || isOpeningPortal || !subscription || subscription.tier === plan.name || (plan.name === 'FREE' && subscription.cancel_at_period_end)}
+                disabled={loadingPlan !== null || isOpeningPortal || !subscription || subscription.tier === plan.name || (plan.name === 'FREE' && subscription.cancel_at_period_end)}
                 onClick={async () => {
                   if (!subscription || subscription.tier === plan.name) return;
                   setError(null);
                   setMessage(null);
-                  setIsLoading(true);
+                  setLoadingPlan(plan.name);
                   try {
                     const data = await authedFetchJson<CheckoutResponse>('/api/v1/billing/create-checkout-session', {
                       method: 'POST',
@@ -273,11 +273,11 @@ export default function Billing() {
                   } catch (err: unknown) {
                     setError(err instanceof Error ? err.message : 'Checkout failed');
                   } finally {
-                    setIsLoading(false);
+                    setLoadingPlan(null);
                   }
                 }}
               >
-                {subscription?.tier === plan.name ? 'Current Plan' : plan.name === 'FREE' && subscription?.cancel_at_period_end ? 'Cancellation scheduled' : isLoading ? 'Working...' : plan.cta}
+                {subscription?.tier === plan.name ? 'Current Plan' : plan.name === 'FREE' && subscription?.cancel_at_period_end ? 'Cancellation scheduled' : loadingPlan === plan.name ? 'Working...' : plan.cta}
               </Button>
             </CardFooter>
           </Card>
