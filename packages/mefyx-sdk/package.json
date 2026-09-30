@@ -1,0 +1,21 @@
+{
+  "name": "@mefyx/sdk",
+  "version": "0.1.0",
+  "description": "Minimal client for the Mefyx scan and gateway APIs",
+  "private": true,
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js"
+    }
+  },
+  "files": ["index.js", "index.d.ts", "README.md"],
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build": "node --check index.js",
+    "test": "node --test test/client.test.js"
+  }
+}

@@ -235,7 +235,7 @@ export default function LandingPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {[
                 { icon: Shield, title: 'Injection Guard', desc: 'Real-time scanning of every incoming prompt for malicious intent.', benefit: 'Prevents jailbreaks and system overrides.' },
-                { icon: Lock, title: 'Privacy Shield', desc: 'Automatically detects and masks PII before it leaves your network.', benefit: 'Ensures HIPAA and GDPR compliance for AI.' },
+                { icon: Lock, title: 'Privacy Shield', desc: "Detects supported PII patterns and returns redacted scan content from Mefyx's API servers.", benefit: 'PII detection and redaction support your compliance requirements.' },
                 { icon: Layers, title: 'Universal SDK', desc: 'One-line integration for OpenAI, Anthropic, and local LLMs.', benefit: 'No vendor lock-in; switch models securely.' },
                 { icon: Key, title: 'Policy Enforcement', desc: 'Applies security policies to allow, block, or require review of risky requests.', benefit: 'Returns policy matches and enforcement decisions.' },
               ].map((feature, i) => (
@@ -379,7 +379,7 @@ export default function LandingPage() {
                 <span className="text-slate-400 ml-2">/month</span>
               </div>
               <ul className="space-y-4 mb-8 flex-1">
-                <li className="flex items-start space-x-3 text-sm text-slate-300"><CheckCircle2 className="w-4 h-4 text-indigo-400 mt-0.5" /><span>Unlimited requests</span></li>
+                <li className="flex items-start space-x-3 text-sm text-slate-300"><CheckCircle2 className="w-4 h-4 text-indigo-400 mt-0.5" /><span>250,000 requests/month</span></li>
                 <li className="flex items-start space-x-3 text-sm text-slate-300"><CheckCircle2 className="w-4 h-4 text-indigo-400 mt-0.5" /><span>Deep AI threat analysis</span></li>
                 <li className="flex items-start space-x-3 text-sm text-slate-300"><CheckCircle2 className="w-4 h-4 text-indigo-400 mt-0.5" /><span>Team dashboard</span></li>
                 <li className="flex items-start space-x-3 text-sm text-slate-300"><CheckCircle2 className="w-4 h-4 text-indigo-400 mt-0.5" /><span>Multiple API keys</span></li>

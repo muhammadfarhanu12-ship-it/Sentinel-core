@@ -8,25 +8,25 @@ const docsSections = [
     id: 'api-documentation',
     icon: Code2,
     title: 'API Documentation',
-    description: 'Review request formats, response fields, event payloads, and error handling patterns for Mefyx security APIs.',
+    description: 'POST /api/v1/scan returns a security assessment. POST /api/v1/gateway/chat accepts a provider, model, and prompt or messages, and returns content, usage, security, and request_id inside the API data envelope.',
   },
   {
     id: 'quick-start',
     icon: Terminal,
     title: 'Quick Start',
-    description: 'Install the SDK, create an API key, route your first AI request through Mefyx, and inspect the security result.',
+    description: 'With Node.js 18 or later, install packages/mefyx-sdk from a repository checkout into your server application. Set MEFYX_BASE_URL to your API origin (for example http://localhost:8000, without /api) and MEFYX_API_KEY to a key created in your account. Save the example as scan.mjs and run node scan.mjs.',
   },
   {
     id: 'authentication',
     icon: KeyRound,
     title: 'Authentication',
-    description: 'Learn how to protect API keys, scope team access, and pass authenticated requests from trusted services.',
+    description: 'Run these examples on your server and keep credentials out of browser bundles. The SDK sends apiKey as x-api-key. You can supply bearerToken instead for an authenticated session. Your account plan determines quotas, models, and available scan tiers.',
   },
   {
     id: 'sdk',
     icon: PackageCheck,
-    title: 'SDK',
-    description: 'Use language-friendly helpers to add scanning, redaction, and monitoring to AI applications with minimal code.',
+    title: 'JavaScript SDK (local package)',
+    description: 'The repository includes @mefyx/sdk with TypeScript declarations and scan() and chat() methods. It is not published to npm yet. Methods return the API data field and throw MefyxApiError for API failures. Security policies are applied by the server; there is no named policy selector.',
   },
 ];
 
@@ -34,8 +34,8 @@ export default function Docs() {
   return (
     <PublicLayout>
       <SEO
-        title="Mefyx Docs | AI Security API Documentation and SDKs"
-        description="Start building with Mefyx documentation for API security, quick start guides, authentication, SDKs, and AI threat monitoring."
+        title="Mefyx Docs | AI Security API and JavaScript SDK"
+        description="Connect to the Mefyx scan and gateway APIs with the repository's JavaScript SDK, authentication guidance, and request examples."
         path="/docs"
       />
 
@@ -50,7 +50,7 @@ export default function Docs() {
               Build secure AI workflows with Mefyx.
             </h1>
             <p className="text-lg md:text-xl text-slate-400 leading-relaxed">
-              Find the guides, API references, authentication patterns, and SDK resources needed to connect Mefyx to production AI applications.
+              Connect your server application to the scan and gateway APIs with the repository's JavaScript SDK.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 pt-10">
               <a href="#quick-start" className="inline-flex items-center justify-center space-x-2 bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium transition-all">
@@ -68,18 +68,31 @@ export default function Docs() {
               <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
               <div className="w-3 h-3 rounded-full bg-green-500/80" />
             </div>
+            <div className="px-6 pt-6 text-sm text-slate-400">
+              <p>Install the local package into your server application. Replace the path with your repository checkout:</p>
+              <pre className="mt-3 text-slate-300 overflow-x-auto"><code>npm install /path/to/sentinel-dashboard/packages/mefyx-sdk</code></pre>
+            </div>
             <pre className="p-6 text-sm text-slate-300 overflow-x-auto">
               <code>{`import { Mefyx } from '@mefyx/sdk';
 
 const mefyx = new Mefyx({
+  baseUrl: process.env.MEFYX_BASE_URL,
   apiKey: process.env.MEFYX_API_KEY,
 });
 
 const result = await mefyx.scan({
-  prompt: userPrompt,
-  policy: 'production-ai-app',
-});`}</code>
+  prompt: 'Summarize our public product guide.',
+  provider: 'local',
+  model: 'local',
+});
+
+console.log(result.status, result.risk_score);
+console.log(result.sanitized_content);`}</code>
             </pre>
+            <p className="px-6 pb-6 text-sm text-slate-400 leading-relaxed">
+              This example requests a standalone scan. The local provider label does not forward to a local LLM.
+              A successful scan response can still report BLOCKED or REDACTED; inspect its decision and review flags before taking further action.
+            </p>
           </div>
         </div>
       </section>

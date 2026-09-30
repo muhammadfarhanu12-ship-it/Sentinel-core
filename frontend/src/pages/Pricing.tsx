@@ -25,7 +25,7 @@ const plans = [
     name: 'Business',
     price: '$49',
     description: 'For companies standardizing AI security across multiple products.',
-    features: ['Unlimited projects', 'Team dashboard', 'Multiple API keys', 'Audit-ready reports', 'Priority support'],
+    features: ['Team dashboard', 'Multiple API keys', 'Audit-ready reports', 'Priority support'],
     cta: 'Start Business',
     to: '/signup',
   },
