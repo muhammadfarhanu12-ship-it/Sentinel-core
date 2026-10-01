@@ -21,46 +21,40 @@ export default function Documentation() {
         <CardHeader>
           <div className="flex items-center space-x-2">
             <Server className="w-5 h-5 text-indigo-400" />
-            <CardTitle>Architecture Diagram</CardTitle>
+            <CardTitle>Current Architecture</CardTitle>
           </div>
-          <CardDescription>High-level flow of the Mefyx AI ecosystem.</CardDescription>
+          <CardDescription>The gateway checks requests, then forwards permitted messages to the provider and model selected by the caller.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="bg-[#0d1117] border border-white/10 rounded-lg p-6 font-mono text-sm text-slate-300 overflow-x-auto whitespace-pre">
 {`[ User Application ]
        │
-       ▼  (1) POST /api/v1/gateway/chat (HTTP or SDK)
+       ▼  POST /api/v1/gateway/chat (HTTP or SDK)
 ┌─────────────────────────────────────────────────────────┐
-│                 MEFYX GATEWAY (Edge)                    │
+│                     MEFYX GATEWAY                       │
 │                                                         │
-│  ┌──────────────┐   ┌──────────────┐   ┌─────────────┐  │
-│  │ Rate Limiter │──▶│ Auth & Tier  │──▶│ Policy Engine│  │
-│  └──────────────┘   └──────────────┘   └─────────────┘  │
-│                            │                            │
-│                            ▼                            │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │                SECURITY ENGINE                    │  │
-│  │  • Prompt Injection Detector  • PII Scanner       │  │
-│  │  • Malicious Intent Analysis  • Data Redactor     │  │
-│  └───────────────────────────────────────────────────┘  │
-│                            │                            │
-│                            ▼                            │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │              ROUTING & LOAD BALANCING             │  │
-│  └───────────────────────────────────────────────────┘  │
+│  Authentication, tier, quota and rate-limit checks       │
+│                         │                               │
+│                         ▼                               │
+│  Security scan and policy decision                      │
+│  Blocked or redacted requests return HTTP 403.           │
+│                         │                               │
+│                         ▼                               │
+│  Forward permitted messages to the caller's             │
+│  selected provider and model.                           │
 └─────────────────────────────────────────────────────────┘
-       │                     │                     │
-       ▼                     ▼                     ▼
-[ OpenAI API ]        [ Anthropic ]         [ Local LLM ]
+       │
+       ▼  One requested provider (subject to availability)
+[ Gemini API ]  [ OpenAI API ]  [ Anthropic API ]  [ xAI API ]
 
-       ▲
-       │ (2) Telemetry & Logs
+[ Gateway request records ]
+       │
        ▼
 ┌─────────────────────────────────────────────────────────┐
-│               MEFYX AI CONTROL PLANE                    │
+│                   WORKSPACE DASHBOARD                   │
 │                                                         │
-│  • Threat Intelligence Engine (Global Pattern DB)       │
-│  • Monitoring Dashboard (Analytics, Logs, Billing)      │
+│  • Workspace audit logs and usage records               │
+│  • Analytics and billing                                │
 └─────────────────────────────────────────────────────────┘`}
           </div>
         </CardContent>
@@ -130,19 +124,19 @@ export default function Documentation() {
         </CardContent>
       </Card>
 
-      {/* Data Schema */}
+      {/* Proposed Data Schema */}
       <Card className="bg-slate-900/40 border-white/5">
         <CardHeader>
           <div className="flex items-center space-x-2">
             <Database className="w-5 h-5 text-blue-400" />
-            <CardTitle>Data Schema</CardTitle>
+            <CardTitle>Proposed Data Schema (Not yet implemented)</CardTitle>
           </div>
-          <CardDescription>Core database entities (PostgreSQL / ClickHouse).</CardDescription>
+          <CardDescription>Illustrative PostgreSQL / ClickHouse design for exploration. These proposed tables are not the current storage schema; ClickHouse ingestion is not implemented.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-[#0d1117] border border-white/10 rounded-lg p-4 font-mono text-xs text-slate-300">
-              <div className="text-indigo-400 font-bold mb-2">Table: Users</div>
+              <div className="text-indigo-400 font-bold mb-2">Proposed table: Users</div>
               id: UUID PRIMARY KEY<br/>
               email: VARCHAR UNIQUE<br/>
               tier: ENUM('FREE', 'PRO', 'BUSINESS')<br/>
@@ -150,7 +144,7 @@ export default function Documentation() {
               created_at: TIMESTAMP
             </div>
             <div className="bg-[#0d1117] border border-white/10 rounded-lg p-4 font-mono text-xs text-slate-300">
-              <div className="text-indigo-400 font-bold mb-2">Table: API_Keys</div>
+              <div className="text-indigo-400 font-bold mb-2">Proposed table: API_Keys</div>
               id: UUID PRIMARY KEY<br/>
               user_id: UUID FOREIGN KEY<br/>
               key_hash: VARCHAR<br/>
@@ -158,7 +152,7 @@ export default function Documentation() {
               status: ENUM('ACTIVE', 'REVOKED', 'QUARANTINED')
             </div>
             <div className="bg-[#0d1117] border border-white/10 rounded-lg p-4 font-mono text-xs text-slate-300 md:col-span-2">
-              <div className="text-indigo-400 font-bold mb-2">Table: Security_Logs (ClickHouse for scale)</div>
+              <div className="text-indigo-400 font-bold mb-2">Proposed table: Security_Logs (ClickHouse, not yet implemented)</div>
               id: UUID PRIMARY KEY<br/>
               api_key_id: UUID<br/>
               timestamp: TIMESTAMP<br/>
@@ -171,7 +165,7 @@ export default function Documentation() {
               raw_payload: JSONB
             </div>
             <div className="bg-[#0d1117] border border-white/10 rounded-lg p-4 font-mono text-xs text-slate-300 md:col-span-2">
-              <div className="text-indigo-400 font-bold mb-2">Table: Remediation_Logs</div>
+              <div className="text-indigo-400 font-bold mb-2">Proposed table: Remediation_Logs</div>
               id: UUID PRIMARY KEY<br/>
               created_at: TIMESTAMP<br/>
               user_id: UUID<br/>
@@ -335,43 +329,43 @@ try {
         </CardContent>
       </Card>
 
-      {/* Implementation Suggestions */}
+      {/* Implementation Proposals */}
       <Card className="bg-slate-900/40 border-white/5">
         <CardHeader>
           <div className="flex items-center space-x-2">
             <Shield className="w-5 h-5 text-red-400" />
-            <CardTitle>Implementation Suggestions</CardTitle>
+            <CardTitle>Implementation Proposals (Not yet implemented)</CardTitle>
           </div>
-          <CardDescription>Tech stack and scaling strategies for millions of API calls.</CardDescription>
+          <CardDescription>Ideas for future evaluation. The proposed additions below are not shipped capabilities or performance commitments.</CardDescription>
         </CardHeader>
         <CardContent>
           <ul className="space-y-4">
             <li className="flex items-start space-x-3">
               <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 shrink-0" />
               <div>
-                <strong className="text-slate-200 block">Edge Computing (Cloudflare Workers / Fastly)</strong>
-                <span className="text-sm text-slate-400">Deploy the Gateway API at the edge to minimize latency. Rate limiting and basic regex/keyword scanning (Free Tier) should happen here before hitting heavier models.</span>
+                <strong className="text-slate-200 block">Proposed: Edge deployment (Not yet implemented)</strong>
+                <span className="text-sm text-slate-400">Explore Cloudflare Workers or Fastly for gateway checks and rule scanning. Evaluate runtime compatibility and measure end-to-end latency before choosing an edge deployment.</span>
               </div>
             </li>
             <li className="flex items-start space-x-3">
               <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 shrink-0" />
               <div>
-                <strong className="text-slate-200 block">High-Performance Data Store (Redis & ClickHouse)</strong>
-                <span className="text-sm text-slate-400">Use Redis for distributed rate limiting and tier enforcement. Use ClickHouse for ingesting millions of security logs per second to power the Dashboard analytics.</span>
+                <strong className="text-slate-200 block">Proposed: Redis and ClickHouse scaling (Not yet implemented)</strong>
+                <span className="text-sm text-slate-400">Explore Redis for distributed rate limiting and ClickHouse for log analytics. A possible target of millions of logs per second would require implementation and representative benchmarks; no such throughput is established.</span>
               </div>
             </li>
             <li className="flex items-start space-x-3">
               <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 shrink-0" />
               <div>
-                <strong className="text-slate-200 block">Tiered Security Engine</strong>
-                <span className="text-sm text-slate-400">Free tier uses fast heuristics (YARA rules, Regex). Pro/Business tiers route prompts through a specialized, fine-tuned fast LLM (e.g., Gemini Flash or Llama 3 8B) trained specifically on prompt injection datasets.</span>
+                <strong className="text-slate-200 block">Proposed: YARA and fine-tuned classifiers (Not yet implemented)</strong>
+                <span className="text-sm text-slate-400">Explore YARA scanning and classifiers fine-tuned on prompt-injection datasets; evaluate detection quality and latency before adoption. Current scanning uses regex rules, structural checks on paid tiers, and optional Gemini classification on Business.</span>
               </div>
             </li>
             <li className="flex items-start space-x-3">
               <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-2 shrink-0" />
               <div>
-                <strong className="text-slate-200 block">Global Threat Intelligence Network</strong>
-                <span className="text-sm text-slate-400">Anonymize and aggregate blocked prompts across all customers to continuously update the signature database. A zero-day prompt injection discovered on Customer A's app instantly protects Customer B.</span>
+                <strong className="text-slate-200 block">Proposed: Global pattern database (Not yet implemented)</strong>
+                <span className="text-sm text-slate-400">Explore opt-in, anonymized signature sharing across customers and reviewed rule distribution. Any protection benefit or propagation time would need validation; this proposal does not provide instant protection across customers today.</span>
               </div>
             </li>
           </ul>

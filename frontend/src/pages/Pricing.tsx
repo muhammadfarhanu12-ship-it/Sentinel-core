@@ -16,7 +16,7 @@ const plans = [
     name: 'Growth',
     price: '$19',
     description: 'For teams shipping AI features that need stronger monitoring and response.',
-    features: ['50,000 AI requests per month', 'Advanced threat detection', 'PII redaction', 'Threat analytics dashboard', 'Priority scanning'],
+    features: ['50,000 AI requests per month', 'Advanced threat detection', 'PII redaction', 'Threat analytics dashboard', 'Higher request rate limits'],
     cta: 'Upgrade to Growth',
     to: '/signup',
     featured: true,

@@ -40,7 +40,7 @@ const features: Feature[] = [
     icon: Layers,
     title: 'SOC Automation',
     description: 'Turn AI security signals into repeatable response workflows so analysts can triage, investigate, and act faster.',
-    points: ['Automated enrichment', 'Escalation-ready evidence', 'Remediation workflow support'],
+    points: ['Local event context: detection labels, policy matches, and remediation outcomes when available', 'Escalation-ready evidence', 'Remediation workflow support'],
   },
   {
     icon: Lock,

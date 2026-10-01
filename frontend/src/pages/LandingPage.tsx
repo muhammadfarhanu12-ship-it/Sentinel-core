@@ -63,7 +63,7 @@ export default function LandingPage() {
                 <span className="text-transparent bg-clip-text bg-linear-to-r from-indigo-400 to-cyan-400">The Intelligent Firewall for the LLM Era.</span>
               </h1>
               <p className="text-lg md:text-xl text-slate-400 mb-10 max-w-3xl mx-auto">
-                Stop prompt injections, redact PII, and automate threat mitigation before they reach your models. One line of code for enterprise-grade AI security.
+                Inspect AI requests for prompt injection and sensitive data. Install and configure our JavaScript SDK to add scanning or gateway calls to your application.
               </p>
               
               <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4">
@@ -236,7 +236,7 @@ export default function LandingPage() {
               {[
                 { icon: Shield, title: 'Injection Guard', desc: 'Real-time scanning of every incoming prompt for malicious intent.', benefit: 'Prevents jailbreaks and system overrides.' },
                 { icon: Lock, title: 'Privacy Shield', desc: "Detects supported PII patterns and returns redacted scan content from Mefyx's API servers.", benefit: 'PII detection and redaction support your compliance requirements.' },
-                { icon: Layers, title: 'Universal SDK', desc: 'One-line integration for OpenAI, Anthropic, and local LLMs.', benefit: 'No vendor lock-in; switch models securely.' },
+                { icon: Layers, title: 'JavaScript SDK', desc: 'Call the scan API or use the gateway with Gemini, OpenAI, Anthropic, and xAI.', benefit: 'Choose a provider and model supported by your plan.' },
                 { icon: Key, title: 'Policy Enforcement', desc: 'Applies security policies to allow, block, or require review of risky requests.', benefit: 'Returns policy matches and enforcement decisions.' },
               ].map((feature, i) => (
                 <div key={i} className="group p-6 rounded-xl bg-slate-950/50 border border-white/5 hover:border-indigo-500/30 hover:bg-slate-900/80 transition-all duration-300">
@@ -272,7 +272,7 @@ export default function LandingPage() {
                   'Real-time threat analytics and scoring',
                   'Detailed security logs with raw payload inspection',
                   'Granular API key usage monitoring',
-                  'Live AI reasoning and chain-of-thought visibility'
+                  'Verdict explanations that describe detected risks in plain language'
                 ].map((item, i) => (
                   <li key={i} className="flex items-start space-x-3">
                     <CheckCircle2 className="w-5 h-5 text-clean shrink-0 mt-0.5" />
@@ -306,16 +306,19 @@ export default function LandingPage() {
           <div className="max-w-7xl mx-auto px-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
               <div>
-                <div className="text-4xl md:text-5xl font-bold text-white mb-2">99.9%</div>
-                <div className="text-indigo-300 font-medium">Threat Detection Rate</div>
+                <div className="text-3xl md:text-4xl font-bold text-white mb-2">Multi-layer</div>
+                <div className="text-indigo-300 font-medium">Threat detection</div>
+                <p className="mt-3 text-sm text-slate-400 leading-relaxed">Combines rule scores with tier-specific structural checks and optional Business AI scoring to flag risk.</p>
               </div>
               <div>
-                <div className="text-4xl md:text-5xl font-bold text-white mb-2">&lt;50ms</div>
-                <div className="text-indigo-300 font-medium">Added Scan Latency</div>
+                <div className="text-4xl md:text-5xl font-bold text-white mb-2">4</div>
+                <div className="text-indigo-300 font-medium">Gateway providers</div>
+                <p className="mt-3 text-sm text-slate-400 leading-relaxed">Gemini, OpenAI, Anthropic, and xAI. Availability depends on your plan and configured provider credentials.</p>
               </div>
               <div>
-                <div className="text-4xl md:text-5xl font-bold text-white mb-2">1 line</div>
-                <div className="text-indigo-300 font-medium">Of code to integrate</div>
+                <div className="text-3xl md:text-4xl font-bold text-white mb-2">JavaScript SDK</div>
+                <div className="text-indigo-300 font-medium">Install, configure, call</div>
+                <p className="mt-3 text-sm text-slate-400 leading-relaxed">Use scan() or chat() from the locally installable package.</p>
               </div>
             </div>
           </div>
@@ -364,7 +367,7 @@ export default function LandingPage() {
                 <li className="flex items-start space-x-3 text-sm text-slate-300"><CheckCircle2 className="w-4 h-4 text-indigo-400 mt-0.5" /><span>Advanced prompt injection detection</span></li>
                 <li className="flex items-start space-x-3 text-sm text-slate-300"><CheckCircle2 className="w-4 h-4 text-indigo-400 mt-0.5" /><span>PII data redaction</span></li>
                 <li className="flex items-start space-x-3 text-sm text-slate-300"><CheckCircle2 className="w-4 h-4 text-indigo-400 mt-0.5" /><span>Threat analytics dashboard</span></li>
-                <li className="flex items-start space-x-3 text-sm text-slate-300"><CheckCircle2 className="w-4 h-4 text-indigo-400 mt-0.5" /><span>Priority scanning</span></li>
+                <li className="flex items-start space-x-3 text-sm text-slate-300"><CheckCircle2 className="w-4 h-4 text-indigo-400 mt-0.5" /><span>Higher request rate limits</span></li>
               </ul>
               <Link to="/signup" className="w-full py-3 px-4 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white text-center font-medium transition-colors shadow-lg">
                 Upgrade to Pro
