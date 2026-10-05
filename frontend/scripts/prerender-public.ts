@@ -1,5 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { StaticRouter } from 'react-router-dom';
+import LandingPage from '../src/pages/LandingPage';
 import {
   AUTH_GATED_ROUTE_PREFIXES,
   AUTH_ROUTE_PATHS,
@@ -47,6 +51,19 @@ function removeMetaName(html: string, name: string) {
   return html.replace(pattern, '');
 }
 
+function upsertMetaProperty(html: string, property: string, content: string) {
+  const tag = `<meta property="${escapeHtml(property)}" content="${escapeHtml(content)}" />`;
+  const pattern = new RegExp(`<meta\\s+[^>]*property=["']${escapeRegExp(property)}["'][^>]*>`, 'i');
+
+  return pattern.test(html)
+    ? html.replace(pattern, tag)
+    : html.replace('</head>', `    ${tag}\n  </head>`);
+}
+
+function removeSocialMeta(html: string) {
+  return html.replace(/\s*<meta\s+[^>]*(?:property=["']og:[^"']+["']|name=["']twitter:[^"']+["'])[^>]*>/gi, '');
+}
+
 function upsertCanonical(html: string, href: string) {
   const tag = `<link rel="canonical" href="${escapeHtml(href)}" />`;
   return /<link\s+[^>]*rel=["']canonical["'][^>]*>/i.test(html)
@@ -70,46 +87,9 @@ function removeSchema(html: string) {
 }
 
 function landingHtml() {
-  return `
-      <div class="min-h-screen bg-slate-950 text-slate-50 font-sans">
-        <header class="border-b border-white/10 bg-slate-950">
-          <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-            <a href="/" class="text-xl font-bold">Mefyx</a>
-            <nav aria-label="Primary" class="flex gap-5 text-sm text-slate-300">
-              <a href="/signin">Sign In</a>
-              <a href="/signup">Start Free</a>
-            </nav>
-          </div>
-        </header>
-        <main>
-          <section class="mx-auto max-w-7xl px-6 py-20">
-            <p class="mb-4 text-sm font-medium text-indigo-300">AI application security</p>
-            <h1 class="max-w-4xl text-5xl font-bold leading-tight">Mefyx is an AI security firewall for LLM applications.</h1>
-            <p class="mt-6 max-w-3xl text-lg text-slate-300">${escapeHtml(LANDING_DESCRIPTION)}</p>
-            <div class="mt-8 flex flex-wrap gap-4">
-              <a href="/signup" class="rounded-lg bg-indigo-500 px-5 py-3 font-medium text-white">Start Free</a>
-              <a href="/docs" class="rounded-lg border border-white/15 px-5 py-3 font-medium text-white">View Documentation</a>
-            </div>
-          </section>
-          <section aria-labelledby="security-capabilities" class="border-t border-white/10 bg-slate-900/40">
-            <div class="mx-auto grid max-w-7xl gap-6 px-6 py-16 md:grid-cols-3">
-              <article>
-                <h2 id="security-capabilities" class="text-xl font-semibold">Prompt injection defense</h2>
-                <p class="mt-3 text-slate-400">Inspect AI prompts before they reach production models.</p>
-              </article>
-              <article>
-                <h2 class="text-xl font-semibold">Sensitive data controls</h2>
-                <p class="mt-3 text-slate-400">Detect and redact exposed secrets, credentials, and personal data.</p>
-              </article>
-              <article>
-                <h2 class="text-xl font-semibold">Security monitoring</h2>
-                <p class="mt-3 text-slate-400">Track AI security traffic, blocked requests, and operational signals.</p>
-              </article>
-            </div>
-          </section>
-        </main>
-      </div>
-    `.trim();
+  return renderToStaticMarkup(
+    createElement(StaticRouter, { location: '/' }, createElement(LandingPage)),
+  );
 }
 
 function setLandingRoot(html: string) {
@@ -129,11 +109,31 @@ function stripLandingRoot(html: string) {
 }
 
 function withLandingHead(html: string) {
-  return upsertSchema(upsertCanonical(upsertMetaName(upsertTitle(html, LANDING_TITLE), 'description', LANDING_DESCRIPTION), canonicalUrl('/')));
+  let updatedHtml = upsertSchema(upsertCanonical(upsertMetaName(upsertTitle(html, LANDING_TITLE), 'description', LANDING_DESCRIPTION), canonicalUrl('/')));
+
+  for (const [property, content] of [
+    ['og:type', 'website'],
+    ['og:site_name', 'Mefyx'],
+    ['og:title', LANDING_TITLE],
+    ['og:description', LANDING_DESCRIPTION],
+    ['og:url', canonicalUrl('/')],
+  ]) {
+    updatedHtml = upsertMetaProperty(updatedHtml, property, content);
+  }
+
+  for (const [name, content] of [
+    ['twitter:card', 'summary'],
+    ['twitter:title', LANDING_TITLE],
+    ['twitter:description', LANDING_DESCRIPTION],
+  ]) {
+    updatedHtml = upsertMetaName(updatedHtml, name, content);
+  }
+
+  return updatedHtml;
 }
 
 function withNoindexHead(html: string) {
-  const shellHtml = removeSchema(removeCanonical(removeMetaName(stripLandingRoot(html), 'description')));
+  const shellHtml = removeSocialMeta(removeSchema(removeCanonical(removeMetaName(stripLandingRoot(html), 'description'))));
   return upsertMetaName(upsertTitle(shellHtml, 'Mefyx App'), 'robots', ROBOTS_NOINDEX);
 }
 

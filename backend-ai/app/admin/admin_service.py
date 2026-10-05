@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -45,6 +44,7 @@ from app.security.admin_access import (
 from app.middleware.rate_limiter import check_rate_limit
 from app.security.roles import ADMIN_ROLE
 from app.services import admin_login_notification_service
+from app.services.auth_service import issue_password_reset_token
 from app.services.dashboard_service import record_audit_event
 from app.utils.api_key_generator import generate_api_key
 from app.utils.hashing import get_password_hash, verify_password
@@ -73,9 +73,7 @@ class AdminService:
 
     @staticmethod
     def _get_client_ip(request: Request) -> str:
-        forwarded = request.headers.get("x-forwarded-for")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
+        # Trust the ASGI server's explicitly configured proxy handling only.
         return request.client.host if request.client else "unknown"
 
     @staticmethod
@@ -494,28 +492,13 @@ class AdminService:
         )
 
         user = await self.db["users"].find_one({"email": normalized_email})
-        if user is None or not has_platform_admin_access(user):
-            return AdminForgotPasswordResponse(
-                message="If an admin account exists, password reset instructions have been generated."
-            )
-
-        raw_token = secrets.token_urlsafe(32)
-        expires_at = self._utcnow() + timedelta(minutes=30)
-        await self.db["users"].update_one(
-            {"_id": user["_id"]},
-            {
-                "$set": {
-                    "admin_reset_token_hash": self._hash_token(raw_token),
-                    "admin_reset_token_expiry": expires_at,
-                    "updated_at": self._utcnow(),
-                }
-            },
-        )
+        if user is not None and has_platform_admin_access(user):
+            # Admins use the same users collection and password as normal login.
+            # Deliver the existing single-use reset link to the verified inbox;
+            # never give an unauthenticated caller a password-reset capability.
+            await issue_password_reset_token(normalized_email)
         return AdminForgotPasswordResponse(
-            message="If an admin account exists, password reset instructions have been generated.",
-            email_sent=False,
-            reset_token=raw_token,
-            expires_at=expires_at,
+            message="If an eligible admin account exists, password reset instructions have been emailed.",
         )
 
     async def reset_password(self, payload: AdminResetPasswordRequest, request: Request) -> AdminMessageResponse:

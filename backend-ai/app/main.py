@@ -7,7 +7,7 @@ from time import perf_counter
 from urllib.parse import parse_qs
 from uuid import uuid4
 
-from fastapi import APIRouter, FastAPI, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -27,7 +27,8 @@ from app.db.mongo import (
     start_mongo_connection_background,
     wait_for_mongo_ready,
 )
-from app.middleware.auth_middleware import attach_security_context
+from app.middleware.auth_middleware import attach_security_context, get_current_user
+from app.middleware.public_rate_limiter import check_public_rate_limit
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.routes.admin import router as admin_router
 from app.routes.auth_routes import router as auth_router
@@ -378,7 +379,11 @@ async def root() -> dict[str, str]:
 
 @app.post("/analyze", include_in_schema=False)
 @app.post("/api/v1/analyze")
-async def analyze(payload: SecurityRequest) -> dict[str, object]:
+async def analyze(payload: SecurityRequest, request: Request, current_user: dict = Depends(get_current_user)) -> dict[str, object]:
+    await check_public_rate_limit(
+        str(current_user.get("_id") or current_user.get("id") or current_user["email"]),
+        scope="legacy_analyze:user", limit=10, window_seconds=60, request=request,
+    )
     request_context = dict(payload.context or {})
     if payload.session_id:
         request_context["session_id"] = payload.session_id

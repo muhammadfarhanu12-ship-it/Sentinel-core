@@ -1,7 +1,8 @@
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from app.schemas.turnstile_schema import TurnstileRequest
 
 
-class ContactRequest(BaseModel):
+class ContactRequest(TurnstileRequest):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     first_name: str = Field(alias="firstName", min_length=1, max_length=100)

@@ -33,6 +33,7 @@ const submission: ContactSubmission = {
   email: ' ada@example.com ',
   company: ' Example Ltd ',
   message: ' Please help secure our AI app. ',
+  turnstile_token: 'single-use-contact-token',
 };
 
 test('contact sends all trimmed fields to the configured backend without login credentials', async () => {
@@ -54,6 +55,7 @@ test('contact sends all trimmed fields to the configured backend without login c
   assert.deepEqual(JSON.parse(String(init.body)), {
     firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com',
     company: 'Example Ltd', message: 'Please help secure our AI app.',
+    turnstile_token: 'single-use-contact-token',
   });
 });
 
@@ -72,7 +74,15 @@ test('company is optional and blank required fields never make a request', async
   assert.equal(requests, 1);
 });
 
+test('contact does not send a request without a security verification token', async () => {
+  const service = await loadService(async () => {
+    assert.fail('Unverified submissions must not be sent.');
+  });
+  await assert.rejects(service.submitContact({ ...submission, turnstile_token: '' }), /complete the security verification/);
+});
+
 for (const { status, expected } of [
+  { status: 400, expected: /Security verification failed or expired/ },
   { status: 429, expected: /Too many messages.*15 minutes/ },
   { status: 422, expected: /Please check your name, email, company, and message/ },
   { status: 503, expected: /couldn't send your message.*support@mefyx.com/ },

@@ -91,6 +91,7 @@ declare module 'react/jsx-runtime' {
 
 declare module 'react-dom/server' {
   export function renderToString(node: any): string;
+  export function renderToStaticMarkup(node: React.ReactNode): string;
 }
 
 declare module 'react-dom/client' {

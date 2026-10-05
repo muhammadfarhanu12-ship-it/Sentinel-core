@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock
+from urllib.parse import parse_qs
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -44,6 +46,66 @@ from app.utils.token_generator import create_access_token
 from app.middleware.auth_middleware import decode_token
 
 oauth2_test_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+
+
+@pytest.fixture
+def turnstile_transport(monkeypatch):
+    """Only the external HTTP transport is replaced; real guards/verifier still run."""
+    from app.services import turnstile_service
+
+    state = SimpleNamespace(requests=[], response=None, used=set())
+
+    def handle_request(request):
+        state.requests.append(request)
+        if isinstance(state.response, Exception):
+            raise state.response
+        if state.response is not None:
+            return state.response
+        token = parse_qs(request.content.decode())["response"][0]
+        if token in state.used:
+            return httpx.Response(200, json={"success": False, "error-codes": ["timeout-or-duplicate"]})
+        state.used.add(token)
+        return httpx.Response(200, json={"success": True, "hostname": "mefyx.com", "action": token.split(":")[0]})
+
+    transport = httpx.MockTransport(handle_request)
+    client_module = SimpleNamespace(**vars(httpx))
+    client_module.AsyncClient = lambda **kwargs: httpx.AsyncClient(transport=transport, **kwargs)
+    monkeypatch.setattr(turnstile_service, "httpx", client_module)
+    monkeypatch.setattr(settings, "TURNSTILE_SECRET_KEY", "unit-test-only-server-credential")
+    monkeypatch.setattr(settings, "TURNSTILE_ALLOWED_HOSTNAMES", "mefyx.com")
+    monkeypatch.setattr(settings, "PUBLIC_RATE_LIMIT_BACKEND", "memory")
+    monkeypatch.setattr(settings, "APP_ENV", "test")
+    return state
+
+
+@pytest.fixture
+def verified_form_client(turnstile_transport):
+    """Browser substitute for existing business-flow tests: supply fresh challenges.
+
+    Protection rejection tests use ordinary TestClient instead, with no injection.
+    """
+    actions = {
+        "/auth/signup": "signup", "/auth/login": "login",
+        "/auth/forgot-password": "forgot_password", "/auth/reset-password": "reset_password",
+        "/auth/resend-verification": "resend_verification", "/contact": "contact",
+        "/admin/login": "admin_login", "/admin/auth/login": "admin_login",
+        "/admin/forgot-password": "admin_forgot_password", "/admin/reset-password": "admin_reset_password",
+        "/admin/request-access": "admin_request_access",
+    }
+
+    class VerifiedFormClient(TestClient):
+        def request(self, method, url, **kwargs):
+            path = httpx.URL(url).path
+            suffix = path.removeprefix("/api/v1").removeprefix("/api")
+            action = actions.get(suffix)
+            if method.upper() == "POST" and action:
+                for body_type in ("json", "data"):
+                    body = kwargs.get(body_type)
+                    if isinstance(body, dict) and "turnstile_token" not in body:
+                        kwargs[body_type] = {**body, "turnstile_token": f"{action}:{uuid4()}"}
+            return super().request(method, url, **kwargs)
+
+    return VerifiedFormClient
 
 
 @pytest.fixture(autouse=True)
@@ -440,7 +502,7 @@ def db_session(monkeypatch: pytest.MonkeyPatch) -> FakeSession:
 
 
 @pytest.fixture
-def client(db_session: FakeSession, monkeypatch: pytest.MonkeyPatch):
+def client(db_session: FakeSession, monkeypatch: pytest.MonkeyPatch, verified_form_client):
     admin_user = LegacyAdminService(db_session).ensure_default_admin()
     current_user = {
         "_id": str(admin_user.id),
@@ -594,7 +656,7 @@ def client(db_session: FakeSession, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(usage_router, "get_usage_summary", fake_usage_summary)
     monkeypatch.setattr(team_router, "list_team_members", fake_team_members)
 
-    with TestClient(app, raise_server_exceptions=False) as test_client:
+    with verified_form_client(app, raise_server_exceptions=False) as test_client:
         yield test_client
 
     app.dependency_overrides.clear()

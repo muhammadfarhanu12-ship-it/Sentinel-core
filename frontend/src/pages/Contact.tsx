@@ -3,10 +3,12 @@ import { useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { SEO } from '../components/SEO';
 import { PublicLayout } from '../components/layout/PublicLayout';
+import { Turnstile, useTurnstile } from '../components/Turnstile';
 import { submitContact } from '../services/contact';
 
 export default function Contact() {
   const submissionInFlight = useRef(false);
+  const challenge = useTurnstile();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -27,6 +29,7 @@ export default function Contact() {
         email: String(data.get('email') || ''),
         company: String(data.get('company') || ''),
         message: String(data.get('message') || ''),
+        turnstile_token: challenge.consumeToken(),
       });
       form.reset();
       setFeedback({ type: 'success', message: "Thanks, we'll get back to you shortly" });
@@ -36,6 +39,7 @@ export default function Contact() {
         message: error instanceof Error ? error.message : "We couldn't send your message. Please try again or email support@mefyx.com.",
       });
     } finally {
+      challenge.reset();
       submissionInFlight.current = false;
       setIsSubmitting(false);
     }
@@ -120,7 +124,8 @@ export default function Contact() {
                 Message
                 <textarea className="mt-2 min-h-36 w-full rounded-lg border border-white/10 bg-slate-950/70 px-3 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60" name="message" placeholder="Tell us about your AI security needs" maxLength={5000} required />
               </label>
-              <button type="submit" disabled={isSubmitting} className="mt-6 w-full inline-flex items-center justify-center space-x-2 bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium transition-all shadow-[0_0_20px_rgba(99,102,241,0.35)] disabled:opacity-60 disabled:cursor-wait">
+              <Turnstile action="contact" {...challenge.widgetProps} />
+              <button type="submit" disabled={isSubmitting || !challenge.token} className="mt-6 w-full inline-flex items-center justify-center space-x-2 bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium transition-all shadow-[0_0_20px_rgba(99,102,241,0.35)] disabled:opacity-60 disabled:cursor-wait">
                 <span>{isSubmitting ? 'Sending...' : 'Contact Sales'}</span>
                 {isSubmitting ? <LoaderCircle className="w-4 h-4 animate-spin" aria-hidden="true" /> : <ArrowRight className="w-4 h-4" aria-hidden="true" />}
               </button>

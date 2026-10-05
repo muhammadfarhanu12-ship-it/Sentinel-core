@@ -207,6 +207,9 @@ async def connect_to_mongo(*, app=None) -> None:
                     IndexModel([("expires_at", 1)], expireAfterSeconds=0),
                 ]
             )
+            await database.get_collection("public_rate_limits").create_indexes(
+                [IndexModel([("expires_at", 1)], expireAfterSeconds=0)]
+            )
 
             _mongo_client = client
             _database = database

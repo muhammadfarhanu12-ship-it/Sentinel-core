@@ -1,6 +1,7 @@
 export type AdminLoginPayload = {
   email: string;
   password: string;
+  turnstile_token: string;
 };
 
 export type AdminSessionUser = {

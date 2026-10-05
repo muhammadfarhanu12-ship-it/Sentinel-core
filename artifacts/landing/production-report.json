@@ -1,0 +1,106 @@
+{
+  "origin": "http://127.0.0.1:4173",
+  "viewports": [
+    {
+      "width": 320,
+      "pageWidth": 320,
+      "overflow": [],
+      "h1": "Stop AI agents from leaking money and financial data.",
+      "headings": [
+        "When an AI can act, a bad prompt costs more.",
+        "One checkpoint before the next action.",
+        "Protect the prompt. Control the action.",
+        "Put the guardrails to the test.",
+        "A security check between your app and your model.",
+        "Start free. Add room as you grow.",
+        "Read the details. Talk to the team.",
+        "Before you connect.",
+        "Add a checkpoint before money moves."
+      ],
+      "heroH1Visible": true,
+      "title": "Mefyx | Security for AI Agents That Handle Money",
+      "hasSkipTarget": true,
+      "scenarioCount": 11,
+      "faqOpens": true,
+      "menuOpens": true
+    },
+    {
+      "width": 375,
+      "pageWidth": 375,
+      "overflow": [],
+      "h1": "Stop AI agents from leaking money and financial data.",
+      "headings": [
+        "When an AI can act, a bad prompt costs more.",
+        "One checkpoint before the next action.",
+        "Protect the prompt. Control the action.",
+        "Put the guardrails to the test.",
+        "A security check between your app and your model.",
+        "Start free. Add room as you grow.",
+        "Read the details. Talk to the team.",
+        "Before you connect.",
+        "Add a checkpoint before money moves."
+      ],
+      "heroH1Visible": true,
+      "title": "Mefyx | Security for AI Agents That Handle Money",
+      "hasSkipTarget": true,
+      "scenarioCount": 11,
+      "faqOpens": true,
+      "menuOpens": true
+    },
+    {
+      "width": 768,
+      "pageWidth": 760,
+      "overflow": [],
+      "h1": "Stop AI agents from leaking money and financial data.",
+      "headings": [
+        "When an AI can act, a bad prompt costs more.",
+        "One checkpoint before the next action.",
+        "Protect the prompt. Control the action.",
+        "Put the guardrails to the test.",
+        "A security check between your app and your model.",
+        "Start free. Add room as you grow.",
+        "Read the details. Talk to the team.",
+        "Before you connect.",
+        "Add a checkpoint before money moves."
+      ],
+      "heroH1Visible": true,
+      "title": "Mefyx | Security for AI Agents That Handle Money",
+      "hasSkipTarget": true,
+      "scenarioCount": 11,
+      "faqOpens": true
+    },
+    {
+      "width": 1440,
+      "pageWidth": 1432,
+      "overflow": [],
+      "h1": "Stop AI agents from leaking money and financial data.",
+      "headings": [
+        "When an AI can act, a bad prompt costs more.",
+        "One checkpoint before the next action.",
+        "Protect the prompt. Control the action.",
+        "Put the guardrails to the test.",
+        "A security check between your app and your model.",
+        "Start free. Add room as you grow.",
+        "Read the details. Talk to the team.",
+        "Before you connect.",
+        "Add a checkpoint before money moves."
+      ],
+      "heroH1Visible": true,
+      "title": "Mefyx | Security for AI Agents That Handle Money",
+      "hasSkipTarget": true,
+      "scenarioCount": 11,
+      "faqOpens": true
+    }
+  ],
+  "cta": {
+    "path": "/signin",
+    "returnTo": "/app/playground",
+    "backToLanding": true
+  },
+  "security": {
+    "path": "/security",
+    "title": "Mefyx Security | Controls, Data Handling, and Approvals",
+    "heading": "Know what protects your AI workflow."
+  },
+  "consoleErrors": []
+}

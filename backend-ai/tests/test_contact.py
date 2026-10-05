@@ -26,12 +26,12 @@ PAYLOAD = {
 
 
 @pytest.fixture
-def contact_client(monkeypatch):
+def contact_client(monkeypatch, verified_form_client):
     monkeypatch.setattr(rate_limiter, "limiter", rate_limiter.RateLimiter())
     sender = AsyncMock(return_value=EmailSendResult(success=True, message_id="contact-test"))
     monkeypatch.setattr(contact_router, "send_contact_email_async", sender)
     # No lifespan context: this public endpoint needs neither Mongo nor startup services.
-    client = TestClient(app)
+    client = verified_form_client(app)
     yield client, sender
     client.close()
 
@@ -131,7 +131,7 @@ def test_contact_limits_attempts_for_fifteen_minutes_and_ignores_spoofed_headers
     async def submit_from_other_ip():
         transport = httpx.ASGITransport(app=app, client=("203.0.113.43", 1234))
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as other_client:
-            return await other_client.post("/api/v1/contact", json=PAYLOAD)
+            return await other_client.post("/api/v1/contact", json={**PAYLOAD, "email": "other@example.com", "turnstile_token": "contact:other-ip"})
 
     assert asyncio.run(submit_from_other_ip()).status_code == 200
     now[0] += 900

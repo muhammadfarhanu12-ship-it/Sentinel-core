@@ -6,6 +6,7 @@ export type ContactSubmission = {
   email: string;
   company?: string;
   message: string;
+  turnstile_token: string;
 };
 
 const SEND_FAILED_MESSAGE = "We couldn't send your message. Please try again or email support@mefyx.com.";
@@ -17,10 +18,14 @@ export async function submitContact(submission: ContactSubmission): Promise<void
     email: submission.email.trim(),
     company: submission.company?.trim() || '',
     message: submission.message.trim(),
+    turnstile_token: submission.turnstile_token,
   };
 
   if (!payload.firstName || !payload.lastName || !payload.email || !payload.message) {
     throw new Error('Please enter your first name, last name, email, and message.');
+  }
+  if (!payload.turnstile_token) {
+    throw new Error('Please complete the security verification and try again.');
   }
 
   const controller = new AbortController();
@@ -37,7 +42,10 @@ export async function submitContact(submission: ContactSubmission): Promise<void
     if (error instanceof ApiRequestError && error.status === 429) {
       throw new Error('Too many messages. Please wait 15 minutes before trying again.');
     }
-    if (error instanceof ApiRequestError && (error.status === 400 || error.status === 422)) {
+    if (error instanceof ApiRequestError && error.status === 400) {
+      throw new Error('Security verification failed or expired. Please verify again and resend your message.');
+    }
+    if (error instanceof ApiRequestError && error.status === 422) {
       throw new Error('Please check your name, email, company, and message and try again.');
     }
     throw new Error(SEND_FAILED_MESSAGE);

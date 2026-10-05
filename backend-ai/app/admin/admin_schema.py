@@ -3,11 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from app.schemas.turnstile_schema import TurnstileRequest
 
 from app.schemas.user_schema import PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, validate_password_strength
 
 
-class AdminLoginRequest(BaseModel):
+class AdminLoginRequest(TurnstileRequest):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     email: str
@@ -43,7 +44,7 @@ class AdminMessageResponse(BaseModel):
     message: str
 
 
-class AdminForgotPasswordRequest(BaseModel):
+class AdminForgotPasswordRequest(TurnstileRequest):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     email: str
@@ -56,7 +57,7 @@ class AdminForgotPasswordResponse(BaseModel):
     expires_at: datetime | None = None
 
 
-class AdminResetPasswordRequest(BaseModel):
+class AdminResetPasswordRequest(TurnstileRequest):
     token: str = Field(min_length=32, max_length=255)
     new_password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
 
@@ -66,7 +67,7 @@ class AdminResetPasswordRequest(BaseModel):
         return validate_password_strength(value)
 
 
-class AdminAccessRequestCreate(BaseModel):
+class AdminAccessRequestCreate(TurnstileRequest):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     email: str

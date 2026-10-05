@@ -26,6 +26,7 @@ from app.admin.admin_schema import (
 from app.admin.admin_service import AdminService
 from app.core.database import get_db
 from app.dependencies.admin_access import require_admin_permission
+from app.dependencies.public_forms import protect_public_form
 from app.models.user_model import user_model
 from app.schemas.api_schema import ApiResponse, ok
 from app.schemas.user_schema import UserResponse
@@ -56,8 +57,10 @@ async def admin_me(
     return ok(await service.get_admin_session(current_admin))
 
 
-@router.post("/login", response_model=ApiResponse[AdminTokenResponse])
-@router.post("/auth/login", response_model=ApiResponse[AdminTokenResponse])
+@router.post("/login", response_model=ApiResponse[AdminTokenResponse],
+             dependencies=[Depends(protect_public_form("admin_login", window_seconds=60))])
+@router.post("/auth/login", response_model=ApiResponse[AdminTokenResponse],
+             dependencies=[Depends(protect_public_form("admin_login", window_seconds=60))])
 async def admin_login(
     payload: AdminLoginRequest,
     request: Request,
@@ -66,7 +69,8 @@ async def admin_login(
     return ok(await service.login(str(payload.email), payload.password, request))
 
 
-@router.post("/forgot-password", response_model=ApiResponse[AdminForgotPasswordResponse])
+@router.post("/forgot-password", response_model=ApiResponse[AdminForgotPasswordResponse],
+             dependencies=[Depends(protect_public_form("admin_forgot_password", limit=3))])
 async def forgot_password(
     payload: AdminForgotPasswordRequest,
     request: Request,
@@ -75,7 +79,8 @@ async def forgot_password(
     return ok(await service.request_password_reset(str(payload.email), request))
 
 
-@router.post("/reset-password", response_model=ApiResponse[AdminMessageResponse])
+@router.post("/reset-password", response_model=ApiResponse[AdminMessageResponse],
+             dependencies=[Depends(protect_public_form("admin_reset_password", limit=10))])
 async def reset_password(
     payload: AdminResetPasswordRequest,
     request: Request,
@@ -88,6 +93,7 @@ async def reset_password(
     "/request-access",
     response_model=ApiResponse[AdminAccessRequestResponse],
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(protect_public_form("admin_request_access", limit=3, window_seconds=3600))],
 )
 async def request_access(
     payload: AdminAccessRequestCreate,

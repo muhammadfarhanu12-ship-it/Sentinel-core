@@ -114,6 +114,24 @@ export function SEO({ title, description, path, robots }: SEOProps) {
       records,
     );
 
+    for (const [name, content] of [
+      ['twitter:card', 'summary'],
+      ['twitter:title', title],
+      ['twitter:description', description],
+    ]) {
+      setHeadAttribute(
+        `meta[name="${name}"]`,
+        () => {
+          const meta = document.createElement('meta');
+          meta.setAttribute('name', name);
+          return meta;
+        },
+        'content',
+        content,
+        records,
+      );
+    }
+
     if (robots) {
       setHeadAttribute(
         'meta[name="robots"]',

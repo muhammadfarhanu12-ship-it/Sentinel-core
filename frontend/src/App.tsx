@@ -1,36 +1,37 @@
 import { Suspense, lazy, useEffect, type ReactNode } from 'react';
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { AppLayout } from './components/layout/AppLayout';
 import { LoadingSkeleton } from './components/enterprise/LoadingSkeleton';
 import { ScrollToTop } from './components/ScrollToTop';
 import { RobotsMeta } from './components/SEO';
 import { ToastProvider } from './components/ui/ToastProvider';
-import Dashboard from './pages/Dashboard';
-import Logs from './pages/Logs';
-import ApiKeys from './pages/ApiKeys';
-import Billing from './pages/Billing';
-import Settings from './pages/Settings';
-import Documentation from './pages/Documentation';
-import Playground from './pages/Playground';
-import Reports from './pages/Reports';
-import Threats from './pages/Threats';
 import LandingPage from './pages/LandingPage';
-import Features from './pages/Features';
-import Pricing from './pages/Pricing';
-import Docs from './pages/Docs';
-import Blog from './pages/Blog';
-import Contact from './pages/Contact';
-import PrivacyPolicy from './pages/PrivacyPolicy';
-import RefundPolicy from './pages/RefundPolicy';
-import TermsOfService from './pages/TermsOfService';
-import SignIn from './pages/auth/SignIn';
-import SignUp from './pages/auth/SignUp';
-import ForgotPassword from './pages/auth/ForgotPassword';
-import ResetPassword from './pages/auth/ResetPassword';
-import OAuthCallback from './pages/auth/OAuthCallback';
-import VerifyEmail from './pages/auth/VerifyEmail';
 import { ADMIN_APP_ORIGIN } from './services/api';
 
+const AppLayout = lazy(() => import('./components/layout/AppLayout').then((module) => ({ default: module.AppLayout })));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Logs = lazy(() => import('./pages/Logs'));
+const ApiKeys = lazy(() => import('./pages/ApiKeys'));
+const Billing = lazy(() => import('./pages/Billing'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Documentation = lazy(() => import('./pages/Documentation'));
+const Playground = lazy(() => import('./pages/Playground'));
+const Reports = lazy(() => import('./pages/Reports'));
+const Threats = lazy(() => import('./pages/Threats'));
+const Security = lazy(() => import('./pages/Security'));
+const Features = lazy(() => import('./pages/Features'));
+const Pricing = lazy(() => import('./pages/Pricing'));
+const Docs = lazy(() => import('./pages/Docs'));
+const Blog = lazy(() => import('./pages/Blog'));
+const Contact = lazy(() => import('./pages/Contact'));
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
+const RefundPolicy = lazy(() => import('./pages/RefundPolicy'));
+const TermsOfService = lazy(() => import('./pages/TermsOfService'));
+const SignIn = lazy(() => import('./pages/auth/SignIn'));
+const SignUp = lazy(() => import('./pages/auth/SignUp'));
+const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'));
+const OAuthCallback = lazy(() => import('./pages/auth/OAuthCallback'));
+const VerifyEmail = lazy(() => import('./pages/auth/VerifyEmail'));
 const AuditLogs = lazy(() => import('./pages/AuditLogs'));
 const UsageAnalytics = lazy(() => import('./pages/UsageAnalytics'));
 const TeamManagement = lazy(() => import('./pages/TeamManagement'));
@@ -39,11 +40,15 @@ function RouteFallback() {
   return <LoadingSkeleton rows={2} compact />;
 }
 
+function RouteSuspense({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
+}
+
 function NoIndexRoute({ children }: { children: ReactNode }) {
   return (
     <>
       <RobotsMeta />
-      {children}
+      <RouteSuspense>{children}</RouteSuspense>
     </>
   );
 }
@@ -65,8 +70,10 @@ export default function App() {
     <ToastProvider>
       <Router>
         <ScrollToTop />
-        <Routes>
+        <RouteSuspense>
+          <Routes>
           <Route path="/" element={<LandingPage />} />
+          <Route path="/security" element={<Security />} />
           <Route path="/features" element={<Features />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/docs" element={<Docs />} />
@@ -87,21 +94,22 @@ export default function App() {
           <Route path="/verify" element={<NoIndexRoute><VerifyEmail /></NoIndexRoute>} />
           <Route path="/admin/*" element={<NoIndexRoute><AdminAppRedirect /></NoIndexRoute>} />
           <Route path="/app" element={<NoIndexRoute><AppLayout /></NoIndexRoute>}>
-            <Route index element={<Dashboard />} />
-            <Route path="playground" element={<Playground />} />
-            <Route path="threats" element={<Threats />} />
-            <Route path="logs" element={<Logs />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="audit-logs" element={<Suspense fallback={<RouteFallback />}><AuditLogs /></Suspense>} />
-            <Route path="usage-analytics" element={<Suspense fallback={<RouteFallback />}><UsageAnalytics /></Suspense>} />
-            <Route path="team" element={<Suspense fallback={<RouteFallback />}><TeamManagement /></Suspense>} />
+            <Route index element={<RouteSuspense><Dashboard /></RouteSuspense>} />
+            <Route path="playground" element={<RouteSuspense><Playground /></RouteSuspense>} />
+            <Route path="threats" element={<RouteSuspense><Threats /></RouteSuspense>} />
+            <Route path="logs" element={<RouteSuspense><Logs /></RouteSuspense>} />
+            <Route path="reports" element={<RouteSuspense><Reports /></RouteSuspense>} />
+            <Route path="audit-logs" element={<RouteSuspense><AuditLogs /></RouteSuspense>} />
+            <Route path="usage-analytics" element={<RouteSuspense><UsageAnalytics /></RouteSuspense>} />
+            <Route path="team" element={<RouteSuspense><TeamManagement /></RouteSuspense>} />
             <Route path="team-management" element={<Navigate to="/app/team" replace />} />
-            <Route path="api-keys" element={<ApiKeys />} />
-            <Route path="billing" element={<Billing />} />
-            <Route path="docs" element={<Documentation />} />
-            <Route path="settings" element={<Settings />} />
+            <Route path="api-keys" element={<RouteSuspense><ApiKeys /></RouteSuspense>} />
+            <Route path="billing" element={<RouteSuspense><Billing /></RouteSuspense>} />
+            <Route path="docs" element={<RouteSuspense><Documentation /></RouteSuspense>} />
+            <Route path="settings" element={<RouteSuspense><Settings /></RouteSuspense>} />
           </Route>
-        </Routes>
+          </Routes>
+        </RouteSuspense>
       </Router>
     </ToastProvider>
   );

@@ -212,6 +212,7 @@ export async function loginAdmin(payload: AdminLoginPayload) {
       body: JSON.stringify({
         email: payload.email.trim(),
         password: payload.password,
+        turnstile_token: payload.turnstile_token,
       }),
     });
   } catch (error) {

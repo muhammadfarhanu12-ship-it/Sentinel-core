@@ -178,7 +178,7 @@ class InMemoryDatabase:
 
 
 @pytest.fixture()
-def auth_client(monkeypatch: pytest.MonkeyPatch):
+def auth_client(monkeypatch: pytest.MonkeyPatch, verified_form_client):
     users_collection = InMemoryCollection(unique_fields=("email",))
     sessions_collection = InMemoryCollection(unique_fields=("jti_hash",))
     database = InMemoryDatabase({"users": users_collection, "auth_sessions": sessions_collection})
@@ -212,7 +212,7 @@ def auth_client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(main_module, "ping_mongo", fake_ping_mongo)
     monkeypatch.setattr(main_module, "wait_for_mongo_ready", fake_ping_mongo)
 
-    with TestClient(app) as client:
+    with verified_form_client(app) as client:
         yield client, users_collection, sessions_collection
 
     limiter._events.clear()
@@ -773,7 +773,8 @@ def test_admin_login_sends_activity_email(auth_client, monkeypatch: pytest.Monke
     assert response.status_code == 200, response.text
     assert response.json()["data"]["access_token"]
     assert captured["admin_email"] == "alerts.admin@example.com"
-    assert captured["ip_address"] == "203.0.113.25"
+    # Caller-supplied forwarding headers cannot override the ASGI client address.
+    assert captured["ip_address"] == "testclient"
     assert captured["user_agent"] == "SentinelAdminTests/1.0"
     assert captured["login_at"] is not None
 
@@ -784,6 +785,9 @@ def test_admin_failed_login_alert_triggers_at_threshold_and_resets_after_success
 ):
     client, _, _ = auth_client
     alert_counts: list[int] = []
+    from app.middleware import rate_limiter
+    now = [1000.0]
+    monkeypatch.setattr(rate_limiter, "time", SimpleNamespace(time=lambda: now[0]))
 
     asyncio.run(
         admin_user_service.ensure_admin_user(
@@ -799,7 +803,7 @@ def test_admin_failed_login_alert_triggers_at_threshold_and_resets_after_success
     async def fake_send_admin_login_failed_attempt_alert_async(*, attempt_count: int, **kwargs):
         alert_counts.append(attempt_count)
         assert kwargs["attempted_email"] == "threshold.admin@example.com"
-        assert kwargs["ip_address"] in {"198.51.100.8", "198.51.100.10"}
+        assert kwargs["ip_address"] == "testclient"
         return EmailSendResult(success=True, message_id=f"admin-login-alert-{attempt_count}")
 
     monkeypatch.setattr(
@@ -831,6 +835,8 @@ def test_admin_failed_login_alert_triggers_at_threshold_and_resets_after_success
     assert fifth_attempt.status_code == 401, fifth_attempt.text
     assert alert_counts == [5]
 
+    # Wait out the shared IP/account limit; spoofing XFF cannot bypass it.
+    now[0] += 61
     success_response = client.post(
         "/api/admin/auth/login",
         json={"email": "threshold.admin@example.com", "password": "AdminPass123"},
@@ -838,6 +844,7 @@ def test_admin_failed_login_alert_triggers_at_threshold_and_resets_after_success
     )
     assert success_response.status_code == 200, success_response.text
 
+    now[0] += 61
     for _ in range(5):
         response = client.post(
             "/api/admin/auth/login",

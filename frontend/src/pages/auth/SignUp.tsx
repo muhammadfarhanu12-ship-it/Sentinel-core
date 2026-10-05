@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Shield, Mail, Lock, ArrowRight, User, CheckCircle2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { PasswordInput } from '../../components/ui/PasswordInput';
+import { Turnstile, useTurnstile } from '../../components/Turnstile';
 import { setDisplayName } from '../../services/auth';
 import {
   AUTH_SERVICE_UNAVAILABLE_MESSAGE,
@@ -23,9 +24,12 @@ export default function SignUp() {
   const [info, setInfo] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const challenge = useTurnstile();
+  const resendChallenge = useTurnstile();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setError(null);
     setInfo(null);
     setIsSubmitting(true);
@@ -42,6 +46,7 @@ export default function SignUp() {
         name: name.trim() || undefined,
         email: email.trim(),
         password,
+        turnstile_token: challenge.consumeToken(),
       });
       if (name.trim()) setDisplayName(name.trim());
       setInfo(String(data?.message || 'Verification email sent.'));
@@ -49,11 +54,13 @@ export default function SignUp() {
     } catch (err: any) {
       setError(String(err?.message || AUTH_SERVICE_UNAVAILABLE_MESSAGE));
     } finally {
+      challenge.reset();
       setIsSubmitting(false);
     }
   };
 
   const handleResendVerification = async () => {
+    if (isResending) return;
     if (!email.trim()) {
       setError('Enter your email address first.');
       return;
@@ -63,11 +70,12 @@ export default function SignUp() {
     setError(null);
     setInfo(null);
     try {
-      const data = await resendVerificationEmail(email.trim());
+      const data = await resendVerificationEmail(email.trim(), resendChallenge.consumeToken());
       setInfo(String(data?.message || 'A new verification email has been sent.'));
     } catch (err: any) {
       setError(String(err?.message || AUTH_SERVICE_UNAVAILABLE_MESSAGE));
     } finally {
+      resendChallenge.reset();
       setIsResending(false);
     }
   };
@@ -110,10 +118,14 @@ export default function SignUp() {
                   {info}
                 </div>
               )}
+              {error && (
+                <div role="alert" className="text-sm text-red-300 mb-4">{error}</div>
+              )}
+              <Turnstile action="resend_verification" {...resendChallenge.widgetProps} />
               <Button
                 type="button"
                 variant="outline"
-                disabled={isResending}
+                disabled={isResending || !resendChallenge.token}
                 onClick={handleResendVerification}
                 className="w-full border-white/10 bg-slate-950/50 hover:bg-slate-800 text-slate-300 mb-3"
               >
@@ -200,7 +212,8 @@ export default function SignUp() {
                 </div>
 
                 <div>
-                  <Button type="submit" disabled={isSubmitting} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white py-2.5 shadow-[0_0_15px_rgba(99,102,241,0.3)]">
+                  <Turnstile action="signup" {...challenge.widgetProps} />
+                  <Button type="submit" disabled={isSubmitting || !challenge.token} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white py-2.5 shadow-[0_0_15px_rgba(99,102,241,0.3)]">
                     Create account
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>

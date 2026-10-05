@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Shield, Lock, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { PasswordInput } from '../../components/ui/PasswordInput';
+import { Turnstile, useTurnstile } from '../../components/Turnstile';
 import {
   AUTH_SERVICE_UNAVAILABLE_MESSAGE,
   getPasswordPolicyError,
@@ -19,9 +20,11 @@ export default function ResetPassword() {
   const [successMessage, setSuccessMessage] = useState('Your password has been reset successfully. You can sign in with your new password now.');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const challenge = useTurnstile();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setError(null);
 
     if (!token) {
@@ -40,12 +43,13 @@ export default function ResetPassword() {
 
     setIsSubmitting(true);
     try {
-      const data = await resetPasswordWithToken(token, password);
+      const data = await resetPasswordWithToken(token, password, challenge.consumeToken());
       setSuccessMessage(String(data?.message || 'Your password has been reset successfully. You can sign in with your new password now.'));
       setIsSubmitted(true);
     } catch (err: any) {
       setError(String(err?.message || AUTH_SERVICE_UNAVAILABLE_MESSAGE));
     } finally {
+      challenge.reset();
       setIsSubmitting(false);
     }
   };
@@ -128,7 +132,8 @@ export default function ResetPassword() {
               </div>
 
               <div>
-                <Button type="submit" disabled={isSubmitting} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white py-2.5 shadow-[0_0_15px_rgba(99,102,241,0.3)]">
+                <Turnstile action="reset_password" {...challenge.widgetProps} />
+                <Button type="submit" disabled={isSubmitting || !challenge.token || !token} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white py-2.5 shadow-[0_0_15px_rgba(99,102,241,0.3)]">
                   Save new password
                 </Button>
               </div>

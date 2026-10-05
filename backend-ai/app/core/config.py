@@ -144,6 +144,14 @@ class Settings:
         self.BLOCKED_EMAIL_DOMAINS: str = _env_str("BLOCKED_EMAIL_DOMAINS", "") or ""
         self.AUTH_TEST_FLOW_ENABLED: bool = _env_bool("AUTH_TEST_FLOW_ENABLED", False)
 
+        self.TURNSTILE_SECRET_KEY: str | None = _env_str("TURNSTILE_SECRET_KEY")
+        self.TURNSTILE_ALLOWED_HOSTNAMES: str = _env_str("TURNSTILE_ALLOWED_HOSTNAMES", "") or ""
+        self.TURNSTILE_TIMEOUT_SECONDS: float = _env_float("TURNSTILE_TIMEOUT_SECONDS", 10.0)
+        self.PUBLIC_RATE_LIMIT_BACKEND: str = _env_str(
+            "PUBLIC_RATE_LIMIT_BACKEND", "mongo" if self.is_production else "memory"
+        ) or "mongo"
+        self.PUBLIC_RATE_LIMIT_TIMEOUT_SECONDS: float = _env_float("PUBLIC_RATE_LIMIT_TIMEOUT_SECONDS", 3.0)
+
         self.MAX_REQUEST_SIZE_BYTES: int = _env_int("MAX_REQUEST_SIZE_BYTES", 1048576)
         self.MAX_UPLOAD_SIZE_BYTES: int = _env_int("MAX_UPLOAD_SIZE_BYTES", 5242880)
         self.ALLOWED_UPLOAD_TYPES: str = _env_str(
@@ -255,6 +263,16 @@ class Settings:
                 raise ValueError(f"{secret_name} must be at least 32 characters in production")
 
         if self.is_production:
+            if not self.TURNSTILE_SECRET_KEY or not self.turnstile_allowed_hostnames:
+                raise ValueError("TURNSTILE_SECRET_KEY and TURNSTILE_ALLOWED_HOSTNAMES are required in production")
+            if self.TURNSTILE_SECRET_KEY in {
+                "1x0000000000000000000000000000000AA",
+                "2x0000000000000000000000000000000AA",
+                "3x0000000000000000000000000000000AA",
+            }:
+                raise ValueError("Turnstile test keys cannot be used in production")
+            if self.PUBLIC_RATE_LIMIT_BACKEND != "mongo":
+                raise ValueError("PUBLIC_RATE_LIMIT_BACKEND must be mongo in production")
             if self.CORS_ORIGINS.strip() == "*":
                 raise ValueError("CORS_ORIGINS must be explicit in production")
             if self.ENABLE_DEMO_MODE:
@@ -269,6 +287,18 @@ class Settings:
                 "ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD must either both be set or both be omitted"
             )
 
+        if self.PUBLIC_RATE_LIMIT_BACKEND not in {"mongo", "memory"}:
+            raise ValueError("PUBLIC_RATE_LIMIT_BACKEND must be mongo or memory")
+        if not 0 < self.TURNSTILE_TIMEOUT_SECONDS <= 30:
+            raise ValueError("TURNSTILE_TIMEOUT_SECONDS must be between 0 and 30")
+        if not 0 < self.PUBLIC_RATE_LIMIT_TIMEOUT_SECONDS <= 10:
+            raise ValueError("PUBLIC_RATE_LIMIT_TIMEOUT_SECONDS must be between 0 and 10")
+        if any(
+            ":" in host or "/" in host or "*" in host or " " in host
+            for host in self.turnstile_allowed_hostnames
+        ):
+            raise ValueError("TURNSTILE_ALLOWED_HOSTNAMES must contain exact hostnames without schemes, ports or wildcards")
+
         api_key_prefix = str(self.API_KEY_PREFIX or "").strip()
         if not api_key_prefix.startswith("sentinel_sk_"):
             raise ValueError("API_KEY_PREFIX must start with 'sentinel_sk_'")
@@ -279,6 +309,10 @@ class Settings:
             raise ValueError("SENTINEL_RISK_THRESHOLD must be between 1 and 100")
         if int(self.SENTINEL_MAX_DECODE_DEPTH) < 1 or int(self.SENTINEL_MAX_DECODE_DEPTH) > 8:
             raise ValueError("SENTINEL_MAX_DECODE_DEPTH must be between 1 and 8")
+
+    @property
+    def turnstile_allowed_hostnames(self) -> set[str]:
+        return {host.strip().lower().rstrip(".") for host in self.TURNSTILE_ALLOWED_HOSTNAMES.split(",") if host.strip()}
 
     @property
     def cors_origins_list(self) -> list[str]:
