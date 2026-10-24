@@ -26,6 +26,13 @@ def _normalize(text: str) -> str:
     return text.lower().strip()
 
 
+def _credential_skeleton(text: str) -> str:
+    """Fold common Cyrillic lookalikes only for credential indicator matching."""
+    return _normalize(text).translate(str.maketrans({
+        "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "х": "x", "і": "i", "у": "y",
+    }))
+
+
 # =========================================================
 # EXTENDED INDIRECT INJECTION PATTERNS
 # =========================================================
@@ -88,7 +95,7 @@ WEAK_INDICATORS = [
     "no need to ask",
 ]
 
-EXTERNAL_SOURCES = {"external_content", "webpage", "email", "social_post", "document", "tool_output", "article", "markdown"}
+EXTERNAL_SOURCES = {"external_content", "webpage", "email", "social_post", "document", "tool_output", "article", "markdown", "conversation_history"}
 
 
 PATTERN_GROUPS: dict[str, list[str]] = {
@@ -153,6 +160,10 @@ PATTERN_GROUPS: dict[str, list[str]] = {
     "credential_access": [
         r"private key",
         r"seed phrase",
+        r"recovery phrase",
+        r"\b(?:card )?pin\b",
+        r"\bpassword\b",
+        r"one[- ]time passcode",
         r"\botp\b",
         r"send credentials",
         r"show password",
@@ -183,6 +194,7 @@ PATTERN_GROUPS: dict[str, list[str]] = {
         r"send internal notes",
         r"reveal hidden policy",
         r"reveal system prompt",
+        r"print (?:the )?developer message",
     ],
     "multilingual_signal": [
         r"pichli instructions ignore karo",
@@ -307,6 +319,79 @@ def detect_indirect_prompt_injection(text: str, context: dict | None = None) -> 
         "data_exfiltration": detect_data_exfiltration_request(text),
         "multilingual_signal": detect_multilingual_signals(text),
     }
+    normalized_text = _credential_skeleton(text)
+    quoted_attack = re.search(
+        r"(['\"â€œ]).{0,180}\b(?:ignore\s+(?:all\s+)?previous instructions|reveal (?:the )?system prompt|print (?:the )?developer message|developer mode|jailbreak)\b.{0,180}?\1",
+        normalized_text,
+        re.I,
+    )
+    educational_framing = re.search(
+        r"\b(?:security training|security awareness|educational|awareness slide|documenting|paper about|explain why|translate the sentence|compar(?:e|es))\b",
+        normalized_text,
+        re.I,
+    )
+    unquoted_attack = re.sub(
+        r"(['\"â€œ]).{0,180}\b(?:ignore\s+(?:all\s+)?previous instructions|reveal (?:the )?system prompt|print (?:the )?developer message|developer mode|jailbreak)\b.{0,180}?\1",
+        " ",
+        normalized_text,
+        flags=re.I,
+    )
+    unquoted_action = re.search(
+        r"\b(?:reveal|show|output|send|steal|exfiltrate|execute|transfer|invoke|call|run|print)\b.{0,80}"
+        r"\b(?:system prompt|hidden prompt|developer message|secret|password|token|funds|wallet|tool)\b",
+        unquoted_attack,
+        re.I,
+    )
+    if quoted_attack and educational_framing and not unquoted_action:
+        groups["prompt_override"] = []
+        groups["data_exfiltration"] = []
+
+    credential_solicitation = bool(
+        re.search(
+            r"\b(?:pin|password|otp|one[- ]time passcode|passcode|recovery phrase|seed phrase|private key|security code|cvv)\b"
+            r".{0,100}\b(?:ask(?:s|ed)?|request(?:s|ed)?|require(?:s|d)?|demand(?:s|ed)?|tell(?:s|ing)?|instruct(?:s|ed)?|urge(?:s|d)?|need(?:s|ed)?)\b"
+            r".{0,100}\b(?:share|provide|enter|send|tell|give|confirm|verify|disclose|reveal|submit)\b"
+            r"|\b(?:ask(?:s|ed)?|request(?:s|ed)?|tell(?:s|ing)?|instruct(?:s|ed)?|urge(?:s|d)?|need(?:s|ed)?)\b"
+            r".{0,100}\b(?:share|provide|enter|send|tell|give|confirm|verify|disclose|reveal|submit|for)\b"
+            r".{0,100}\b(?:pin|password|otp|one[- ]time passcode|passcode|recovery phrase|seed phrase|private key|security code|cvv)\b"
+            r"|\b(?:share|provide|enter|send|tell|give|confirm|verify|disclose|reveal|submit)\b"
+            r".{0,100}\b(?:pin|password|otp|one[- ]time passcode|passcode|recovery phrase|seed phrase|private key|security code|cvv)\b",
+            normalized_text,
+            re.I,
+        )
+        or re.search(
+            r"\b(?:ask(?:s|ed)?|request(?:s|ed)?|require(?:s|d)?|demand(?:s|ed)?|tell(?:s|ing)?|instruct(?:s|ed)?|urge(?:s|d)?|need(?:s|ed)?)\b"
+            r".{0,80}\b(?:(?:the|your|their|customer's|account holder's)\s+)?"
+            r"(?:pin|password|otp|one[- ]time passcode|passcode|recovery phrase|seed phrase|private key|security code|cvv)\b"
+            r"|\breply with\b.{0,50}\b(?:pin|password|otp|one[- ]time passcode|passcode|recovery phrase|seed phrase|private key|security code|cvv)\b",
+            normalized_text,
+            re.I,
+        )
+    )
+    education_request = bool(
+        re.search(
+            r"\b(?:how to|explain|teach|describe|recogniz(?:e|ing)|spot|identify|detect|report|avoid|review|analy[sz]e|list)\b"
+            r".{0,160}\b(?:scam|phish|fraud|fake (?:bank )?alerts?|credential theft|social engineering|impersonation|safety lesson|suspicious sms|safe account practices|red flags)\b",
+            normalized_text,
+            re.I,
+        )
+        or re.search(
+            r"\b(?:can|should|would)\b.{0,60}\b(?:legitimate|real|official)\b.{0,80}"
+            r"\b(?:ask|request|read|disclose|share)\b.{0,40}\b(?:otp|passcode|pin|password|recovery phrase)\b",
+            normalized_text,
+            re.I,
+        )
+        or re.search(
+            r"\b(?:never|should not|shouldn't|must not|mustn't)\b.{0,60}\b(?:request|ask for)\b.{0,60}"
+            r"\b(?:pin|password|otp|one[- ]time passcode|passcode|recovery phrase|seed phrase|private key|security code|cvv)\b",
+            normalized_text,
+            re.I,
+        )
+    )
+    if credential_solicitation and not education_request:
+        groups["credential_access"].append(
+            {"category": "credential_access", "signal": "credential solicitation", "pattern": "credential_solicitation"}
+        )
     categories: set[str] = set()
     matched_signals: list[dict[str, Any]] = []
 
@@ -362,10 +447,17 @@ def detect_indirect_prompt_injection(text: str, context: dict | None = None) -> 
         score += 25
     if groups["credential_access"]:
         score += 25
+    if credential_solicitation and not education_request:
+        # Treat an explicit request to disclose an authentication secret as a
+        # high-risk credential theft signal; mere discussion of credentials
+        # remains a lower-level signal.
+        score = max(score, 85)
     if groups["tool_execution_request"]:
         score += 20
     if groups["data_exfiltration"]:
         score += 20
+    if groups["prompt_override"] and groups["data_exfiltration"]:
+        score = max(score, 85)
     if groups["multilingual_signal"]:
         score += 10
     if unicode_obfuscated:

@@ -89,6 +89,33 @@ def detect_semantic_jailbreak(
 
     combined = _normalize(f"{history_content}\n{normalized_content}")
 
+    # Do not classify an explicitly quoted attack phrase as an attack when the
+    # surrounding request is clearly educational and contains no unquoted
+    # operational instruction. Other detectors still inspect the full text.
+    quoted_attack = re.search(
+        r"(['\"“]).{0,180}\b(?:ignore\s+(?:all\s+)?previous instructions|system prompt|developer mode|jailbreak)\b.{0,180}?\1",
+        combined,
+        re.I,
+    )
+    educational_framing = re.search(
+        r"\b(?:security training|security awareness|educational|awareness slide|documenting|paper about|explain why|translate the sentence|compar(?:e|es))\b",
+        combined,
+        re.I,
+    )
+    unquoted_text = re.sub(
+        r"(['\"“]).{0,180}\b(?:ignore\s+(?:all\s+)?previous instructions|system prompt|developer mode|jailbreak)\b.{0,180}?\1",
+        " ",
+        combined,
+        flags=re.I,
+    )
+    actionable_target = re.search(
+        r"\b(?:reveal|show|output|send|steal|exfiltrate|execute|transfer|invoke|call|run)\b.{0,80}\b(?:system prompt|hidden prompt|secret|password|token|funds|wallet|tool)\b",
+        unquoted_text,
+        re.I,
+    )
+    if quoted_attack and educational_framing and not actionable_target:
+        return []
+
     base_risk = 0.0
 
     # =====================================================

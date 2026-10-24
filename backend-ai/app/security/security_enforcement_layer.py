@@ -153,6 +153,18 @@ class SecurityEnforcementLayer:
             history=(payload.conversation_history or []),
             context=scanner_context,
         )
+        # Conversation history is attacker-controlled context. Scan each item
+        # as untrusted input as well as passing it to the semantic detector;
+        # otherwise credential solicitation or other non-jailbreak threats in
+        # prior turns never reach the enforcement decision.
+        for history_item in payload.conversation_history or []:
+            if str(history_item or "").strip():
+                findings.extend(
+                    scan_prompt_security(
+                        str(history_item),
+                        context={"source": "conversation_history", "trusted": False},
+                    )
+                )
         if self.enable_jailbreak_detection:
             findings.extend(detect_semantic_jailbreak(candidate_prompt, history=payload.conversation_history))
         result.detections = findings

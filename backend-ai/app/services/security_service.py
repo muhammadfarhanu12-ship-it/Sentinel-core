@@ -176,7 +176,7 @@ def _looks_like_low_risk_education(text: str, enforcement_payload: dict[str, Any
     risk = int(enforcement_payload.get("risk_score") or 0)
     categories = set(_rich_indirect_fields(enforcement_payload).get("detected_categories") or [])
     dangerous_categories = {"financial_action", "crypto_transfer", "credential_access", "tool_execution_request", "data_exfiltration"}
-    return action == "ALLOW" and risk <= 25 and not (categories & dangerous_categories)
+    return action in {"ALLOW", "WARN"} and risk <= 45 and not (categories & dangerous_categories)
 
 
 def _serialize_enforcement_result(enforcement: Any) -> dict[str, Any]:
@@ -290,14 +290,20 @@ def _threat_types_from_enforcement(enforcement_payload: dict[str, Any]) -> list[
         label = str(finding.get("label") or "").lower()
         detector = str(finding.get("detector") or "").lower()
         reason = str(finding.get("reason") or "").lower()
+        metadata = finding.get("metadata") if isinstance(finding.get("metadata"), dict) else {}
+        low_risk_indirect_warning = (
+            detector == "indirect_prompt_injection_detector"
+            and str(metadata.get("verdict") or "").lower() == "warn"
+            and int(metadata.get("risk_score") or 0) < 71
+        )
         blob = " ".join([label, detector, reason])
-        if any(token in blob for token in ("jailbreak", "prompt", "policy", "injection")):
+        if not low_risk_indirect_warning and any(token in blob for token in ("jailbreak", "prompt", "policy", "injection")):
             threat_types.add("PROMPT_INJECTION")
         if any(token in blob for token in ("sql", "command", "credential_harvest")):
             threat_types.add("MALICIOUS_CODE")
         if any(token in blob for token in ("pii", "email", "ssn", "iban", "credit_card")):
             threat_types.add("DATA_LEAK")
-        if "indirect" in blob:
+        if "indirect" in blob and not low_risk_indirect_warning:
             threat_types.add("PROMPT_INJECTION")
         if "hitl_bypass_attempt" in blob or "authority_impersonation" in blob:
             threat_types.add("HITL_BYPASS_ATTEMPT")
@@ -479,6 +485,7 @@ def _assessment_to_scan_result(
     model: str,
     security_tier: str,
     enforcement_payload: dict[str, Any] | None = None,
+    original_prompt: str | None = None,
 ) -> Dict[str, Any]:
     primary = primary_threat_type(assessment.threat_types)
     status_map = {"ALLOW": "CLEAN", "SANITIZE": "REDACTED", "BLOCK": "BLOCKED"}
@@ -531,7 +538,7 @@ def _assessment_to_scan_result(
             sanitized_content = enforcement_payload.get("sanitized_prompt") or sanitized_content
             detection_stage_triggered.append("security_enforcement_pre_model")
 
-    if _looks_like_low_risk_education(sanitized_content, enforcement_payload):
+    if _looks_like_low_risk_education(original_prompt or sanitized_content, enforcement_payload):
         threat_types = [item for item in threat_types if item != "PROMPT_INJECTION"] or ["NONE"]
         primary = primary_threat_type(threat_types)
         threat_score_value = min(threat_score_value, 0.20)
@@ -743,7 +750,24 @@ def scan_prompt(
                 enforcement_payload=enforcement_payload,
             )
     except Exception:
-        logger.exception("Security enforcement pre-check failed; falling back to legacy scan path.")
+        logger.exception("Security enforcement pre-check failed; denying request.")
+        # A broken pre-model control must never fall through to the legacy path,
+        # which may permit downstream execution when its detectors miss a variant.
+        return _enforcement_to_scan_result(
+            prompt=prompt,
+            provider=provider,
+            model=model,
+            security_tier=security_tier,
+            enforcement_payload={
+                "action": "BLOCK",
+                "risk_score": 100,
+                "severity": "CRITICAL",
+                "sanitized_prompt": "[REDACTED: SECURITY CHECK UNAVAILABLE]",
+                "explanation": "Request blocked because the security check could not be completed.",
+                "detections": [],
+                "policy_matches": [],
+            },
+        )
 
     original_threat_type = classify_threat(prompt)
     if original_threat_type in {"DATA_LEAK", "MALICIOUS_CODE"}:
@@ -768,6 +792,7 @@ def scan_prompt(
         model=model,
         security_tier=security_tier,
         enforcement_payload=enforcement_payload,
+        original_prompt=prompt,
     )
 
     # Output leak prevention pass on explanation + sanitized content.

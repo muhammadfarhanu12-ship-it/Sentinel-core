@@ -95,7 +95,7 @@ _STAGE1_PATTERNS: list[tuple[str, str, re.Pattern[str], float]] = [
     ),
     (THREAT_POLICY_BYPASS, "safety_bypass", re.compile(r"\b(bypass|override)\b.{0,20}\b(safety|guardrails|policy|filters?)\b", re.I), 0.22),
     # Data exfiltration / secrets harvesting
-    (THREAT_DATA_EXFILTRATION, "secret_harvest", re.compile(r"\b(api key|secret key|access token|passwords?)\b", re.I), 0.22),
+    (THREAT_DATA_EXFILTRATION, "secret_harvest", re.compile(r"\b(?:show|reveal|print|dump|send|steal|exfiltrate|provide|output)\b.{0,50}\b(api key|secret key|access token|passwords?)\b", re.I), 0.22),
     (THREAT_DATA_EXFILTRATION, "env_exfil", re.compile(r"\b(os\.environ|environment variables?|dotenv|printenv)\b", re.I), 0.22),
     (
         THREAT_DATA_EXFILTRATION,
@@ -138,6 +138,43 @@ def _risk_level(score: float) -> str:
     if score >= 0.4:
         return "medium"
     return "low"
+
+
+def _is_quoted_security_education(prompt: str) -> bool:
+    normalized = unicodedata.normalize("NFKC", str(prompt or ""))
+    quoted_attack = re.search(
+        r"(['\"“]).{0,180}\b(?:ignore\s+(?:all\s+)?previous instructions|system prompt|developer mode|jailbreak)\b.{0,180}?\1",
+        normalized,
+        re.I,
+    )
+    educational = re.search(
+        r"\b(?:security training|security awareness|educational|awareness slide|documenting|paper about|explain why|translate the sentence|compar(?:e|es)|bank safety lesson|how to recognize|how to spot|how to identify|how to detect|describe why)\b",
+        normalized,
+        re.I,
+    )
+    unquoted = re.sub(
+        r"(['\"“]).{0,180}\b(?:ignore\s+(?:all\s+)?previous instructions|system prompt|developer mode|jailbreak)\b.{0,180}?\1",
+        " ",
+        normalized,
+        flags=re.I,
+    )
+    actionable = re.search(
+        r"\b(?:reveal|show|output|send|steal|exfiltrate|execute|transfer|invoke|call|run)\b.{0,80}\b(?:system prompt|hidden prompt|secret|password|token|funds|wallet|tool)\b",
+        unquoted,
+        re.I,
+    )
+    awareness_only = re.search(
+        r"\b(?:recogniz(?:e|ing)|spot|identify|detect|report|avoid|explain|describe)\b"
+        r".{0,180}\b(?:scam|phish|fraud|fake alert|credential theft|social engineering|impersonation|support agent)\b",
+        normalized,
+        re.I,
+    )
+    inert_negative = re.search(
+        r"\b(?:never|should not|shouldn't|must not|mustn't|avoid)\b.{0,80}\b(?:request|ask for|share|disclose|provide)\b.{0,80}\b(?:password|otp|pin|recovery phrase|passcode)\b",
+        normalized,
+        re.I,
+    )
+    return bool((quoted_attack and educational or awareness_only or inert_negative) and not actionable)
 
 
 def _primary_threat_type(threat_types: list[str]) -> str:
@@ -497,10 +534,23 @@ class ThreatDetectionService:
             threat_types.update(s2_types)
             debug["stage2"] = {"score": s2_score, "findings": s2_findings}
 
+        safe_education = _is_quoted_security_education(prompt)
+        if safe_education:
+            # Treat an inert, explicitly quoted attack phrase as discussion,
+            # while retaining blocks for any unquoted operational instruction.
+            s1_score = s2_score = 0.0
+            s1_hits = []
+            s2_findings = []
+            s1_types = []
+            s2_types = []
+            threat_types.clear()
+            debug["quoted_security_education"] = True
+
         s3_score = 0.0
         s3_types: list[str] = []
         s3_payload: dict[str, Any] | None = None
-        if tier == "BUSINESS":
+        # safe_education is initialized above for every tier before classifier selection.
+        if tier == "BUSINESS" and not safe_education:
             ai_enabled = bool(enable_ai) if enable_ai is not None else _ai_classifier_available()
             if ai_enabled:
                 s3_score, s3_types, s3_payload = _stage3_ai(prompt)

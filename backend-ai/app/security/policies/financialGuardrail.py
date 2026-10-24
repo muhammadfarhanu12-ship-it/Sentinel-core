@@ -18,6 +18,20 @@ from app.security.utils.types import EnforcementAction, PolicyMatch, SeverityLev
 logger = logging.getLogger("security.financial_guardrail")
 
 
+def _explicitly_negates_payment(text: str) -> bool:
+    return bool(re.search(
+        r"\bno\b.{0,40}\bpayments?\s+(?:is|are)\s+(?:requested|required|needed)\b",
+        text,
+        re.I,
+    ))
+
+
+FINANCIAL_ACTION_CONTEXT = re.compile(
+    r"\b(?:send|transfer|wire|withdraw|pay|settle|disburse|reallocate|move|approve|sign|initiate|deposit|purchase|buy|sell|change|update|modify|route)\b",
+    re.I,
+)
+
+
 # =========================================================
 # DEFAULT POLICY
 # =========================================================
@@ -281,6 +295,8 @@ class PolicyManagementService:
         self.load_policies()
 
         text = normalize_text(prompt).lower()
+        payment_negated = _explicitly_negates_payment(text)
+        financial_action_context = bool(FINANCIAL_ACTION_CONTEXT.search(text))
 
         matches: list[PolicyMatch] = []
 
@@ -288,31 +304,34 @@ class PolicyManagementService:
             if not policy.enabled:
                 continue
 
-            kw_hits = [k for k in policy.restricted_keywords if k in text]
-            bypass_hits = [b for b in policy.bypass_phrases if b in text]
+            kw_hits = [
+                k for k in policy.restricted_keywords
+                if financial_action_context and k in text and not (payment_negated and k in {"pay", "payment"})
+            ]
+            bypass_hits = [b for b in policy.bypass_phrases if financial_action_context and b in text]
 
             # -------------------------------------------------
             # SEMANTIC TRIGGERS (NEW CRITICAL FIX)
             # -------------------------------------------------
             semantic_hits = [
-                s for s in policy.semantic_triggers if s in text
+                s for s in policy.semantic_triggers if financial_action_context and s in text
             ]
 
             authority_hits = [
                 keyword for keyword in SYSTEM_AUTHORITY_BYPASS_KEYWORDS
-                if keyword in text
+                if financial_action_context and keyword in text
             ]
             financial_intent_hits = [
                 keyword for keyword in FINANCIAL_INTENT_KEYWORDS
-                if keyword in text
+                if financial_action_context and keyword in text and not (payment_negated and keyword == "payment")
             ]
             confirmation_bypass_hits = [
                 keyword for keyword in CONFIRMATION_BYPASS_KEYWORDS
-                if keyword in text
+                if financial_action_context and keyword in text
             ]
             automation_claim_hits = [
                 keyword for keyword in AUTOMATION_CLAIM_KEYWORDS
-                if keyword in text
+                if financial_action_context and keyword in text
             ]
 
             if not (
