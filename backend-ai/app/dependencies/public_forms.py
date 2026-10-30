@@ -8,9 +8,9 @@ from app.middleware.public_rate_limiter import check_public_rate_limit
 from app.services.turnstile_service import verify_turnstile
 
 
-def protect_public_form(action: str, *, limit: int = 5, window_seconds: int = 900):
+def rate_limit_public_form(action: str, *, limit: int = 5, window_seconds: int = 900):
     """Runs before the handler (including every mounted legacy route alias)."""
-    async def guard(request: Request) -> None:
+    async def guard(request: Request) -> dict:
         # Uvicorn alone resolves trusted proxies. Raw forwarding headers are untrusted.
         client_ip = request.client.host if request.client else "unknown"
         await check_public_rate_limit(
@@ -37,6 +37,17 @@ def protect_public_form(action: str, *, limit: int = 5, window_seconds: int = 90
                 email.strip().lower()[:320], scope=f"public:{action}:email", limit=limit,
                 window_seconds=window_seconds, request=request,
             )
+        return payload
+
+    return guard
+
+
+def protect_public_form(action: str, *, limit: int = 5, window_seconds: int = 900):
+    """Rate limit and verify CAPTCHA for the contact form before any side effects."""
+    rate_limit = rate_limit_public_form(action, limit=limit, window_seconds=window_seconds)
+
+    async def guard(request: Request) -> None:
+        payload = await rate_limit(request)
         await verify_turnstile(payload.get("turnstile_token"), action=action)
 
     return guard

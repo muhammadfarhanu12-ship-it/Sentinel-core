@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { Shield, Mail, Lock, ArrowRight } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { PasswordInput } from '../../components/ui/PasswordInput';
-import { Turnstile, useTurnstile } from '../../components/Turnstile';
 import { setDisplayName, setTokens } from '../../services/auth';
 import { getSignInDestination } from '../../lib/signInDestination';
 import {
@@ -25,8 +24,6 @@ export default function SignIn() {
   const [info, setInfo] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
-  const challenge = useTurnstile();
-  const resendChallenge = useTurnstile();
   const [verificationRequired, setVerificationRequired] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -71,7 +68,7 @@ export default function SignIn() {
     setInfo(null);
     setIsSubmitting(true);
     try {
-      const data = await signInWithEmail(email.trim(), password, challenge.consumeToken());
+      const data = await signInWithEmail(email.trim(), password);
 
       if (data?.user?.name) {
         setDisplayName(String(data.user.name));
@@ -94,7 +91,6 @@ export default function SignIn() {
       setError(message);
       setVerificationRequired(isEmailVerificationRequired(message));
     } finally {
-      challenge.reset();
       setIsSubmitting(false);
     }
   };
@@ -110,12 +106,11 @@ export default function SignIn() {
     setError(null);
     setInfo(null);
     try {
-      const data = await resendVerificationEmail(email.trim(), resendChallenge.consumeToken());
+      const data = await resendVerificationEmail(email.trim());
       setInfo(String(data?.message || 'A new verification email has been sent.'));
     } catch (err: any) {
       setError(String(err?.message || AUTH_SERVICE_UNAVAILABLE_MESSAGE));
     } finally {
-      resendChallenge.reset();
       setIsResending(false);
     }
   };
@@ -215,8 +210,7 @@ export default function SignIn() {
             </div>
 
             <div>
-              <Turnstile action="login" {...challenge.widgetProps} />
-              <Button type="submit" disabled={isSubmitting || isResending || !challenge.token} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white py-2.5 shadow-[0_0_15px_rgba(99,102,241,0.3)]">
+              <Button type="submit" disabled={isSubmitting || isResending} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white py-2.5 shadow-[0_0_15px_rgba(99,102,241,0.3)]">
                 Sign in
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -224,11 +218,10 @@ export default function SignIn() {
 
             {canResendVerification && (
               <div>
-                <Turnstile action="resend_verification" {...resendChallenge.widgetProps} />
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={isResending || isSubmitting || !resendChallenge.token}
+                  disabled={isResending || isSubmitting}
                   onClick={handleResendVerification}
                   className="w-full border-white/10 bg-slate-950/50 hover:bg-slate-800 text-slate-300"
                 >

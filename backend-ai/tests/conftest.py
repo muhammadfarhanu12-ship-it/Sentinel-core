@@ -80,18 +80,11 @@ def turnstile_transport(monkeypatch):
 
 @pytest.fixture
 def verified_form_client(turnstile_transport):
-    """Browser substitute for existing business-flow tests: supply fresh challenges.
+    """Supply fresh contact challenges; authentication requests stay token-free.
 
     Protection rejection tests use ordinary TestClient instead, with no injection.
     """
-    actions = {
-        "/auth/signup": "signup", "/auth/login": "login",
-        "/auth/forgot-password": "forgot_password", "/auth/reset-password": "reset_password",
-        "/auth/resend-verification": "resend_verification", "/contact": "contact",
-        "/admin/login": "admin_login", "/admin/auth/login": "admin_login",
-        "/admin/forgot-password": "admin_forgot_password", "/admin/reset-password": "admin_reset_password",
-        "/admin/request-access": "admin_request_access",
-    }
+    actions = {"/contact": "contact"}
 
     class VerifiedFormClient(TestClient):
         def request(self, method, url, **kwargs):

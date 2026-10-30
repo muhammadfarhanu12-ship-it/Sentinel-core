@@ -1,7 +1,6 @@
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
-from app.schemas.turnstile_schema import TurnstileRequest
 
 from app.schemas.user_schema import PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, UserResponse, validate_password_strength
 
@@ -29,15 +28,15 @@ class LogoutRequest(BaseModel):
     refresh_token: str | None = Field(default=None, min_length=32)
 
 
-class ForgotPasswordRequest(TurnstileRequest):
+class ForgotPasswordRequest(BaseModel):
     email: str
 
 
-class ResendVerificationRequest(TurnstileRequest):
+class ResendVerificationRequest(BaseModel):
     email: str
 
 
-class ResetPasswordRequest(TurnstileRequest):
+class ResetPasswordRequest(BaseModel):
     token: str = Field(min_length=32)
     new_password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
 

@@ -26,7 +26,7 @@ from app.admin.admin_schema import (
 from app.admin.admin_service import AdminService
 from app.core.database import get_db
 from app.dependencies.admin_access import require_admin_permission
-from app.dependencies.public_forms import protect_public_form
+from app.dependencies.public_forms import rate_limit_public_form
 from app.models.user_model import user_model
 from app.schemas.api_schema import ApiResponse, ok
 from app.schemas.user_schema import UserResponse
@@ -58,9 +58,9 @@ async def admin_me(
 
 
 @router.post("/login", response_model=ApiResponse[AdminTokenResponse],
-             dependencies=[Depends(protect_public_form("admin_login", window_seconds=60))])
+             dependencies=[Depends(rate_limit_public_form("admin_login", window_seconds=60))])
 @router.post("/auth/login", response_model=ApiResponse[AdminTokenResponse],
-             dependencies=[Depends(protect_public_form("admin_login", window_seconds=60))])
+             dependencies=[Depends(rate_limit_public_form("admin_login", window_seconds=60))])
 async def admin_login(
     payload: AdminLoginRequest,
     request: Request,
@@ -70,7 +70,7 @@ async def admin_login(
 
 
 @router.post("/forgot-password", response_model=ApiResponse[AdminForgotPasswordResponse],
-             dependencies=[Depends(protect_public_form("admin_forgot_password", limit=3))])
+             dependencies=[Depends(rate_limit_public_form("admin_forgot_password", limit=3))])
 async def forgot_password(
     payload: AdminForgotPasswordRequest,
     request: Request,
@@ -80,7 +80,7 @@ async def forgot_password(
 
 
 @router.post("/reset-password", response_model=ApiResponse[AdminMessageResponse],
-             dependencies=[Depends(protect_public_form("admin_reset_password", limit=10))])
+             dependencies=[Depends(rate_limit_public_form("admin_reset_password", limit=10))])
 async def reset_password(
     payload: AdminResetPasswordRequest,
     request: Request,
@@ -93,7 +93,7 @@ async def reset_password(
     "/request-access",
     response_model=ApiResponse[AdminAccessRequestResponse],
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(protect_public_form("admin_request_access", limit=3, window_seconds=3600))],
+    dependencies=[Depends(rate_limit_public_form("admin_request_access", limit=3, window_seconds=3600))],
 )
 async def request_access(
     payload: AdminAccessRequestCreate,

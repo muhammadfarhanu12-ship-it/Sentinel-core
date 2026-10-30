@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Shield, Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
-import { Turnstile, useTurnstile } from '../../components/Turnstile';
 import { AUTH_SERVICE_UNAVAILABLE_MESSAGE, requestPasswordReset } from '../../services/authApi';
 
 export default function ForgotPassword() {
@@ -11,7 +10,6 @@ export default function ForgotPassword() {
   const [message, setMessage] = useState('We\'ve sent a password reset link to your email address.');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const challenge = useTurnstile();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,13 +17,12 @@ export default function ForgotPassword() {
     setError(null);
     setIsSubmitting(true);
     try {
-      const data = await requestPasswordReset(email.trim(), challenge.consumeToken());
+      const data = await requestPasswordReset(email.trim());
       setMessage(String(data?.message || 'We\'ve sent a password reset link to your email address.'));
       setIsSubmitted(true);
     } catch (err: any) {
       setError(String(err?.message || AUTH_SERVICE_UNAVAILABLE_MESSAGE));
     } finally {
-      challenge.reset();
       setIsSubmitting(false);
     }
   };
@@ -97,8 +94,7 @@ export default function ForgotPassword() {
               </div>
 
               <div>
-                <Turnstile action="forgot_password" {...challenge.widgetProps} />
-                <Button type="submit" disabled={isSubmitting || !challenge.token} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white py-2.5 shadow-[0_0_15px_rgba(99,102,241,0.3)]">
+                <Button type="submit" disabled={isSubmitting} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white py-2.5 shadow-[0_0_15px_rgba(99,102,241,0.3)]">
                   Send reset link
                 </Button>
               </div>

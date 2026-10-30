@@ -3,8 +3,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, LockKeyhole, Mail } from 'lucide-react';
 
 import { PasswordInput } from '../components/ui/PasswordInput';
-import { Turnstile } from '../components/Turnstile';
-import { useTurnstile } from '../hooks/useTurnstile';
 import { useToast } from '../hooks/useToast';
 import { clearAdminToken, getAdminToken, setAdminToken } from '../lib/auth';
 import { ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE, loginAdmin, verifyAdminSession } from '../lib/adminService';
@@ -23,7 +21,6 @@ export default function AdminLogin() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [checkingExistingSession, setCheckingExistingSession] = useState(true);
-  const challenge = useTurnstile();
 
   const redirectTarget = useMemo(() => {
     const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
@@ -80,15 +77,13 @@ export default function AdminLogin() {
 
     setLoading(true);
     try {
-      const turnstileToken = challenge.consumeToken();
-      const payload = await loginAdmin({ email, password, turnstile_token: turnstileToken });
+      const payload = await loginAdmin({ email, password });
       setAdminToken(payload.access_token);
       notify({ title: 'Login successful', message: 'Admin session established.', tone: 'success' });
       navigate(redirectTarget, { replace: true });
     } catch (error: unknown) {
       setError(getErrorMessage(error, ADMIN_AUTH_SERVICE_UNAVAILABLE_MESSAGE));
     } finally {
-      challenge.reset();
       setLoading(false);
     }
   }
@@ -147,9 +142,7 @@ export default function AdminLogin() {
             />
           </label>
 
-          <Turnstile action="admin_login" {...challenge.widgetProps} />
-
-          <button className="admin-button admin-button--primary" disabled={loading || !challenge.token} type="submit">
+          <button className="admin-button admin-button--primary" disabled={loading} type="submit">
             {loading ? 'Signing in...' : 'Login'}
           </button>
         </form>

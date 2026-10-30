@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from app.schemas.turnstile_schema import TurnstileRequest
 
 PASSWORD_MIN_LENGTH = 12
 PASSWORD_MAX_LENGTH = 128
@@ -53,7 +52,7 @@ class UserBase(BaseModel):
         return cleaned or None
 
 
-class SignupRequest(UserBase, TurnstileRequest):
+class SignupRequest(UserBase):
     password: str = Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
 
     @field_validator("password")
@@ -62,7 +61,7 @@ class SignupRequest(UserBase, TurnstileRequest):
         return validate_password_strength(value)
 
 
-class LoginRequest(UserBase, TurnstileRequest):
+class LoginRequest(UserBase):
     password: str = Field(min_length=1, max_length=PASSWORD_MAX_LENGTH)
 
     @field_validator("password")
